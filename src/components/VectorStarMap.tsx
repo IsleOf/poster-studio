@@ -47,7 +47,8 @@ const VectorStarMap: React.FC = () => {
         titleKerning, subtitleKerning, detailsKerning, dedicationKerning,
         mapBackgroundImage, borderStyle, selectedTemplate, starColor, mapInteriorColor,
         showDivider, dividerLength, dividerThickness,
-        setTitleOffsetY, setSubtitleOffsetY, setDetailsOffsetY, setDedicationOffsetY, setDividerOffsetY
+        setTitleOffsetY, setSubtitleOffsetY, setDetailsOffsetY, setDedicationOffsetY, setDividerOffsetY,
+        posterType,
     } = useStore();
 
     // Debounce frequently-changing values to prevent excessive re-renders
@@ -184,6 +185,24 @@ const VectorStarMap: React.FC = () => {
                 .attr('width', imgSize)
                 .attr('height', imgSize)
                 .attr('preserveAspectRatio', 'xMidYMid slice');
+        } else if (posterType === 'streetmap') {
+            // Street map mode but image not yet captured — show placeholder
+            const shapeFillColor = mapInteriorColor;
+            if (maskShape === 'heart') {
+                mapContent.append('path').attr('d', userHeartPath).attr('transform', getHeartTransform(1)).attr('fill', shapeFillColor);
+            } else {
+                mapContent.append('circle').attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius).attr('fill', shapeFillColor);
+            }
+            mapContent.append('text')
+                .attr('x', center[0]).attr('y', center[1] - 20)
+                .attr('text-anchor', 'middle').attr('fill', 'rgba(255,255,255,0.5)')
+                .attr('font-size', '32px').attr('font-family', 'sans-serif')
+                .text('⊕');
+            mapContent.append('text')
+                .attr('x', center[0]).attr('y', center[1] + 24)
+                .attr('text-anchor', 'middle').attr('fill', 'rgba(255,255,255,0.4)')
+                .attr('font-size', '20px').attr('font-family', 'sans-serif')
+                .text('Search a city to load map');
         } else if (!isLightMode) {
             // Dark background inside shape (using mapInteriorColor)
             const shapeFillColor = mapInteriorColor;
@@ -194,19 +213,19 @@ const VectorStarMap: React.FC = () => {
             }
         }
 
-        // Grid
-        if (showGrid) {
+        // Grid — skip in street map mode
+        if (showGrid && posterType !== 'streetmap') {
             const graticule = geoGraticule();
             mapContent.append('path').datum(graticule).attr('d', path as any).attr('fill', 'none').attr('stroke', starColor).attr('stroke-width', gridWidth * 2).attr('stroke-opacity', gridOpacity);
         }
 
-        // Constellations
-        if (showConstellations && constellationsData.features) {
+        // Constellations — skip in street map mode
+        if (showConstellations && constellationsData.features && posterType !== 'streetmap') {
             mapContent.append('g').selectAll('path').data(constellationsData.features as ConstellationFeature[]).enter().append('path').attr('d', path as any).attr('fill', 'none').attr('stroke', starColor).attr('stroke-width', debouncedLineWeight * 2).attr('stroke-opacity', 1.0);
         }
 
-        // Stars
-        if (starsData.features) {
+        // Stars — skip in street map mode
+        if (starsData.features && posterType !== 'streetmap') {
             const magScale = scaleLinear().domain([-2, 6]).range([6 * debouncedStarScale, 0.8 * debouncedStarScale]).clamp(true);
             const features = starsData.features as StarFeature[];
             const brightStars = features.filter(d => d.properties.mag < 2.5);
@@ -304,7 +323,7 @@ const VectorStarMap: React.FC = () => {
         showBorder, showConstellations, showGrid, designStyle, maskShape, isLightMode, // Toggles
         debouncedCircleSize, debouncedHeartSize, debouncedShapeOffsetY, debouncedShapeOutlineWidth, // Shape
         posterColor, textColor, starColor, mapInteriorColor, width, height, // Colors & Dims
-        mapBackgroundImage, borderStyle // New Props
+        mapBackgroundImage, borderStyle, posterType // New Props
     ]);
 
     // Frame Rendering Effect

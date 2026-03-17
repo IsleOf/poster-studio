@@ -22,12 +22,15 @@ const CitySearch: React.FC<CitySearchProps> = ({
     const [loading, setLoading] = useState(false);
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
-
-    // Sync external value
-    useEffect(() => { setQuery(value); }, [value]);
+    // True while we don't want the debounced search to fire
+    const skipNextSearch = useRef(false);
 
     // Debounced search
     useEffect(() => {
+        if (skipNextSearch.current) {
+            skipNextSearch.current = false;
+            return;
+        }
         if (query.length < 2) { setResults([]); return; }
         const t = setTimeout(async () => {
             setLoading(true);
@@ -54,7 +57,10 @@ const CitySearch: React.FC<CitySearchProps> = ({
     }, []);
 
     const handleSelect = (r: GeoResult) => {
-        setQuery(r.name + (r.state ? `, ${r.state}` : '') + `, ${r.country}`);
+        const label = r.name + (r.state ? `, ${r.state}` : '') + `, ${r.country}`;
+        skipNextSearch.current = true;
+        setQuery(label);
+        setResults([]);
         setOpen(false);
         onSelect(r);
     };
@@ -65,6 +71,7 @@ const CitySearch: React.FC<CitySearchProps> = ({
                 <Input
                     value={query}
                     onChange={(e) => {
+                        skipNextSearch.current = false;
                         setQuery(e.target.value);
                         setOpen(false);
                     }}
