@@ -1,0 +1,792 @@
+
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Orbitron-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Orbitron-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Cinzel-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Cinzel-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Cinzel-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Cinzel-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Playfair-Display-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Playfair-Display-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Playfair-Display-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Playfair-Display-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Playfair-Display-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Playfair-Display-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Playfair-Display-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Playfair-Display-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Montserrat-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Montserrat-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Montserrat-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Montserrat-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Montserrat-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Montserrat-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Montserrat-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Montserrat-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Montserrat-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Montserrat-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Montserrat-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Montserrat-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Montserrat-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Montserrat-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Montserrat-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Raleway-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Raleway-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Raleway-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Raleway-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./Raleway-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Raleway-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Raleway-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Raleway-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Raleway-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Raleway-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Raleway-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Raleway-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Raleway-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Raleway-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Raleway-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Great Vibes';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Great-Vibes-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Great Vibes';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Great-Vibes-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Great Vibes';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Great-Vibes-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Great Vibes';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Great-Vibes-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Great Vibes';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Great-Vibes-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Great Vibes';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Great-Vibes-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Space-Mono-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Space-Mono-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Space-Mono-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Space-Mono-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Space-Mono-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Space-Mono-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Sacramento';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Sacramento-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Sacramento';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Sacramento-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Dancing-Script-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Dancing-Script-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Dancing-Script-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Dancing-Script-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Dancing-Script-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Dancing-Script-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Pinyon Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Pinyon-Script-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Pinyon Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Pinyon-Script-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Pinyon Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Pinyon-Script-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Allura';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Allura-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Allura';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Allura-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Allura';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Allura-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Petit Formal Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Petit-Formal-Script-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Petit Formal Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Petit-Formal-Script-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Alex Brush';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Alex-Brush-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Alex Brush';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Alex-Brush-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Alex Brush';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Alex-Brush-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Tinos-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Tinos-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Tinos-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Tinos-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Tinos-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Tinos-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Tinos-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Tinos-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Tinos-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Tinos-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Tinos-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Tinos-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Tinos-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Tinos-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Tinos-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Tinos-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Didact Gothic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Didact-Gothic-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Didact Gothic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Didact-Gothic-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Didact Gothic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Didact-Gothic-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Didact Gothic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Didact-Gothic-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Didact Gothic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Didact-Gothic-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Didact Gothic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Didact-Gothic-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Parisienne';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Parisienne-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Parisienne';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Parisienne-400-normal.woff2') format('woff2');
+}

@@ -1,0 +1,690 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { geoStereographic, geoPath, geoGraticule } from 'd3-geo';
+import { select } from 'd3-selection';
+import { scaleLinear } from 'd3-scale';
+import { useStore } from '../store/useStore';
+import { getProjectionRotation } from '../utils/astronomy';
+import { format } from 'date-fns';
+
+interface StarFeature {
+    type: 'Feature';
+    properties: {
+        mag: number;
+        [key: string]: any;
+    };
+    geometry: {
+        type: 'Point';
+        coordinates: [number, number];
+    };
+}
+
+interface ConstellationFeature {
+    type: 'Feature';
+    geometry: {
+        type: 'MultiLineString';
+        coordinates: number[][][];
+    };
+    properties: {
+        [key: string]: any;
+    };
+}
+
+const VectorStarMap: React.FC = () => {
+    const svgRef = useRef<SVGSVGElement>(null);
+    const [starsData, setStarsData] = useState<any>(null);
+    const [constellationsData, setConstellationsData] = useState<any>(null);
+
+    // Get state from store
+    const {
+        title,
+        subtitle,
+        date,
+        time,
+        lat,
+        lng,
+        location,
+        starScale,
+        lineWeight,
+        gridWidth,
+        posterColor,
+        textColor,
+        glowIntensity,
+        gridOpacity,
+        showBorder,
+        showConstellations,
+        showMilkyWay,
+        showGrid,
+        designStyle,
+        maskShape,
+        isLightMode,
+        showLocation,
+        showDate,
+        showCoords,
+        customText,
+        printSize,
+        circleSize,
+        heartSize,
+        shapeOffsetY,
+        titleFontSize,
+        subtitleFontSize,
+        detailsFontSize,
+        dedicationFontSize,
+        titleOffsetY,
+        subtitleOffsetY,
+        detailsOffsetY,
+        dedicationOffsetY
+    } = useStore();
+
+    // Fetch data on mount
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [starsRes, constellationsRes] = await Promise.all([
+                    fetch('https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/stars.6.json'),
+                    fetch('https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.lines.json')
+                ]);
+
+                const stars = await starsRes.json();
+                const constellations = await constellationsRes.json();
+
+                setStarsData(stars);
+                setConstellationsData(constellations);
+            } catch (error) {
+                console.error('Error fetching star map data:', error);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    // Render map when data or state changes
+    useEffect(() => {
+        if (!svgRef.current || !starsData || !constellationsData) return;
+
+        // Dynamic Dimensions based on Print Size Ratio
+        const width = 1200;
+        const [rW, rH] = printSize.ratio.split('/').map(Number);
+        const ratioVal = rW / rH;
+        const height = width / ratioVal;
+
+        const baseMapRadius = Math.min(width, height) * 0.4;
+        const mapRadius = baseMapRadius * (maskShape === 'circle' ? circleSize : heartSize);
+        const center = [width / 2, (height * 0.45) + shapeOffsetY];
+
+        const svg = select(svgRef.current);
+        svg.selectAll('*').remove();
+        svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+        // Define Defs (Glow Filter & Clip Path)
+        const defs = svg.append('defs');
+
+        // Clip Path Logic (Circle vs Heart)
+        const clipPath = defs.append('clipPath')
+            .attr('id', 'map-clip');
+
+        // Standard Heart SVG Path - properly scaled
+        // Using viewBox 0 0 24 24 standard heart, scaled to fit canvas
+        const baseHeartScale = baseMapRadius / 12; // Scale factor for 24-unit viewBox
+        const heartScale = baseHeartScale * heartSize; // Apply user size adjustment
+        const heartCenterX = center[0];
+        const heartCenterY = center[1];
+
+        // Standard heart path (viewBox 0 0 24 24) - centered and scaled
+        // Original: M12 6C10.2 3.9 7.2 3.3 4.9 5.2C2.7 7.1 2.4 10.3 4.1 12.6C5.6 14.5 10.1 18.4 11.5 19.7C11.7 19.9 11.8 19.9 11.9 20C12 20 12 20 12.1 20C12.2 19.9 12.3 19.9 12.5 19.7C13.9 18.4 18.4 14.5 19.8 12.6C21.6 10.3 21.3 7.1 19 5.2C16.8 3.3 13.8 3.9 12 6Z
+        const heartPath = `
+          M ${heartCenterX} ${heartCenterY - 6 * heartScale}
+          C ${heartCenterX - 1.8 * heartScale} ${heartCenterY - 8.1 * heartScale}, 
+            ${heartCenterX - 4.8 * heartScale} ${heartCenterY - 8.7 * heartScale}, 
+            ${heartCenterX - 7.1 * heartScale} ${heartCenterY - 6.8 * heartScale}
+          C ${heartCenterX - 9.3 * heartScale} ${heartCenterY - 4.9 * heartScale}, 
+            ${heartCenterX - 9.6 * heartScale} ${heartCenterY - 1.7 * heartScale}, 
+            ${heartCenterX - 7.9 * heartScale} ${heartCenterY + 0.6 * heartScale}
+          C ${heartCenterX - 6.4 * heartScale} ${heartCenterY + 2.5 * heartScale}, 
+            ${heartCenterX - 1.9 * heartScale} ${heartCenterY + 6.4 * heartScale}, 
+            ${heartCenterX - 0.5 * heartScale} ${heartCenterY + 7.7 * heartScale}
+          C ${heartCenterX - 0.3 * heartScale} ${heartCenterY + 7.9 * heartScale}, 
+            ${heartCenterX - 0.2 * heartScale} ${heartCenterY + 7.9 * heartScale}, 
+            ${heartCenterX - 0.1 * heartScale} ${heartCenterY + 8 * heartScale}
+          C ${heartCenterX} ${heartCenterY + 8 * heartScale}, 
+            ${heartCenterX} ${heartCenterY + 8 * heartScale}, 
+            ${heartCenterX + 0.1 * heartScale} ${heartCenterY + 8 * heartScale}
+          C ${heartCenterX + 0.2 * heartScale} ${heartCenterY + 7.9 * heartScale}, 
+            ${heartCenterX + 0.3 * heartScale} ${heartCenterY + 7.9 * heartScale}, 
+            ${heartCenterX + 0.5 * heartScale} ${heartCenterY + 7.7 * heartScale}
+          C ${heartCenterX + 1.9 * heartScale} ${heartCenterY + 6.4 * heartScale}, 
+            ${heartCenterX + 6.4 * heartScale} ${heartCenterY + 2.5 * heartScale}, 
+            ${heartCenterX + 7.9 * heartScale} ${heartCenterY + 0.6 * heartScale}
+          C ${heartCenterX + 9.6 * heartScale} ${heartCenterY - 1.7 * heartScale}, 
+            ${heartCenterX + 9.3 * heartScale} ${heartCenterY - 4.9 * heartScale}, 
+            ${heartCenterX + 7.1 * heartScale} ${heartCenterY - 6.8 * heartScale}
+          C ${heartCenterX + 4.8 * heartScale} ${heartCenterY - 8.7 * heartScale}, 
+            ${heartCenterX + 1.8 * heartScale} ${heartCenterY - 8.1 * heartScale}, 
+            ${heartCenterX} ${heartCenterY - 6 * heartScale}
+          Z
+        `;
+
+        if (maskShape === 'heart') {
+            clipPath.append('path').attr('d', heartPath);
+        } else {
+            clipPath.append('circle')
+                .attr('cx', center[0])
+                .attr('cy', center[1])
+                .attr('r', mapRadius);
+        }
+
+        // Glow Filter
+        const blurRadius = (glowIntensity / 10) * 8;
+
+        const filter = defs.append('filter')
+            .attr('id', 'star-glow')
+            .attr('x', '-100%')
+            .attr('y', '-100%')
+            .attr('width', '300%')
+            .attr('height', '300%');
+
+        filter.append('feGaussianBlur')
+            .attr('stdDeviation', blurRadius)
+            .attr('result', 'coloredBlur');
+
+        const feMerge = filter.append('feMerge');
+        feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+        feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+        // Setup projection with Time
+        const [hours, minutes] = time.split(':').map(Number);
+        const dateTime = new Date(date);
+        dateTime.setHours(hours || 0, minutes || 0);
+
+        const rotation = getProjectionRotation(dateTime, lat, lng);
+        const projection = geoStereographic()
+            .scale(mapRadius)
+            .translate([center[0], center[1]])
+            .rotate(rotation)
+            .clipAngle(90);
+
+        const path = geoPath().projection(projection);
+
+        // Draw background (Full SVG)
+        svg.append('rect')
+            .attr('width', '100%')
+            .attr('height', '100%')
+            .attr('fill', posterColor);
+
+        // --- MAP CONTENT GROUP (Clipped) ---
+        const mapGroup = svg.append('g')
+            .attr('clip-path', 'url(#map-clip)');
+
+        // Map Background Circle/Shape
+        if (!isLightMode) {
+            if (maskShape === 'heart') {
+                mapGroup.append('path')
+                    .attr('d', heartPath)
+                    .attr('fill', posterColor);
+            } else {
+                mapGroup.append('circle')
+                    .attr('cx', center[0])
+                    .attr('cy', center[1])
+                    .attr('r', mapRadius)
+                    .attr('fill', posterColor);
+            }
+        }
+
+        // Milky Way (Placeholder)
+        if (showMilkyWay) {
+            // Placeholder
+        }
+
+        // Graticule (Grid)
+        if (showGrid) {
+            const graticule = geoGraticule();
+            mapGroup.append('path')
+                .datum(graticule)
+                .attr('class', 'graticule')
+                .attr('d', path as any)
+                .attr('fill', 'none')
+                .attr('stroke', textColor)
+                .attr('stroke-width', gridWidth * 2)
+                .attr('stroke-opacity', gridOpacity);
+        }
+
+        // Constellation Lines
+        if (showConstellations && constellationsData.features) {
+            mapGroup.append('g')
+                .selectAll('path')
+                .data(constellationsData.features as ConstellationFeature[])
+                .enter()
+                .append('path')
+                .attr('d', path as any)
+                .attr('fill', 'none')
+                .attr('stroke', textColor)
+                .attr('stroke-width', lineWeight * 2)
+                .attr('stroke-opacity', 0.6);
+        }
+
+        // Stars - always using textColor for custom color support
+        if (starsData.features) {
+            const magScale = scaleLinear()
+                .domain([-2, 6])
+                .range([6 * starScale, 0.8 * starScale])
+                .clamp(true);
+
+            const features = starsData.features as StarFeature[];
+            const brightStars = features.filter(d => d.properties.mag < 2.5);
+            const faintStars = features.filter(d => d.properties.mag >= 2.5);
+
+            const starColor = textColor;
+
+            const drawStars = (selection: any, data: StarFeature[]) => {
+                selection.selectAll('circle')
+                    .data(data)
+                    .enter()
+                    .append('circle')
+                    .attr('cx', (d: StarFeature) => {
+                        const coords = projection(d.geometry.coordinates);
+                        return coords ? coords[0] : null;
+                    })
+                    .attr('cy', (d: StarFeature) => {
+                        const coords = projection(d.geometry.coordinates);
+                        return coords ? coords[1] : null;
+                    })
+                    .attr('r', (d: StarFeature) => magScale(d.properties.mag))
+                    .attr('fill', starColor);
+            };
+
+            const faintGroup = mapGroup.append('g').attr('class', 'stars-faint');
+            drawStars(faintGroup, faintStars);
+
+            const brightGroup = mapGroup.append('g').attr('class', 'stars-bright');
+            if (glowIntensity > 0 && !isLightMode) {
+                brightGroup.style('filter', 'url(#star-glow)');
+            }
+            drawStars(brightGroup, brightStars);
+        }
+
+        // --- OVERLAYS (Unclipped) ---
+
+        // Map Border (Horizon)
+        if (showBorder) {
+            const borderWidth = designStyle === 'fineline' ? 1.5 : 5;
+
+            if (maskShape === 'heart') {
+                // Draw Heart Border
+                svg.append('path')
+                    .attr('d', heartPath)
+                    .attr('fill', 'none')
+                    .attr('stroke', textColor)
+                    .attr('stroke-width', borderWidth);
+
+                if (designStyle === 'fineline') {
+                    const heartScaleInner = heartScale * 0.92;
+                    const heartPathInner = `
+                      M ${heartCenterX} ${heartCenterY - 6 * heartScaleInner}
+                      C ${heartCenterX - 1.8 * heartScaleInner} ${heartCenterY - 8.1 * heartScaleInner}, 
+                        ${heartCenterX - 4.8 * heartScaleInner} ${heartCenterY - 8.7 * heartScaleInner}, 
+                        ${heartCenterX - 7.1 * heartScaleInner} ${heartCenterY - 6.8 * heartScaleInner}
+                      C ${heartCenterX - 9.3 * heartScaleInner} ${heartCenterY - 4.9 * heartScaleInner}, 
+                        ${heartCenterX - 9.6 * heartScaleInner} ${heartCenterY - 1.7 * heartScaleInner}, 
+                        ${heartCenterX - 7.9 * heartScaleInner} ${heartCenterY + 0.6 * heartScaleInner}
+                      C ${heartCenterX - 6.4 * heartScaleInner} ${heartCenterY + 2.5 * heartScaleInner}, 
+                        ${heartCenterX - 1.9 * heartScaleInner} ${heartCenterY + 6.4 * heartScaleInner}, 
+                        ${heartCenterX - 0.5 * heartScaleInner} ${heartCenterY + 7.7 * heartScaleInner}
+                      C ${heartCenterX - 0.3 * heartScaleInner} ${heartCenterY + 7.9 * heartScaleInner}, 
+                        ${heartCenterX - 0.2 * heartScaleInner} ${heartCenterY + 7.9 * heartScaleInner}, 
+                        ${heartCenterX - 0.1 * heartScaleInner} ${heartCenterY + 8 * heartScaleInner}
+                      C ${heartCenterX} ${heartCenterY + 8 * heartScaleInner}, 
+                        ${heartCenterX} ${heartCenterY + 8 * heartScaleInner}, 
+                        ${heartCenterX + 0.1 * heartScaleInner} ${heartCenterY + 8 * heartScaleInner}
+                      C ${heartCenterX + 0.2 * heartScaleInner} ${heartCenterY + 7.9 * heartScaleInner}, 
+                        ${heartCenterX + 0.3 * heartScaleInner} ${heartCenterY + 7.9 * heartScaleInner}, 
+                        ${heartCenterX + 0.5 * heartScaleInner} ${heartCenterY + 7.7 * heartScaleInner}
+                      C ${heartCenterX + 1.9 * heartScaleInner} ${heartCenterY + 6.4 * heartScaleInner}, 
+                        ${heartCenterX + 6.4 * heartScaleInner} ${heartCenterY + 2.5 * heartScaleInner}, 
+                        ${heartCenterX + 7.9 * heartScaleInner} ${heartCenterY + 0.6 * heartScaleInner}
+                      C ${heartCenterX + 9.6 * heartScaleInner} ${heartCenterY - 1.7 * heartScaleInner}, 
+                        ${heartCenterX + 9.3 * heartScaleInner} ${heartCenterY - 4.9 * heartScaleInner}, 
+                        ${heartCenterX + 7.1 * heartScaleInner} ${heartCenterY - 6.8 * heartScaleInner}
+                      C ${heartCenterX + 4.8 * heartScaleInner} ${heartCenterY - 8.7 * heartScaleInner}, 
+                        ${heartCenterX + 1.8 * heartScaleInner} ${heartCenterY - 8.1 * heartScaleInner}, 
+                        ${heartCenterX} ${heartCenterY - 6 * heartScaleInner}
+                      Z
+                    `;
+
+                    svg.append('path')
+                        .attr('d', heartPathInner)
+                        .attr('fill', 'none')
+                        .attr('stroke', textColor)
+                        .attr('stroke-width', 1.5)
+                        .attr('opacity', 0.8);
+                }
+
+            } else {
+                // Standard Circle Border
+                svg.append('circle')
+                    .attr('cx', center[0])
+                    .attr('cy', center[1])
+                    .attr('r', mapRadius)
+                    .attr('fill', 'none')
+                    .attr('stroke', textColor)
+                    .attr('stroke-width', borderWidth);
+
+                if (designStyle === 'fineline') {
+                    svg.append('circle')
+                        .attr('cx', center[0])
+                        .attr('cy', center[1])
+                        .attr('r', mapRadius - 20)
+                        .attr('fill', 'none')
+                        .attr('stroke', textColor)
+                        .attr('stroke-width', 1.5)
+                        .attr('opacity', 0.8);
+                }
+            }
+        }
+
+        // Text Content
+        const textGroup = svg.append('g')
+            .attr('transform', `translate(${width / 2}, ${height * 0.82})`)
+            .attr('text-anchor', 'middle');
+
+        // Title
+        textGroup.append('text')
+            .attr('y', 0 + titleOffsetY)
+            .attr('fill', textColor)
+            .attr('font-family', 'Playfair Display, serif')
+            .attr('font-size', `${titleFontSize}px`)
+            .attr('font-weight', 'bold')
+            .attr('letter-spacing', '0.05em')
+            .text((customText.title || title).toUpperCase());
+
+        // Subtitle
+        textGroup.append('text')
+            .attr('y', 80 + subtitleOffsetY)
+            .attr('fill', textColor)
+            .attr('font-family', 'Lato, sans-serif')
+            .attr('font-size', `${subtitleFontSize}px`)
+            .attr('font-weight', '300')
+            .attr('letter-spacing', '0.2em')
+            .text((customText.subtitle || subtitle).toUpperCase());
+
+        // Date & Location & Coords
+        const dateStr = customText.date || format(dateTime, 'MMMM do, yyyy').toUpperCase();
+        const locStr = customText.location || (location ? location.toUpperCase() : '');
+        const coordsStr = customText.coords || `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
+
+        let detailParts = [];
+        if (showDate) detailParts.push(dateStr);
+        if (showLocation && locStr) detailParts.push(locStr);
+        if (showCoords) detailParts.push(coordsStr);
+
+        const detailText = detailParts.join(' • ');
+
+        textGroup.append('text')
+            .attr('y', 140 + detailsOffsetY)
+            .attr('fill', textColor)
+            .attr('font-family', 'Lato, sans-serif')
+            .attr('font-size', `${detailsFontSize}px`)
+            .attr('font-weight', '400')
+            .attr('opacity', 0.8)
+            .text(detailText);
+
+        // Personal Dedication (Footer)
+        if (customText.dedication) {
+            const dedicationLines = customText.dedication.split('\n');
+            dedicationLines.forEach((line, i) => {
+                textGroup.append('text')
+                    .attr('y', 220 + dedicationOffsetY + (i * 35))
+                    .attr('fill', textColor)
+                    .attr('font-family', 'Playfair Display, serif')
+                    .attr('font-size', `${dedicationFontSize}px`)
+                    .attr('font-style', 'italic')
+                    .attr('opacity', 0.9)
+                    .text(line);
+            });
+        }
+
+    }, [starsData, constellationsData, date, time, lat, lng, location, title, subtitle, starScale, lineWeight, gridWidth, posterColor, textColor, glowIntensity, gridOpacity, showBorder, showConstellations, showMilkyWay, showGrid, designStyle, maskShape, isLightMode, showLocation, showDate, showCoords, customText, printSize, circleSize, heartSize, shapeOffsetY, titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY]);
+
+    const { previewZoom, setPreviewZoom } = useStore();
+
+    // Mouse wheel zoom handler
+    const handleWheel = (e: React.WheelEvent) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        const newZoom = Math.max(0.5, Math.min(3.0, previewZoom + delta));
+        setPreviewZoom(newZoom);
+    };
+
+    return (
+        <div className="w-full h-full flex flex-col overflow-hidden bg-gray-100">
+            {/* Zoom Slider */}
+            <div className="px-4 py-2 bg-white border-b flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Zoom:</span>
+                <input
+                    type="range"
+                    min="0.5"
+                    max="3.0"
+                    step="0.1"
+                    value={previewZoom}
+                    onChange={(e) => setPreviewZoom(parseFloat(e.target.value))}
+                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+```
+                const starColor = textColor;
+
+            const drawStars = (selection: any, data: StarFeature[]) => {
+                    selection.selectAll('circle')
+                        .data(data)
+                        .enter()
+                        .append('circle')
+                        .attr('cx', (d: StarFeature) => {
+                            const coords = projection(d.geometry.coordinates);
+                            return coords ? coords[0] : null;
+                        })
+                        .attr('cy', (d: StarFeature) => {
+                            const coords = projection(d.geometry.coordinates);
+                            return coords ? coords[1] : null;
+                        })
+                        .attr('r', (d: StarFeature) => magScale(d.properties.mag))
+                        .attr('fill', starColor);
+            };
+
+                const faintGroup = mapGroup.append('g').attr('class', 'stars-faint');
+                drawStars(faintGroup, faintStars);
+
+                const brightGroup = mapGroup.append('g').attr('class', 'stars-bright');
+            if (glowIntensity > 0 && !isLightMode) {
+                    brightGroup.style('filter', 'url(#star-glow)');
+            }
+                drawStars(brightGroup, brightStars);
+        }
+
+                // --- OVERLAYS (Unclipped) ---
+
+                // Map Border (Horizon)
+                if (showBorder) {
+            const borderWidth = designStyle === 'fineline' ? 1.5 : 5;
+
+                if (maskShape === 'heart') {
+                    // Draw Heart Border
+                    svg.append('path')
+                        .attr('d', heartPath)
+                        .attr('fill', 'none')
+                        .attr('stroke', textColor)
+                        .attr('stroke-width', borderWidth);
+
+                if (designStyle === 'fineline') {
+                    const heartScaleInner = heartScale * 0.92;
+                const heartPathInner = `
+                M ${heartCenterX} ${heartCenterY - 6 * heartScaleInner}
+                C ${heartCenterX - 1.8 * heartScaleInner} ${heartCenterY - 8.1 * heartScaleInner},
+                ${heartCenterX - 4.8 * heartScaleInner} ${heartCenterY - 8.7 * heartScaleInner},
+                ${heartCenterX - 7.1 * heartScaleInner} ${heartCenterY - 6.8 * heartScaleInner}
+                C ${heartCenterX - 9.3 * heartScaleInner} ${heartCenterY - 4.9 * heartScaleInner},
+                ${heartCenterX - 9.6 * heartScaleInner} ${heartCenterY - 1.7 * heartScaleInner},
+                ${heartCenterX - 7.9 * heartScaleInner} ${heartCenterY + 0.6 * heartScaleInner}
+                C ${heartCenterX - 6.4 * heartScaleInner} ${heartCenterY + 2.5 * heartScaleInner},
+                ${heartCenterX - 1.9 * heartScaleInner} ${heartCenterY + 6.4 * heartScaleInner},
+                ${heartCenterX - 0.5 * heartScaleInner} ${heartCenterY + 7.7 * heartScaleInner}
+                C ${heartCenterX - 0.3 * heartScaleInner} ${heartCenterY + 7.9 * heartScaleInner},
+                ${heartCenterX - 0.2 * heartScaleInner} ${heartCenterY + 7.9 * heartScaleInner},
+                ${heartCenterX - 0.1 * heartScaleInner} ${heartCenterY + 8 * heartScaleInner}
+                C ${heartCenterX} ${heartCenterY + 8 * heartScaleInner},
+                ${heartCenterX} ${heartCenterY + 8 * heartScaleInner},
+                ${heartCenterX + 0.1 * heartScaleInner} ${heartCenterY + 8 * heartScaleInner}
+                C ${heartCenterX + 0.2 * heartScaleInner} ${heartCenterY + 7.9 * heartScaleInner},
+                ${heartCenterX + 0.3 * heartScaleInner} ${heartCenterY + 7.9 * heartScaleInner},
+                ${heartCenterX + 0.5 * heartScaleInner} ${heartCenterY + 7.7 * heartScaleInner}
+                C ${heartCenterX + 1.9 * heartScaleInner} ${heartCenterY + 6.4 * heartScaleInner},
+                ${heartCenterX + 6.4 * heartScaleInner} ${heartCenterY + 2.5 * heartScaleInner},
+                ${heartCenterX + 7.9 * heartScaleInner} ${heartCenterY + 0.6 * heartScaleInner}
+                C ${heartCenterX + 9.6 * heartScaleInner} ${heartCenterY - 1.7 * heartScaleInner},
+                ${heartCenterX + 9.3 * heartScaleInner} ${heartCenterY - 4.9 * heartScaleInner},
+                ${heartCenterX + 7.1 * heartScaleInner} ${heartCenterY - 6.8 * heartScaleInner}
+                C ${heartCenterX + 4.8 * heartScaleInner} ${heartCenterY - 8.7 * heartScaleInner},
+                ${heartCenterX + 1.8 * heartScaleInner} ${heartCenterY - 8.1 * heartScaleInner},
+                ${heartCenterX} ${heartCenterY - 6 * heartScaleInner}
+                Z
+                `;
+
+                svg.append('path')
+                .attr('d', heartPathInner)
+                .attr('fill', 'none')
+                .attr('stroke', textColor)
+                .attr('stroke-width', 1.5)
+                .attr('opacity', 0.8);
+                }
+
+            } else {
+                    // Standard Circle Border
+                    svg.append('circle')
+                        .attr('cx', center[0])
+                        .attr('cy', center[1])
+                        .attr('r', mapRadius)
+                        .attr('fill', 'none')
+                        .attr('stroke', textColor)
+                        .attr('stroke-width', borderWidth);
+
+                if (designStyle === 'fineline') {
+                    svg.append('circle')
+                        .attr('cx', center[0])
+                        .attr('cy', center[1])
+                        .attr('r', mapRadius - 20)
+                        .attr('fill', 'none')
+                        .attr('stroke', textColor)
+                        .attr('stroke-width', 1.5)
+                        .attr('opacity', 0.8);
+                }
+            }
+        }
+
+                // Text Content
+                const textGroup = svg.append('g')
+                .attr('transform', `translate(${width / 2}, ${height * 0.82})`)
+                .attr('text-anchor', 'middle');
+
+                // Title
+                textGroup.append('text')
+                .attr('y', 0 + titleOffsetY)
+                .attr('fill', textColor)
+                .attr('font-family', 'Playfair Display, serif')
+                .attr('font-size', `${titleFontSize}px`)
+                .attr('font-weight', 'bold')
+                .attr('letter-spacing', '0.05em')
+                .text((customText.title || title).toUpperCase());
+
+                // Subtitle
+                textGroup.append('text')
+                .attr('y', 80 + subtitleOffsetY)
+                .attr('fill', textColor)
+                .attr('font-family', 'Lato, sans-serif')
+                .attr('font-size', `${subtitleFontSize}px`)
+                .attr('font-weight', '300')
+                .attr('letter-spacing', '0.2em')
+                .text((customText.subtitle || subtitle).toUpperCase());
+
+                // Date & Location & Coords
+                const dateStr = customText.date || format(dateTime, 'MMMM do, yyyy').toUpperCase();
+                const locStr = customText.location || (location ? location.toUpperCase() : '');
+                const coordsStr = customText.coords || `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
+
+                let detailParts = [];
+                if (showDate) detailParts.push(dateStr);
+                if (showLocation && locStr) detailParts.push(locStr);
+                if (showCoords) detailParts.push(coordsStr);
+
+                const detailText = detailParts.join(' • ');
+
+                textGroup.append('text')
+                .attr('y', 140 + detailsOffsetY)
+                .attr('fill', textColor)
+                .attr('font-family', 'Lato, sans-serif')
+                .attr('font-size', `${detailsFontSize}px`)
+                .attr('font-weight', '400')
+                .attr('opacity', 0.8)
+                .text(detailText);
+
+                // Personal Dedication (Footer)
+                if (customText.dedication) {
+            const dedicationLines = customText.dedication.split('\n');
+            dedicationLines.forEach((line, i) => {
+                    textGroup.append('text')
+                        .attr('y', 220 + dedicationOffsetY + (i * 35))
+                        .attr('fill', textColor)
+                        .attr('font-family', 'Playfair Display, serif')
+                        .attr('font-size', `${dedicationFontSize}px`)
+                        .attr('font-style', 'italic')
+                        .attr('opacity', 0.9)
+                        .text(line);
+            });
+        }
+
+    }, [starsData, constellationsData, date, time, lat, lng, location, title, subtitle, starScale, lineWeight, gridWidth, posterColor, textColor, glowIntensity, gridOpacity, showBorder, showConstellations, showMilkyWay, showGrid, designStyle, maskShape, isLightMode, showLocation, showDate, showCoords, customText, printSize, circleSize, heartSize, shapeOffsetY, titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY]);
+
+                const {previewZoom, setPreviewZoom} = useStore();
+
+    // Mouse wheel zoom handler
+    const handleWheel = (e: React.WheelEvent) => {
+                    e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                const newZoom = Math.max(0.5, Math.min(3.0, previewZoom + delta));
+                setPreviewZoom(newZoom);
+    };
+
+                return (
+                <div className="w-full h-full flex flex-col overflow-hidden bg-gray-100">
+                    {/* Zoom Slider */}
+                    <div className="px-4 py-2 bg-white border-b flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Zoom:</span>
+                        <input
+                            type="range"
+                            min="0.5"
+                            max="3.0"
+                            step="0.1"
+                            value={previewZoom}
+                            onChange={(e) => setPreviewZoom(parseFloat(e.target.value))}
+                            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                        />
+                        <span className="text-sm text-gray-500 w-12 text-right">{Math.round(previewZoom * 100)}%</span>
+                    </div>
+
+                    {/* Preview Container with Zoom */}
+                    <div
+                        className="flex-1 overflow-auto"
+                        onWheel={handleWheel}
+                        style={{ cursor: 'grab' }}
+                    >
+                        <svg
+                            ref={svgRef}
+                            className="w-full h-full"
+                            style={{
+                                backgroundColor: posterColor,
+                                transform: `scale(${previewZoom})`,
+                                transformOrigin: 'center center'
+                            }}
+                            preserveAspectRatio="xMidYMid meet"
+                        />
+                    </div>
+                </div>
+                );
+};
+
+                export default VectorStarMap;
+                ```

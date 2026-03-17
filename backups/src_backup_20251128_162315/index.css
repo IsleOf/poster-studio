@@ -1,0 +1,165 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Luxury Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Cormorant Garamond', 'Playfair Display', serif;
+
+  /* Premium Color Palette - Sophisticated Neutrals with Gold Accents */
+  --color-bg-primary: #fafaf9;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #f5f5f4;
+
+  --color-text-primary: #09090b;
+  --color-text-secondary: #71717a;
+  --color-text-tertiary: #a1a1aa;
+
+  --color-border-light: #e7e5e4;
+  --color-border-default: #d6d3d1;
+  --color-border-dark: #a8a29e;
+
+  /* Luxury Gold Accent */
+  --color-accent: #d4af37;
+  --color-accent-hover: #c19b2a;
+  --color-accent-light: #f3e5ab;
+
+  /* Premium Blue for Interactive Elements */
+  --color-primary: #0f172a;
+  --color-primary-hover: #1e293b;
+  --color-primary-light: #334155;
+
+  /* Shadows for Depth */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+}
+
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-stone-50 text-zinc-900 font-sans antialiased;
+    font-feature-settings: "kern" 1, "liga" 1;
+    letter-spacing: -0.011em;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-serif;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  }
+}
+
+@layer components {
+
+  /* Premium Button Styles */
+  .btn-primary {
+    @apply px-6 py-2.5 bg-zinc-900 text-white rounded-lg font-medium text-sm;
+    @apply hover:bg-zinc-800 active:bg-zinc-950;
+    @apply transition-all duration-200 ease-out;
+    @apply shadow-sm hover:shadow-md;
+    letter-spacing: 0.01em;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-2.5 bg-white text-zinc-900 rounded-lg font-medium text-sm;
+    @apply border border-stone-200 hover:border-stone-300;
+    @apply hover:bg-stone-50 active:bg-stone-100;
+    @apply transition-all duration-200 ease-out;
+    @apply shadow-sm hover:shadow;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 text-zinc-700 rounded-md font-medium text-sm;
+    @apply hover:bg-stone-100 active:bg-stone-200;
+    @apply transition-colors duration-150;
+  }
+
+  /* Luxury Input Styles */
+  .input-luxury {
+    @apply w-full px-4 py-2.5 bg-white text-zinc-900;
+    @apply border border-stone-200 rounded-lg;
+    @apply focus:border-zinc-400 focus:ring-2 focus:ring-zinc-100;
+    @apply placeholder-zinc-400;
+    @apply transition-all duration-200 outline-none;
+    @apply shadow-sm focus:shadow;
+    font-size: 0.9375rem;
+  }
+
+  /* Premium Slider Styles */
+  .slider-luxury {
+    @apply w-full h-1.5 bg-stone-200 rounded-full appearance-none cursor-pointer;
+    @apply transition-all duration-200;
+  }
+
+  .slider-luxury::-webkit-slider-thumb {
+    @apply appearance-none wh-4 h-4 bg-zinc-900 rounded-full cursor-pointer;
+    @apply shadow-md hover:shadow-lg;
+    @apply transition-all duration-200;
+    border: 2px solid white;
+  }
+
+  .slider-luxury::-moz-range-thumb {
+    @apply w-4 h-4 bg-zinc-900 rounded-full cursor-pointer;
+    @apply shadow-md hover:shadow-lg;
+    @apply transition-all duration-200;
+    border: 2px solid white;
+  }
+
+  .slider-luxury:hover {
+    @apply bg-stone-300;
+  }
+
+  /* Toggle Switch - Luxury Style */
+  .toggle-luxury {
+    @apply relative inline-block w-11 h-6;
+  }
+
+  .toggle-luxury input {
+    @apply opacity-0 w-0 h-0;
+  }
+
+  .toggle-slider {
+    @apply absolute cursor-pointer inset-0 bg-stone-300 rounded-full;
+    @apply transition-all duration-300 ease-in-out;
+    @apply shadow-inner;
+  }
+
+  .toggle-slider:before {
+    @apply absolute content-[''] h-5 w-5 left-0.5 bottom-0.5;
+    @apply bg-white rounded-full shadow-md;
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  input:checked+.toggle-slider {
+    @apply bg-zinc-900;
+  }
+
+  input:checked+.toggle-slider:before {
+    @apply translate-x-5;
+  }
+
+  /* Luxury Card */
+  .card-luxury {
+    @apply bg-white rounded-xl border border-stone-200;
+    @apply shadow-sm hover:shadow-md transition-shadow duration-200;
+  }
+
+  /* Section Header */
+  .section-header {
+    @apply text-sm font-semibold text-zinc-900 uppercase tracking-wide;
+    letter-spacing: 0.05em;
+  }
+
+  /* Divider */
+  .divider-luxury {
+    @apply border-t border-stone-200;
+  }
+}

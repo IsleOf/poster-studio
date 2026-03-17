@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+
+@theme {
+  /* Star Poster Color Palette */
+  --font-sans: 'Lato', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Playfair Display', serif;
+
+  /* Dark theme colors matching Star Poster */
+  --color-bg-primary: #1B2735;
+  --color-bg-secondary: #2C3E50;
+  --color-bg-tertiary: #34495E;
+
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #E0E0E0;
+  --color-text-tertiary: #95A5A6;
+
+  --color-border-light: #3E4E5E;
+  --color-border-default: #4E5E6E;
+  --color-border-dark: #2C3E50;
+
+  /* Blue Accent */
+  --color-accent: #007BFF;
+  --color-accent-hover: #0066D6;
+  --color-accent-light: #4DA3FF;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.3);
+}
+
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-zinc-900 text-white font-sans antialiased;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-serif;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  }
+}
+
+@layer components {
+
+  /* Star Poster Button Styles */
+  .btn-primary {
+    @apply px-6 py-3 bg-blue-600 text-white rounded-lg font-medium text-sm;
+    @apply hover:bg-blue-700 active:bg-blue-800;
+    @apply transition-all duration-200 ease-out;
+    @apply shadow-md hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 bg-zinc-700 text-white rounded-lg font-medium text-sm;
+    @apply border border-zinc-600 hover:border-zinc-500;
+    @apply hover:bg-zinc-600 active:bg-zinc-800;
+    @apply transition-all duration-200 ease-out;
+  }
+
+  /* Input Styles */
+  .input-dark {
+    @apply w-full px-4 py-2.5 bg-zinc-800 text-white;
+    @apply border border-zinc-700 rounded-lg;
+    @apply focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20;
+    @apply placeholder-zinc-500;
+    @apply transition-all duration-200 outline-none;
+  }
+
+  /* Slider Styles */
+  .slider-dark {
+    @apply w-full h-1.5 bg-zinc-700 rounded-full appearance-none cursor-pointer;
+    @apply transition-all duration-200;
+  }
+
+  .slider-dark::-webkit-slider-thumb {
+    @apply appearance-none w-4 h-4 bg-blue-600 rounded-full cursor-pointer;
+    @apply shadow-md hover:shadow-lg;
+    @apply transition-all duration-200;
+    border: 2px solid white;
+  }
+
+  .slider-dark::-moz-range-thumb {
+    @apply w-4 h-4 bg-blue-600 rounded-full cursor-pointer;
+    @apply shadow-md hover:shadow-lg;
+    @apply transition-all duration-200;
+    border: 2px solid white;
+  }
+
+  .slider-dark:hover {
+    @apply bg-zinc-600;
+  }
+
+  /* Toggle Switch */
+  .toggle-switch {
+    @apply relative inline-block w-11 h-6;
+  }
+
+  .toggle-switch input {
+    @apply opacity-0 w-0 h-0;
+  }
+
+  .toggle-slider {
+    @apply absolute cursor-pointer inset-0 bg-zinc-700 rounded-full;
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .toggle-slider:before {
+    @apply absolute content-[''] h-5 w-5 left-0.5 bottom-0.5;
+    @apply bg-white rounded-full shadow-md;
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  input:checked+.toggle-slider {
+    @apply bg-blue-600;
+  }
+
+  input:checked+.toggle-slider:before {
+    @apply translate-x-5;
+  }
+
+  /* Card */
+  .card-dark {
+    @apply bg-zinc-800 rounded-xl border border-zinc-700;
+    @apply shadow-md hover:shadow-lg transition-shadow duration-200;
+  }
+
+  /* Section Header */
+  .section-header {
+    @apply text-base font-serif font-semibold text-white tracking-wide;
+  }
+
+  /* Divider */
+  .divider-dark {
+    @apply border-t border-zinc-700;
+  }
+}

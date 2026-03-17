@@ -1,0 +1,375 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { geoStereographic, geoPath, geoGraticule } from 'd3-geo';
+import { select } from 'd3-selection';
+import { scaleLinear } from 'd3-scale';
+import { useStore } from '../store/useStore';
+import { getProjectionRotation } from '../utils/astronomy';
+import { format } from 'date-fns';
+
+interface StarFeature {
+    type: 'Feature';
+    properties: {
+        mag: number;
+        [key: string]: any;
+    };
+    geometry: {
+        type: 'Point';
+        coordinates: [number, number];
+    };
+}
+
+interface ConstellationFeature {
+    type: 'Feature';
+    geometry: {
+        type: 'MultiLineString';
+        coordinates: number[][][];
+    };
+    properties: {
+        [key: string]: any;
+    };
+}
+
+const VectorStarMap: React.FC = () => {
+    const svgRef = useRef<SVGSVGElement>(null);
+    const [starsData, setStarsData] = useState<any>(null);
+    const [constellationsData, setConstellationsData] = useState<any>(null);
+
+    const {
+        title, subtitle, date, time, lat, lng, location, starScale, lineWeight, gridWidth,
+        posterColor, textColor, glowIntensity, gridOpacity, showBorder, showConstellations,
+        showMilkyWay, showGrid, designStyle, maskShape, isLightMode, showLocation, showDate,
+        showCoords, customText, printSize, circleSize, heartSize, shapeOffsetY, titleFontSize,
+        subtitleFontSize, detailsFontSize, dedicationFontSize, titleOffsetY, subtitleOffsetY,
+        detailsOffsetY, dedicationOffsetY
+    } = useStore();
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [starsRes, constellationsRes] = await Promise.all([
+                    fetch('https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/stars.6.json'),
+                    fetch('https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.lines.json')
+                ]);
+                const stars = await starsRes.json();
+                const constellations = await constellationsRes.json();
+                setStarsData(stars);
+                setConstellationsData(constellations);
+            } catch (error) {
+                console.error('Error fetching star map data:', error);
+            }
+        };
+        fetchData();
+    }, []);
+
+    useEffect(() => {
+        if (!svgRef.current || !starsData || !constellationsData) return;
+
+        const width = 1200;
+        const [rW, rH] = printSize.ratio.split('/').map(Number);
+        const ratioVal = rW / rH;
+        const height = width / ratioVal;
+
+        const baseMapRadius = Math.min(width, height) * 0.4;
+        const mapRadius = baseMapRadius * (maskShape === 'circle' ? circleSize : heartSize);
+        const center = [width / 2, (height * 0.45) + shapeOffsetY];
+
+        const svg = select(svgRef.current);
+        svg.selectAll('*').remove();
+        svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+        const defs = svg.append('defs');
+        const clipPath = defs.append('clipPath').attr('id', 'map-clip');
+
+        const baseHeartScale = baseMapRadius / 12;
+        const heartScale = baseHeartScale * heartSize;
+        const heartCenterX = center[0];
+        const heartCenterY = center[1];
+
+        const heartPath = `M ${heartCenterX} ${heartCenterY - 6 * heartScale} C ${heartCenterX - 1.8 * heartScale} ${heartCenterY - 8.1 * heartScale}, ${heartCenterX - 4.8 * heartScale} ${heartCenterY - 8.7 * heartScale}, ${heartCenterX - 7.1 * heartScale} ${heartCenterY - 6.8 * heartScale} C ${heartCenterX - 9.3 * heartScale} ${heartCenterY - 4.9 * heartScale}, ${heartCenterX - 9.6 * heartScale} ${heartCenterY - 1.7 * heartScale}, ${heartCenterX - 7.9 * heartScale} ${heartCenterY + 0.6 * heartScale} C ${heartCenterX - 6.4 * heartScale} ${heartCenterY + 2.5 * heartScale}, ${heartCenterX - 1.9 * heartScale} ${heartCenterY + 6.4 * heartScale}, ${heartCenterX - 0.5 * heartScale} ${heartCenterY + 7.7 * heartScale} C ${heartCenterX - 0.3 * heartScale} ${heartCenterY + 7.9 * heartScale}, ${heartCenterX - 0.2 * heartScale} ${heartCenterY + 7.9 * heartScale}, ${heartCenterX - 0.1 * heartScale} ${heartCenterY + 8 * heartScale} C ${heartCenterX} ${heartCenterY + 8 * heartScale}, ${heartCenterX} ${heartCenterY + 8 * heartScale}, ${heartCenterX + 0.1 * heartScale} ${heartCenterY + 8 * heartScale} C ${heartCenterX + 0.2 * heartScale} ${heartCenterY + 7.9 * heartScale}, ${heartCenterX + 0.3 * heartScale} ${heartCenterY + 7.9 * heartScale}, ${heartCenterX + 0.5 * heartScale} ${heartCenterY + 7.7 * heartScale} C ${heartCenterX + 1.9 * heartScale} ${heartCenterY + 6.4 * heartScale}, ${heartCenterX + 6.4 * heartScale} ${heartCenterY + 2.5 * heartScale}, ${heartCenterX + 7.9 * heartScale} ${heartCenterY + 0.6 * heartScale} C ${heartCenterX + 9.6 * heartScale} ${heartCenterY - 1.7 * heartScale}, ${heartCenterX + 9.3 * heartScale} ${heartCenterY - 4.9 * heartScale}, ${heartCenterX + 7.1 * heartScale} ${heartCenterY - 6.8 * heartScale} C ${heartCenterX + 4.8 * heartScale} ${heartCenterY - 8.7 * heartScale}, ${heartCenterX + 1.8 * heartScale} ${heartCenterY - 8.1 * heartScale}, ${heartCenterX} ${heartCenterY - 6 * heartScale} Z`;
+
+        if (maskShape === 'heart') {
+            clipPath.append('path').attr('d', heartPath);
+        } else {
+            clipPath.append('circle').attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius);
+        }
+
+        const blurRadius = (glowIntensity / 10) * 8;
+        const filter = defs.append('filter').attr('id', 'star-glow').attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%');
+        filter.append('feGaussianBlur').attr('stdDeviation', blurRadius).attr('result', 'coloredBlur');
+        const feMerge = filter.append('feMerge');
+        feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+        feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+        const [hours, minutes] = time.split(':').map(Number);
+        const dateTime = new Date(date);
+        dateTime.setHours(hours || 0, minutes || 0);
+
+        const rotation = getProjectionRotation(dateTime, lat, lng);
+        const projection = geoStereographic().scale(mapRadius).translate([center[0], center[1]]).rotate(rotation).clipAngle(90);
+        const path = geoPath().projection(projection);
+
+        svg.append('rect').attr('width', '100%').attr('height', '100%').attr('fill', posterColor);
+
+        const mapGroup = svg.append('g').attr('clip-path', 'url(#map-clip)');
+
+        if (!isLightMode) {
+            if (maskShape === 'heart') {
+                mapGroup.append('path').attr('d', heartPath).attr('fill', posterColor);
+            } else {
+                mapGroup.append('circle').attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius).attr('fill', posterColor);
+            }
+        }
+
+        if (showGrid) {
+            const graticule = geoGraticule();
+            mapGroup.append('path').datum(graticule).attr('d', path as any).attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', gridWidth * 2).attr('stroke-opacity', gridOpacity);
+        }
+
+        if (showConstellations && constellationsData.features) {
+            mapGroup.append('g').selectAll('path').data(constellationsData.features as ConstellationFeature[]).enter().append('path').attr('d', path as any).attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', lineWeight * 2).attr('stroke-opacity', 1.0);
+        }
+
+        if (starsData.features) {
+            const magScale = scaleLinear().domain([-2, 6]).range([6 * starScale, 0.8 * starScale]).clamp(true);
+            const features = starsData.features as StarFeature[];
+            const brightStars = features.filter(d => d.properties.mag < 2.5);
+            const faintStars = features.filter(d => d.properties.mag >= 2.5);
+
+            const drawStars = (selection: any, data: StarFeature[]) => {
+                selection.selectAll('circle').data(data).enter().append('circle')
+                    .attr('cx', (d: StarFeature) => { const coords = projection(d.geometry.coordinates); return coords ? coords[0] : null; })
+                    .attr('cy', (d: StarFeature) => { const coords = projection(d.geometry.coordinates); return coords ? coords[1] : null; })
+                    .attr('r', (d: StarFeature) => magScale(d.properties.mag))
+                    .attr('fill', textColor);
+            };
+
+            const faintGroup = mapGroup.append('g');
+            drawStars(faintGroup, faintStars);
+
+            const brightGroup = mapGroup.append('g');
+            if (glowIntensity > 0 && !isLightMode) {
+                brightGroup.style('filter', 'url(#star-glow)');
+            }
+            drawStars(brightGroup, brightStars);
+        }
+
+        if (showBorder) {
+            const borderWidth = designStyle === 'fineline' ? 1.5 : 5;
+            if (maskShape === 'heart') {
+                svg.append('path').attr('d', heartPath).attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', borderWidth);
+            } else {
+                svg.append('circle').attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius).attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', borderWidth);
+            }
+        }
+
+        const textGroup = svg.append('g').attr('transform', `translate(${width / 2}, ${height * 0.82})`).attr('text-anchor', 'middle');
+        textGroup.append('text').attr('y', 0 + titleOffsetY).attr('fill', textColor).attr('font-family', 'Playfair Display, serif').attr('font-size', `${titleFontSize}px`).attr('font-weight', 'bold').attr('letter-spacing', '0.05em').text((customText.title || title).toUpperCase());
+        textGroup.append('text').attr('y', 80 + subtitleOffsetY).attr('fill', textColor).attr('font-family', 'Lato, sans-serif').attr('font-size', `${subtitleFontSize}px`).attr('font-weight', '300').attr('letter-spacing', '0.2em').text((customText.subtitle || subtitle).toUpperCase());
+
+        const dateStr = customText.date || format(dateTime, 'MMMM do, yyyy').toUpperCase();
+        const locStr = customText.location || (location ? location.toUpperCase() : '');
+        const coordsStr = customText.coords || `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
+        let detailParts = [];
+        if (showDate) detailParts.push(dateStr);
+        if (showLocation && locStr) detailParts.push(locStr);
+        if (showCoords) detailParts.push(coordsStr);
+        const detailText = detailParts.join(' • ');
+        textGroup.append('text').attr('y', 140 + detailsOffsetY).attr('fill', textColor).attr('font-family', 'Lato, sans-serif').attr('font-size', `${detailsFontSize}px`).attr('font-weight', '400').attr('opacity', 0.8).text(detailText);
+
+        import React, { useEffect, useRef, useState } from 'react';
+        import { geoStereographic, geoPath, geoGraticule } from 'd3-geo';
+        import { select } from 'd3-selection';
+        import { scaleLinear } from 'd3-scale';
+        import { useStore } from '../store/useStore';
+        import { getProjectionRotation } from '../utils/astronomy';
+        import { format } from 'date-fns';
+
+        interface StarFeature {
+            type: 'Feature';
+            properties: {
+                mag: number;
+                [key: string]: any;
+            };
+            geometry: {
+                type: 'Point';
+                coordinates: [number, number];
+            };
+        }
+
+        interface ConstellationFeature {
+            type: 'Feature';
+            geometry: {
+                type: 'MultiLineString';
+                coordinates: number[][][];
+            };
+            properties: {
+                [key: string]: any;
+            };
+        }
+
+        const VectorStarMap: React.FC = () => {
+            const svgRef = useRef<SVGSVGElement>(null);
+            const [starsData, setStarsData] = useState<any>(null);
+            const [constellationsData, setConstellationsData] = useState<any>(null);
+
+            const {
+                title, subtitle, date, time, lat, lng, location, starScale, lineWeight, gridWidth,
+                posterColor, textColor, glowIntensity, gridOpacity, showBorder, showConstellations,
+                showMilkyWay, showGrid, designStyle, maskShape, isLightMode, showLocation, showDate,
+                showCoords, customText, printSize, circleSize, heartSize, shapeOffsetY, titleFontSize,
+                subtitleFontSize, detailsFontSize, dedicationFontSize, titleOffsetY, subtitleOffsetY,
+                detailsOffsetY, dedicationOffsetY, previewZoom, setPreviewZoom
+            } = useStore();
+
+            useEffect(() => {
+                const fetchData = async () => {
+                    try {
+                        const [starsRes, constellationsRes] = await Promise.all([
+                            fetch('https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/stars.6.json'),
+                            fetch('https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.lines.json')
+                        ]);
+                        const stars = await starsRes.json();
+                        const constellations = await constellationsRes.json();
+                        setStarsData(stars);
+                        setConstellationsData(constellations);
+                    } catch (error) {
+                        console.error('Error fetching star map data:', error);
+                    }
+                };
+                fetchData();
+            }, []);
+
+            useEffect(() => {
+                if (!svgRef.current || !starsData || !constellationsData) return;
+
+                const width = 1200;
+                const [rW, rH] = printSize.ratio.split('/').map(Number);
+                const ratioVal = rW / rH;
+                const height = width / ratioVal;
+
+                const baseMapRadius = Math.min(width, height) * 0.4;
+                const mapRadius = baseMapRadius * (maskShape === 'circle' ? circleSize : heartSize);
+                const center = [width / 2, (height * 0.45) + shapeOffsetY];
+
+                const svg = select(svgRef.current);
+                svg.selectAll('*').remove();
+                svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+                const defs = svg.append('defs');
+                const clipPath = defs.append('clipPath').attr('id', 'map-clip');
+
+                const baseHeartScale = baseMapRadius / 12;
+                const heartScale = baseHeartScale * heartSize;
+                const heartCenterX = center[0];
+                const heartCenterY = center[1];
+
+                const heartPath = `M ${heartCenterX} ${heartCenterY - 6 * heartScale} C ${heartCenterX - 1.8 * heartScale} ${heartCenterY - 8.1 * heartScale}, ${heartCenterX - 4.8 * heartScale} ${heartCenterY - 8.7 * heartScale}, ${heartCenterX - 7.1 * heartScale} ${heartCenterY - 6.8 * heartScale} C ${heartCenterX - 9.3 * heartScale} ${heartCenterY - 4.9 * heartScale}, ${heartCenterX - 9.6 * heartScale} ${heartCenterY - 1.7 * heartScale}, ${heartCenterX - 7.9 * heartScale} ${heartCenterY + 0.6 * heartScale} C ${heartCenterX - 6.4 * heartScale} ${heartCenterY + 2.5 * heartScale}, ${heartCenterX - 1.9 * heartScale} ${heartCenterY + 6.4 * heartScale}, ${heartCenterX - 0.5 * heartScale} ${heartCenterY + 7.7 * heartScale} C ${heartCenterX - 0.3 * heartScale} ${heartCenterY + 7.9 * heartScale}, ${heartCenterX - 0.2 * heartScale} ${heartCenterY + 7.9 * heartScale}, ${heartCenterX - 0.1 * heartScale} ${heartCenterY + 8 * heartScale} C ${heartCenterX} ${heartCenterY + 8 * heartScale}, ${heartCenterX} ${heartCenterY + 8 * heartScale}, ${heartCenterX + 0.1 * heartScale} ${heartCenterY + 8 * heartScale} C ${heartCenterX + 0.2 * heartScale} ${heartCenterY + 7.9 * heartScale}, ${heartCenterX + 0.3 * heartScale} ${heartCenterY + 7.9 * heartScale}, ${heartCenterX + 0.5 * heartScale} ${heartCenterY + 7.7 * heartScale} C ${heartCenterX + 1.9 * heartScale} ${heartCenterY + 6.4 * heartScale}, ${heartCenterX + 6.4 * heartScale} ${heartCenterY + 2.5 * heartScale}, ${heartCenterX + 7.9 * heartScale} ${heartCenterY + 0.6 * heartScale} C ${heartCenterX + 9.6 * heartScale} ${heartCenterY - 1.7 * heartScale}, ${heartCenterX + 9.3 * heartScale} ${heartCenterY - 4.9 * heartScale}, ${heartCenterX + 7.1 * heartScale} ${heartCenterY - 6.8 * heartScale} C ${heartCenterX + 4.8 * heartScale} ${heartCenterY - 8.7 * heartScale}, ${heartCenterX + 1.8 * heartScale} ${heartCenterY - 8.1 * heartScale}, ${heartCenterX} ${heartCenterY - 6 * heartScale} Z`;
+
+                if (maskShape === 'heart') {
+                    clipPath.append('path').attr('d', heartPath);
+                } else {
+                    clipPath.append('circle').attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius);
+                }
+
+                const blurRadius = (glowIntensity / 10) * 8;
+                const filter = defs.append('filter').attr('id', 'star-glow').attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%');
+                filter.append('feGaussianBlur').attr('stdDeviation', blurRadius).attr('result', 'coloredBlur');
+                const feMerge = filter.append('feMerge');
+                feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+                feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+                const [hours, minutes] = time.split(':').map(Number);
+                const dateTime = new Date(date);
+                dateTime.setHours(hours || 0, minutes || 0);
+
+                const rotation = getProjectionRotation(dateTime, lat, lng);
+                const projection = geoStereographic().scale(mapRadius).translate([center[0], center[1]]).rotate(rotation).clipAngle(90);
+                const path = geoPath().projection(projection);
+
+                svg.append('rect').attr('width', '100%').attr('height', '100%').attr('fill', posterColor);
+
+                const mapGroup = svg.append('g').attr('clip-path', 'url(#map-clip)');
+
+                if (!isLightMode) {
+                    if (maskShape === 'heart') {
+                        mapGroup.append('path').attr('d', heartPath).attr('fill', posterColor);
+                    } else {
+                        mapGroup.append('circle').attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius).attr('fill', posterColor);
+                    }
+                }
+
+                if (showGrid) {
+                    const graticule = geoGraticule();
+                    mapGroup.append('path').datum(graticule).attr('d', path as any).attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', gridWidth * 2).attr('stroke-opacity', gridOpacity);
+                }
+
+                if (showConstellations && constellationsData.features) {
+                    mapGroup.append('g').selectAll('path').data(constellationsData.features as ConstellationFeature[]).enter().append('path').attr('d', path as any).attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', lineWeight * 2).attr('stroke-opacity', 1.0);
+                }
+
+                if (starsData.features) {
+                    const magScale = scaleLinear().domain([-2, 6]).range([6 * starScale, 0.8 * starScale]).clamp(true);
+                    const features = starsData.features as StarFeature[];
+                    const brightStars = features.filter(d => d.properties.mag < 2.5);
+                    const faintStars = features.filter(d => d.properties.mag >= 2.5);
+
+                    const drawStars = (selection: any, data: StarFeature[]) => {
+                        selection.selectAll('circle').data(data).enter().append('circle')
+                            .attr('cx', (d: StarFeature) => { const coords = projection(d.geometry.coordinates); return coords ? coords[0] : null; })
+                            .attr('cy', (d: StarFeature) => { const coords = projection(d.geometry.coordinates); return coords ? coords[1] : null; })
+                            .attr('r', (d: StarFeature) => magScale(d.properties.mag))
+                            .attr('fill', textColor);
+                    };
+
+                    const faintGroup = mapGroup.append('g');
+                    drawStars(faintGroup, faintStars);
+
+                    const brightGroup = mapGroup.append('g');
+                    if (glowIntensity > 0 && !isLightMode) {
+                        brightGroup.style('filter', 'url(#star-glow)');
+                    }
+                    drawStars(brightGroup, brightStars);
+                }
+
+                if (showBorder) {
+                    const borderWidth = designStyle === 'fineline' ? 1.5 : 5;
+                    if (maskShape === 'heart') {
+                        svg.append('path').attr('d', heartPath).attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', borderWidth);
+                    } else {
+                        svg.append('circle').attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius).attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', borderWidth);
+                    }
+                }
+
+                const textGroup = svg.append('g').attr('transform', `translate(${width / 2}, ${height * 0.82})`).attr('text-anchor', 'middle');
+                textGroup.append('text').attr('y', 0 + titleOffsetY).attr('fill', textColor).attr('font-family', 'Playfair Display, serif').attr('font-size', `${titleFontSize}px`).attr('font-weight', 'bold').attr('letter-spacing', '0.05em').text((customText.title || title).toUpperCase());
+                textGroup.append('text').attr('y', 80 + subtitleOffsetY).attr('fill', textColor).attr('font-family', 'Lato, sans-serif').attr('font-size', `${subtitleFontSize}px`).attr('font-weight', '300').attr('letter-spacing', '0.2em').text((customText.subtitle || subtitle).toUpperCase());
+
+                const dateStr = customText.date || format(dateTime, 'MMMM do, yyyy').toUpperCase();
+                const locStr = customText.location ? customText.location.toUpperCase() : (location ? location.toUpperCase() : '');
+                const coordsStr = customText.coords || `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
+                let detailParts = [];
+                if (showDate) detailParts.push(dateStr);
+                if (showLocation && locStr) detailParts.push(locStr);
+                if (showCoords) detailParts.push(coordsStr);
+                const detailText = detailParts.join(' • ');
+                textGroup.append('text').attr('y', 140 + detailsOffsetY).attr('fill', textColor).attr('font-family', 'Lato, sans-serif').attr('font-size', `${detailsFontSize}px`).attr('font-weight', '400').attr('opacity', 0.8).text(detailText);
+
+                if (customText.dedication) {
+                    const dedicationLines = customText.dedication.split('\n');
+                    dedicationLines.forEach((line, i) => {
+                        textGroup.append('text').attr('y', 220 + dedicationOffsetY + (i * 35)).attr('fill', textColor).attr('font-family', 'Playfair Display, serif').attr('font-size', `${dedicationFontSize}px`).attr('font-style', 'italic').attr('opacity', 0.9).text(line);
+                    });
+                }
+            }, [starsData, constellationsData, date, time, lat, lng, location, title, subtitle, starScale, lineWeight, gridWidth, posterColor, textColor, glowIntensity, gridOpacity, showBorder, showConstellations, showMilkyWay, showGrid, designStyle, maskShape, isLightMode, showLocation, showDate, showCoords, customText, printSize, circleSize, heartSize, shapeOffsetY, titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY]);
+
+            return (
+                <svg
+                    ref={svgRef}
+                    className="w-full h-full"
+                    style={{ backgroundColor: posterColor }}
+                    preserveAspectRatio="xMidYMid meet"
+                />
+            );
+        };
+
+        export default VectorStarMap;
