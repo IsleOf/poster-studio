@@ -33,8 +33,9 @@ poster-studio/
 │   ├── components/
 │   │   ├── MainLayout.tsx         # Split-pane layout, zoom/pan, poster preview
 │   │   ├── VectorStarMap.tsx      # SVG poster renderer (star OR street map)
-│   │   ├── SidebarControls.tsx    # All controls (1600+ lines, accordion-based)
+│   │   ├── SidebarControls.tsx    # All controls (1700+ lines, accordion-based)
 │   │   ├── StreetMapCapture.tsx   # Offscreen MapLibre renderer → canvas capture
+│   │   ├── GlyphPicker.tsx        # Visual glyph browser for Mapped Moment Script font
 │   │   ├── CitySearch.tsx         # Nominatim city autocomplete
 │   │   └── DownloadButton.tsx     # SVG → 300 DPI PNG export
 │   ├── store/
@@ -49,7 +50,7 @@ poster-studio/
 └── dist/                          # Build output (gitignored)
 ```
 
-## How The Two Modes Work
+## How The Three Modes Work
 
 ### Star Map Mode
 `posterType === 'starmap'` in the store.
@@ -58,13 +59,16 @@ poster-studio/
 - `mapBackgroundImage` is `null` → renders stars
 
 ### Street Map Mode
-`posterType === 'streetmap'` in the store.
+`posterType === 'streetmap'` in the store. 2-color monochrome presets only. `mapStyleUrl = null`.
 - `MainLayout.tsx` renders `<StreetMapCapture>` offscreen (fixed, top:-9999px)
-- MapLibre GL JS renders the street map to a WebGL canvas
+- MapLibre GL JS renders the street map to a WebGL canvas using custom 2-color style
 - On `idle`/`moveend`, `StreetMapCapture.onCapture(dataUrl)` is called
 - `MainLayout` calls `setMapBackgroundImage(dataUrl)` to store the snapshot
-- `VectorStarMap.tsx` detects `mapBackgroundImage !== null` and renders it as an `<image>` inside the poster template (clipped to circle/heart shape)
+- `VectorStarMap.tsx` detects `mapBackgroundImage !== null` and renders it as an `<image>` inside the poster template
 - All poster text, titles, borders, fonts still apply on top
+
+### Colored Map Mode
+`posterType === 'coloredmap'` in the store. Sets `mapStyleUrl = 'https://tiles.openfreemap.org/styles/bright'` automatically via `setPosterType`. Same StreetMapCapture flow but uses the realistic full-colour prebuilt style. `applyHeritagePOIFilter()` strips business POIs after style loads.
 
 ### Adding a Color Preset
 Edit `src/components/StreetMapCapture.tsx`, `MAP_COLOR_PRESETS` array:
@@ -87,9 +91,10 @@ npm run preview    # Preview production build
 ## Deployment (AWS EC2 VPS)
 
 **Server:** AWS EC2 t3.micro, Ubuntu 24.04, Sydney (`ap-southeast-2`)
-**Tailscale IP:** `100.93.10.110`
-**SSH:** `ssh ubuntu@100.93.10.110`
-**Served on:** Port 80 via nginx, publicly accessible
+**Public IP:** `13.210.227.152` · Instance: `i-0dfddb55abbf931d1`
+**SSH:** `ssh ubuntu@13.210.227.152`
+**Domain:** `https://themappedmoment.com` (Let's Encrypt SSL, auto-renews)
+**Served on:** Port 443 HTTPS + 80 → redirect, via nginx
 
 ### Deploy Steps
 ```bash
@@ -97,14 +102,12 @@ npm run preview    # Preview production build
 npm run build
 
 # 2. Copy to VPS
-rsync -avz --delete dist/ ubuntu@100.93.10.110:/var/www/poster-studio/
-
-# 3. (First time only) Set up nginx — see DEPLOYMENT.md
+rsync -avz --delete dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
 ```
 
 ### Quick redeploy after changes
 ```bash
-cd /home/dev/poster-studio && npm run build && rsync -avz --delete dist/ ubuntu@100.93.10.110:/var/www/poster-studio/
+cd /home/dev/poster-studio && npm run build && rsync -avz --delete dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
 ```
 
 ## Key Files for Common Tasks

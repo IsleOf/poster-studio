@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { format } from 'date-fns';
 import DownloadButton from './DownloadButton';
 import CitySearch from './CitySearch';
+import GlyphPicker from './GlyphPicker';
 import { MAP_COLOR_PRESETS } from './StreetMapCapture';
 import { ChevronDown } from 'lucide-react';
+import { renderPosterToBlob } from '../utils/renderPoster';
 import {
     Box,
     VStack,
@@ -61,9 +63,18 @@ const SUBTITLE_SUGGESTIONS = [
 ];
 
 const TITLE_FONTS = [
+    // Serifs
+    { label: 'Cormorant Garamond', value: 'Cormorant Garamond' },
     { label: 'Playfair Display', value: 'Playfair Display' },
     { label: 'Cinzel', value: 'Cinzel' },
+    // Sans-serif
+    { label: 'Bebas Neue', value: 'Bebas Neue' },
+    { label: 'Oswald', value: 'Oswald' },
+    { label: 'Poppins', value: 'Poppins' },
+    { label: 'Nunito', value: 'Nunito' },
     { label: 'Orbitron', value: 'Orbitron' },
+    // Script — featured
+    { label: 'Mapped Moment Script ❤', value: 'Mapped Moment Script' },
     { label: 'Great Vibes', value: 'Great Vibes' },
     { label: 'Sacramento', value: 'Sacramento' },
     { label: 'Dancing Script', value: 'Dancing Script' },
@@ -74,9 +85,12 @@ const TITLE_FONTS = [
 ];
 
 const SUBTITLE_FONTS = [
+    { label: 'Mapped Moment Script ❤', value: 'Mapped Moment Script' },
     { label: 'Montserrat', value: 'Montserrat' },
     { label: 'Raleway', value: 'Raleway' },
-    { label: 'Lato', value: 'Lato' },
+    { label: 'Poppins', value: 'Poppins' },
+    { label: 'Nunito', value: 'Nunito' },
+    { label: 'Oswald', value: 'Oswald' },
     { label: 'Space Mono', value: 'Space Mono' },
     { label: 'Playfair Display', value: 'Playfair Display' },
     { label: 'Cinzel', value: 'Cinzel' },
@@ -90,6 +104,7 @@ const DETAILS_FONTS = [
 ];
 
 const DEDICATION_FONTS = [
+    { label: 'Mapped Moment Script ❤', value: 'Mapped Moment Script' },
     { label: 'Great Vibes', value: 'Great Vibes' },
     { label: 'Sacramento', value: 'Sacramento' },
     { label: 'Dancing Script', value: 'Dancing Script' },
@@ -128,6 +143,7 @@ const SidebarControls: React.FC = () => {
         customText, setCustomText,
         circleSize, setCircleSize,
         heartSize, setHeartSize,
+        houseSize, setHouseSize,
         shapeOffsetY, setShapeOffsetY,
         titleFontSize, setTitleFontSize,
         subtitleFontSize, setSubtitleFontSize,
@@ -171,6 +187,10 @@ const SidebarControls: React.FC = () => {
         mapBgColor, setMapBgColor,
         mapStreetColor, setMapStreetColor,
         mapColorPreset, setMapColorPreset,
+        setMapStyleUrl,
+        activeTypoField, setActiveTypoField,
+        showLocationPin, setShowLocationPin,
+        locationPinSize, setLocationPinSize,
     } = useStore();
 
     const [locationQuery, setLocationQuery] = useState('');
@@ -180,6 +200,23 @@ const SidebarControls: React.FC = () => {
     const [showSubtitleSuggestions, setShowSubtitleSuggestions] = useState(false);
     const [showAllTitleSuggestions, setShowAllTitleSuggestions] = useState(false);
     const [showAllSubtitleSuggestions, setShowAllSubtitleSuggestions] = useState(false);
+
+    // Typography tab — syncs when user clicks a text element in the poster
+    const [typoTab, setTypoTab] = useState<'title' | 'subtitle' | 'details' | 'dedication'>('title');
+    const typoButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (!activeTypoField) return;
+        setTypoTab(activeTypoField);
+        setTimeout(() => {
+            if (typoButtonRef.current) {
+                typoButtonRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                if (typoButtonRef.current.getAttribute('aria-expanded') === 'false') {
+                    typoButtonRef.current.click();
+                }
+            }
+        }, 50);
+    }, [activeTypoField]);
 
     // Close suggestions when clicking outside
     useEffect(() => {
@@ -264,9 +301,9 @@ const SidebarControls: React.FC = () => {
         <Box w="full" h="full" bg="white" display="flex" flexDirection="column">
             {/* Header */}
             <Box p={6} borderBottom="1px" borderColor="gray.200">
-                <Text fontSize="xl" fontWeight="bold" letterSpacing="tight" mb={3}>POSTER STUDIO</Text>
+                <Text fontSize="xl" fontWeight="bold" letterSpacing="tight" mb={3}>THE MAPPED MOMENT</Text>
                 {/* Poster Type Toggle */}
-                <HStack spacing={2}>
+                <HStack spacing={1}>
                     <Button
                         size="sm"
                         flex={1}
@@ -278,7 +315,8 @@ const SidebarControls: React.FC = () => {
                         fontWeight={posterType === 'starmap' ? '700' : '500'}
                         _hover={{ bg: posterType === 'starmap' ? 'gray.800' : 'gray.50' }}
                         fontSize="xs"
-                        letterSpacing="wider"
+                        letterSpacing="wide"
+                        px={2}
                     >
                         ✦ STAR MAP
                     </Button>
@@ -293,17 +331,34 @@ const SidebarControls: React.FC = () => {
                         fontWeight={posterType === 'streetmap' ? '700' : '500'}
                         _hover={{ bg: posterType === 'streetmap' ? 'gray.800' : 'gray.50' }}
                         fontSize="xs"
-                        letterSpacing="wider"
+                        letterSpacing="wide"
+                        px={2}
                     >
                         ⊕ STREET MAP
+                    </Button>
+                    <Button
+                        size="sm"
+                        flex={1}
+                        onClick={() => setPosterType('coloredmap')}
+                        bg={posterType === 'coloredmap' ? 'gray.900' : 'white'}
+                        color={posterType === 'coloredmap' ? 'white' : 'gray.700'}
+                        border="1px solid"
+                        borderColor={posterType === 'coloredmap' ? 'gray.900' : 'gray.300'}
+                        fontWeight={posterType === 'coloredmap' ? '700' : '500'}
+                        _hover={{ bg: posterType === 'coloredmap' ? 'gray.800' : 'gray.50' }}
+                        fontSize="xs"
+                        letterSpacing="wide"
+                        px={2}
+                    >
+                        ◈ COLORED MAP
                     </Button>
                 </HStack>
             </Box>
 
             <Box flex="1" overflowY="auto">
 
-                {/* ── Street Map Controls ──────────────────────────────── */}
-                {posterType === 'streetmap' && (
+                {/* ── Street/Colored Map Controls ──────────────────────── */}
+                {posterType !== 'starmap' && (
                     <Box borderBottom="1px" borderColor="gray.200">
                         <Accordion allowToggle defaultIndex={[0]} allowMultiple>
                             <AccordionItem border="none" borderBottom="1px" borderColor="gray.100">
@@ -371,11 +426,28 @@ const SidebarControls: React.FC = () => {
                                                 <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="1px" />
                                             </Slider>
                                         </FormControl>
+                                        <HStack justify="space-between">
+                                            <Text fontSize="xs" fontWeight="600" color="gray.700">Location Pin</Text>
+                                            <Switch size="sm" isChecked={showLocationPin} onChange={(e) => setShowLocationPin(e.target.checked)}
+                                                sx={{ '.chakra-switch__track': { bg: 'gray.300' }, '.chakra-switch__track[data-checked]': { bg: 'gray.900' } }} />
+                                        </HStack>
+                                        {showLocationPin && (
+                                            <FormControl>
+                                                <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>
+                                                    Pin Size: {locationPinSize}px
+                                                </FormLabel>
+                                                <Slider value={locationPinSize} min={10} max={80} step={1} onChange={setLocationPinSize} aria-label="pin-size">
+                                                    <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
+                                                    <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="1px" />
+                                                </Slider>
+                                            </FormControl>
+                                        )}
                                     </VStack>
                                 </AccordionPanel>
                             </AccordionItem>
 
-                            <AccordionItem border="none">
+                            {/* 2-color presets — only shown in Street Map mode (not colored map) */}
+                            {posterType === 'streetmap' && <AccordionItem border="none">
                                 <h2>
                                     <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
                                         <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
@@ -386,7 +458,7 @@ const SidebarControls: React.FC = () => {
                                 </h2>
                                 <AccordionPanel pb={6} px={6}>
                                     <VStack spacing={4} align="stretch">
-                                        {/* Color presets */}
+                                        {/* Color presets — one-click coordinated color themes */}
                                         <Grid templateColumns="repeat(4, 1fr)" gap={2}>
                                             {MAP_COLOR_PRESETS.map((preset) => (
                                                 <Box
@@ -396,8 +468,16 @@ const SidebarControls: React.FC = () => {
                                                         setMapColorPreset(preset.id);
                                                         setMapBgColor(preset.bgColor);
                                                         setMapStreetColor(preset.streetColor);
-                                                        setPosterColor(preset.bgColor);
-                                                        setTextColor(preset.id === 'classic' || preset.id === 'sepia' ? '#1a1a1a' : '#ffffff');
+                                                        // Realistic uses a prebuilt style URL; all others use 2-color custom style
+                                                        setMapStyleUrl(preset.styleUrl ?? null);
+                                                        if (!preset.styleUrl) {
+                                                            setPosterColor(preset.bgColor);
+                                                            setTextColor(preset.id === 'classic' ? '#1a1a1a' : '#ffffff');
+                                                        } else {
+                                                            // Realistic: light poster bg, dark text to complement the colourful map
+                                                            setPosterColor('#ffffff');
+                                                            setTextColor('#1a1a1a');
+                                                        }
                                                     }}
                                                     borderRadius="md"
                                                     border="2px solid"
@@ -409,42 +489,25 @@ const SidebarControls: React.FC = () => {
                                                     _hover={{ borderColor: 'gray.400' }}
                                                     transition="all 0.15s"
                                                 >
-                                                    <Box h="28px" bg={preset.bgColor} />
+                                                    {preset.styleUrl ? (
+                                                        // Realistic preset — show a multicolour gradient swatch
+                                                        <Box
+                                                            h="28px"
+                                                            style={{ background: 'linear-gradient(135deg, #AECFE2 0%, #d8e8c8 30%, #f8f4f0 50%, #fea 70%, #fc8 100%)' }}
+                                                        />
+                                                    ) : (
+                                                        <Box h="28px" bg={preset.bgColor} />
+                                                    )}
                                                     <Box h="16px" bg="white" display="flex" alignItems="center" justifyContent="center">
                                                         <Text fontSize="7px" fontWeight="700" color="gray.600">{preset.name.toUpperCase()}</Text>
                                                     </Box>
                                                 </Box>
                                             ))}
                                         </Grid>
-                                        <HStack spacing={3}>
-                                            <FormControl>
-                                                <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>Background</FormLabel>
-                                                <HStack>
-                                                    <Input
-                                                        type="color"
-                                                        value={mapBgColor}
-                                                        onChange={(e) => { setMapBgColor(e.target.value); setPosterColor(e.target.value); }}
-                                                        w="40px" h="32px" p={0} border="none" cursor="pointer"
-                                                    />
-                                                    <Text fontSize="xs" color="gray.600">{mapBgColor}</Text>
-                                                </HStack>
-                                            </FormControl>
-                                            <FormControl>
-                                                <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>Streets</FormLabel>
-                                                <HStack>
-                                                    <Input
-                                                        type="color"
-                                                        value={mapStreetColor}
-                                                        onChange={(e) => setMapStreetColor(e.target.value)}
-                                                        w="40px" h="32px" p={0} border="none" cursor="pointer"
-                                                    />
-                                                    <Text fontSize="xs" color="gray.600">{mapStreetColor}</Text>
-                                                </HStack>
-                                            </FormControl>
-                                        </HStack>
+                                        <Text fontSize="xs" color="gray.500">Fine-tune colors in the Color section below.</Text>
                                     </VStack>
                                 </AccordionPanel>
-                            </AccordionItem>
+                            </AccordionItem>}
                         </Accordion>
                     </Box>
                 )}
@@ -697,77 +760,6 @@ const SidebarControls: React.FC = () => {
                                     <AccordionItem border="none">
                                         <AccordionButton px={0} _hover={{ bg: 'transparent' }}>
                                             <Box flex="1" textAlign="left" fontSize="xs" color="gray.600" fontWeight="600">
-                                                Typography
-                                            </Box>
-                                            <AccordionIcon color="gray.500" />
-                                        </AccordionButton>
-                                        <AccordionPanel pb={4} px={0}>
-                                            <VStack spacing={3}>
-                                                <FormControl>
-                                                    <FormLabel {...labelStyles}>Title Font</FormLabel>
-                                                    <Select
-                                                        value={titleFont}
-                                                        onChange={(e) => setTitleFont(e.target.value)}
-                                                        size="sm"
-                                                        bg="white"
-                                                        borderColor="gray.200"
-                                                    >
-                                                        {TITLE_FONTS.map(font => (
-                                                            <option key={font.value} value={font.value}>{font.label}</option>
-                                                        ))}
-                                                    </Select>
-                                                </FormControl>
-                                                <FormControl>
-                                                    <FormLabel {...labelStyles}>Subtitle Font</FormLabel>
-                                                    <Select
-                                                        value={subtitleFont}
-                                                        onChange={(e) => setSubtitleFont(e.target.value)}
-                                                        size="sm"
-                                                        bg="white"
-                                                        borderColor="gray.200"
-                                                    >
-                                                        {SUBTITLE_FONTS.map(font => (
-                                                            <option key={font.value} value={font.value}>{font.label}</option>
-                                                        ))}
-                                                    </Select>
-                                                </FormControl>
-                                                <FormControl>
-                                                    <FormLabel {...labelStyles}>Details Font</FormLabel>
-                                                    <Select
-                                                        value={detailsFont}
-                                                        onChange={(e) => setDetailsFont(e.target.value)}
-                                                        size="sm"
-                                                        bg="white"
-                                                        borderColor="gray.200"
-                                                    >
-                                                        {DETAILS_FONTS.map(font => (
-                                                            <option key={font.value} value={font.value}>{font.label}</option>
-                                                        ))}
-                                                    </Select>
-                                                </FormControl>
-                                                <FormControl>
-                                                    <FormLabel {...labelStyles}>Dedication Font</FormLabel>
-                                                    <Select
-                                                        value={dedicationFont}
-                                                        onChange={(e) => setDedicationFont(e.target.value)}
-                                                        size="sm"
-                                                        bg="white"
-                                                        borderColor="gray.200"
-                                                    >
-                                                        {DEDICATION_FONTS.map(font => (
-                                                            <option key={font.value} value={font.value}>{font.label}</option>
-                                                        ))}
-                                                    </Select>
-                                                </FormControl>
-                                            </VStack>
-                                        </AccordionPanel>
-                                    </AccordionItem>
-                                </Accordion>
-
-                                <Accordion allowToggle border="none">
-                                    <AccordionItem border="none">
-                                        <AccordionButton px={0} _hover={{ bg: 'transparent' }}>
-                                            <Box flex="1" textAlign="left" fontSize="xs" color="gray.600" fontWeight="600">
                                                 Advanced Text Options
                                             </Box>
                                             <AccordionIcon color="gray.500" />
@@ -868,6 +860,16 @@ const SidebarControls: React.FC = () => {
                                         mapBg: null,
                                         font: 'Great Vibes'
                                     },
+                                    {
+                                        id: 'home-street',
+                                        label: 'Home Street',
+                                        bg: '#ffffff',
+                                        text: '#111111',
+                                        shape: 'house',
+                                        border: 'simple',
+                                        mapBg: null,
+                                        font: 'Cinzel'
+                                    },
                                 ].map((template) => (
                                     <VStack
                                         key={template.id}
@@ -908,7 +910,7 @@ const SidebarControls: React.FC = () => {
                                                 } else {
                                                     // Apply built-in defaults
                                                     setPosterColor(template.bg);
-                                                    setMapInteriorColor(template.bg);
+                                                    setMapInteriorColor(template.id === 'modern-white' ? '#1B2735' : template.bg);
                                                     setTextColor(template.text);
                                                     setMaskShape(template.shape as any);
                                                     setBorderStyle(template.border as any);
@@ -957,6 +959,32 @@ const SidebarControls: React.FC = () => {
                                                         setSubtitleFont('Lato');
                                                         setDetailsFont('Lato');
                                                         setTitleFont('Playfair Display');
+                                                    } else if (template.id === 'home-street') {
+                                                        setPosterType('coloredmap');
+                                                        setIsLightMode(false);
+                                                        setShowFrame(true);
+                                                        setFrameWidth(3);
+                                                        setFrameInset(16);
+                                                        setShapeOutlineWidth(3);
+                                                        setTitleFontSize(52);
+                                                        setSubtitleFontSize(14);
+                                                        setDetailsFontSize(12);
+                                                        setDedicationFontSize(13);
+                                                        setTitleOffsetY(0);
+                                                        setSubtitleOffsetY(0);
+                                                        setDetailsOffsetY(0);
+                                                        setDedicationOffsetY(0);
+                                                        setSubtitleFont('DM Sans');
+                                                        setDetailsFont('DM Sans');
+                                                        setDedicationFont('DM Sans');
+                                                        setTitleFont('Cinzel');
+                                                        setShowDivider(true);
+                                                        setMapBgColor('#f8f4f0');
+                                                        setMapStreetColor('#fc8');
+                                                        setPosterColor('#ffffff');
+                                                        setTextColor('#1a1a1a');
+                                                        setMapColorPreset('realistic');
+                                                        setMapStyleUrl('https://tiles.openfreemap.org/styles/bright');
                                                     } else {
                                                         setIsLightMode(false);
                                                         setStarColor('#ffffff');
@@ -979,13 +1007,17 @@ const SidebarControls: React.FC = () => {
                                             <Box
                                                 w={16}
                                                 h={16}
-                                                bg={template.id === 'modern-white' ? '#CBD5E0' : (template.mapBg ? `url(${template.mapBg})` : (template.bg === '#ffffff' ? '#000' : '#fff'))}
+                                                bg={template.id === 'modern-white' ? '#CBD5E0' : template.id === 'home-street' ? '#CBD5E0' : (template.mapBg ? `url(${template.mapBg})` : (template.bg === '#ffffff' ? '#000' : '#fff'))}
                                                 backgroundSize="cover"
                                                 borderRadius={template.shape === 'circle' ? 'full' : 'none'}
                                                 opacity={0.9}
                                                 pointerEvents="none"
                                                 style={{
-                                                    clipPath: template.shape === 'heart' ? 'path("M32 56.93l-3.86-3.52C14.4 40.96 5.33 32.75 5.33 22.67 5.33 14.45 11.78 8 20 8c4.64 0 9.09 2.16 12 5.57C34.91 10.16 39.36 8 44 8c8.22 0 14.67 6.45 14.67 14.67 0 10.08-9.07 18.29-22.8 30.77L32 56.93z")' : undefined
+                                                    clipPath: template.shape === 'heart'
+                                                        ? 'path("M32 56.93l-3.86-3.52C14.4 40.96 5.33 32.75 5.33 22.67 5.33 14.45 11.78 8 20 8c4.64 0 9.09 2.16 12 5.57C34.91 10.16 39.36 8 44 8c8.22 0 14.67 6.45 14.67 14.67 0 10.08-9.07 18.29-22.8 30.77L32 56.93z")'
+                                                        : template.shape === 'house'
+                                                        ? 'polygon(20% 90%, 20% 40%, 10% 40%, 50% 0%, 60% 10%, 60% 2%, 70% 2%, 70% 20%, 90% 40%, 80% 40%, 80% 90%)'
+                                                        : undefined
                                                 }}
                                             />
                                         </Box>
@@ -1069,6 +1101,32 @@ const SidebarControls: React.FC = () => {
                                                             setSubtitleFont('Lato');
                                                             setDetailsFont('Lato');
                                                             setTitleFont('Playfair Display');
+                                                        } else if (template.id === 'home-street') {
+                                                            setPosterType('streetmap');
+                                                            setIsLightMode(false);
+                                                            setShowFrame(true);
+                                                            setFrameWidth(3);
+                                                            setFrameInset(16);
+                                                            setShapeOutlineWidth(3);
+                                                            setTitleFontSize(52);
+                                                            setSubtitleFontSize(14);
+                                                            setDetailsFontSize(12);
+                                                            setDedicationFontSize(13);
+                                                            setTitleOffsetY(0);
+                                                            setSubtitleOffsetY(0);
+                                                            setDetailsOffsetY(0);
+                                                            setDedicationOffsetY(0);
+                                                            setSubtitleFont('DM Sans');
+                                                            setDetailsFont('DM Sans');
+                                                            setDedicationFont('DM Sans');
+                                                            setTitleFont('Cinzel');
+                                                            setShowDivider(true);
+                                                            setMapBgColor('#f8f4f0');
+                                                            setMapStreetColor('#fc8');
+                                                            setPosterColor('#ffffff');
+                                                            setTextColor('#1a1a1a');
+                                                            setMapColorPreset('realistic');
+                                                            setMapStyleUrl('https://tiles.openfreemap.org/styles/bright');
                                                         } else {
                                                             setIsLightMode(false);
                                                             setStarColor('#ffffff');
@@ -1115,39 +1173,48 @@ const SidebarControls: React.FC = () => {
                     {/* Typography Section */}
                     < AccordionItem border="none" borderBottom="1px" borderColor="gray.200" >
                         <h2>
-                            <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
-                                <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
+                            <AccordionButton ref={typoButtonRef} _expanded={{ bg: 'gray.50' }} py={4} px={6}>
+                                <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900" display="flex" alignItems="center" gap={2}>
                                     Typography
+                                    {activeTypoField && (
+                                        <Box as="span" fontSize="xs" color="blue.500" fontWeight="400">
+                                            · {activeTypoField}
+                                        </Box>
+                                    )}
                                 </Box>
                                 <AccordionIcon color="gray.400" />
                             </AccordionButton>
                         </h2>
                         <AccordionPanel pb={6} px={6}>
-                            <VStack spacing={6} align="stretch">
-                                {/* Title Typography */}
-                                <Box>
-                                    <Text fontSize="sm" fontWeight="600" color="gray.900" mb={3}>Title</Text>
+                            <VStack spacing={4} align="stretch">
+                                {/* Tab strip */}
+                                <HStack spacing={1}>
+                                    {(['title', 'subtitle', 'details', 'dedication'] as const).map((tab) => (
+                                        <Button
+                                            key={tab}
+                                            size="xs"
+                                            flex={1}
+                                            onClick={() => setTypoTab(tab)}
+                                            bg={typoTab === tab ? 'gray.900' : 'white'}
+                                            color={typoTab === tab ? 'white' : 'gray.600'}
+                                            border="1px solid"
+                                            borderColor={typoTab === tab ? 'gray.900' : 'gray.300'}
+                                            _hover={{ bg: typoTab === tab ? 'gray.800' : 'gray.50' }}
+                                            borderRadius="md"
+                                            textTransform="capitalize"
+                                        >
+                                            {tab}
+                                        </Button>
+                                    ))}
+                                </HStack>
+
+                                {/* Title tab */}
+                                {typoTab === 'title' && (
                                     <VStack spacing={3}>
                                         <FormControl>
                                             <FormLabel {...labelStyles}>Font Family</FormLabel>
-                                            <Select
-                                                size="sm"
-                                                value={titleFont}
-                                                onChange={(e) => setTitleFont(e.target.value)}
-                                                bg="white"
-                                                borderColor="gray.300"
-                                                _hover={{ borderColor: 'gray.400' }}
-                                            >
-                                                <option value="Pinyon Script">Pinyon Script</option>
-                                                <option value="Sacramento">Sacramento</option>
-                                                <option value="Kaushan Script">Kaushan Script</option>
-                                                <option value="Playfair Display">Playfair Display</option>
-                                                <option value="Lato">Lato</option>
-                                                <option value="Roboto">Roboto</option>
-                                                <option value="Montserrat">Montserrat</option>
-                                                <option value="Open Sans">Open Sans</option>
-                                                <option value="Merriweather">Merriweather</option>
-                                                <option value="Lora">Lora</option>
+                                            <Select size="sm" value={titleFont} onChange={(e) => setTitleFont(e.target.value)} bg="white" borderColor="gray.300" _hover={{ borderColor: 'gray.400' }}>
+                                                {TITLE_FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                             </Select>
                                         </FormControl>
                                         <Box w="full">
@@ -1155,7 +1222,7 @@ const SidebarControls: React.FC = () => {
                                                 <Text fontSize="xs" color="gray.700" fontWeight="500">Font Size</Text>
                                                 <Text fontSize="xs" color="gray.500">{titleFontSize}px</Text>
                                             </HStack>
-                                            <Slider value={titleFontSize} min={24} max={120} step={1} onChange={setTitleFontSize}>
+                                            <Slider value={titleFontSize} min={24} max={300} step={1} onChange={setTitleFontSize}>
                                                 <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                                 <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                                             </Slider>
@@ -1180,34 +1247,17 @@ const SidebarControls: React.FC = () => {
                                                 <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                                             </Slider>
                                         </Box>
+                                        {titleFont === 'Mapped Moment Script' && <GlyphPicker defaultField="title" />}
                                     </VStack>
-                                </Box>
+                                )}
 
-                                {/* Subtitle Typography */}
-                                <Box>
-                                    <Text fontSize="sm" fontWeight="600" color="gray.900" mb={3}>Subtitle</Text>
+                                {/* Subtitle tab */}
+                                {typoTab === 'subtitle' && (
                                     <VStack spacing={3}>
                                         <FormControl>
                                             <FormLabel {...labelStyles}>Font Family</FormLabel>
-                                            <Select
-                                                size="sm"
-                                                value={subtitleFont}
-                                                onChange={(e) => setSubtitleFont(e.target.value)}
-                                                bg="white"
-                                                borderColor="gray.300"
-                                            >
-                                                <option value="Cormorant Garamond">Cormorant Garamond</option>
-                                                <option value="DM Sans">DM Sans</option>
-                                                <option value="Pinyon Script">Pinyon Script</option>
-                                                <option value="Sacramento">Sacramento</option>
-                                                <option value="Kaushan Script">Kaushan Script</option>
-                                                <option value="Playfair Display">Playfair Display</option>
-                                                <option value="Lato">Lato</option>
-                                                <option value="Roboto">Roboto</option>
-                                                <option value="Montserrat">Montserrat</option>
-                                                <option value="Open Sans">Open Sans</option>
-                                                <option value="Merriweather">Merriweather</option>
-                                                <option value="Lora">Lora</option>
+                                            <Select size="sm" value={subtitleFont} onChange={(e) => setSubtitleFont(e.target.value)} bg="white" borderColor="gray.300" _hover={{ borderColor: 'gray.400' }}>
+                                                {SUBTITLE_FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                             </Select>
                                         </FormControl>
                                         <Box w="full">
@@ -1215,7 +1265,7 @@ const SidebarControls: React.FC = () => {
                                                 <Text fontSize="xs" color="gray.700" fontWeight="500">Font Size</Text>
                                                 <Text fontSize="xs" color="gray.500">{subtitleFontSize}px</Text>
                                             </HStack>
-                                            <Slider value={subtitleFontSize} min={16} max={60} step={1} onChange={setSubtitleFontSize}>
+                                            <Slider value={subtitleFontSize} min={16} max={200} step={1} onChange={setSubtitleFontSize}>
                                                 <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                                 <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                                             </Slider>
@@ -1240,32 +1290,17 @@ const SidebarControls: React.FC = () => {
                                                 <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                                             </Slider>
                                         </Box>
+                                        {subtitleFont === 'Mapped Moment Script' && <GlyphPicker defaultField="subtitle" />}
                                     </VStack>
-                                </Box>
+                                )}
 
-                                {/* Details Typography */}
-                                <Box>
-                                    <Text fontSize="sm" fontWeight="600" color="gray.900" mb={3}>Details</Text>
+                                {/* Details tab */}
+                                {typoTab === 'details' && (
                                     <VStack spacing={3}>
                                         <FormControl>
                                             <FormLabel {...labelStyles}>Font Family</FormLabel>
-                                            <Select
-                                                size="sm"
-                                                value={detailsFont}
-                                                onChange={(e) => setDetailsFont(e.target.value)}
-                                                bg="white"
-                                                borderColor="gray.300"
-                                            >
-                                                <option value="Pinyon Script">Pinyon Script</option>
-                                                <option value="Sacramento">Sacramento</option>
-                                                <option value="Kaushan Script">Kaushan Script</option>
-                                                <option value="Playfair Display">Playfair Display</option>
-                                                <option value="Lato">Lato</option>
-                                                <option value="Roboto">Roboto</option>
-                                                <option value="Montserrat">Montserrat</option>
-                                                <option value="Open Sans">Open Sans</option>
-                                                <option value="Merriweather">Merriweather</option>
-                                                <option value="Lora">Lora</option>
+                                            <Select size="sm" value={detailsFont} onChange={(e) => setDetailsFont(e.target.value)} bg="white" borderColor="gray.300" _hover={{ borderColor: 'gray.400' }}>
+                                                {DETAILS_FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                             </Select>
                                         </FormControl>
                                         <Box w="full">
@@ -1299,31 +1334,15 @@ const SidebarControls: React.FC = () => {
                                             </Slider>
                                         </Box>
                                     </VStack>
-                                </Box>
+                                )}
 
-                                {/* Dedication Typography */}
-                                <Box>
-                                    <Text fontSize="sm" fontWeight="600" color="gray.900" mb={3}>Dedication</Text>
+                                {/* Dedication tab */}
+                                {typoTab === 'dedication' && (
                                     <VStack spacing={3}>
                                         <FormControl>
                                             <FormLabel {...labelStyles}>Font Family</FormLabel>
-                                            <Select
-                                                size="sm"
-                                                value={dedicationFont}
-                                                onChange={(e) => setDedicationFont(e.target.value)}
-                                                bg="white"
-                                                borderColor="gray.300"
-                                            >
-                                                <option value="Pinyon Script">Pinyon Script</option>
-                                                <option value="Sacramento">Sacramento</option>
-                                                <option value="Kaushan Script">Kaushan Script</option>
-                                                <option value="Playfair Display">Playfair Display</option>
-                                                <option value="Lato">Lato</option>
-                                                <option value="Roboto">Roboto</option>
-                                                <option value="Montserrat">Montserrat</option>
-                                                <option value="Open Sans">Open Sans</option>
-                                                <option value="Merriweather">Merriweather</option>
-                                                <option value="Lora">Lora</option>
+                                            <Select size="sm" value={dedicationFont} onChange={(e) => setDedicationFont(e.target.value)} bg="white" borderColor="gray.300" _hover={{ borderColor: 'gray.400' }}>
+                                                {DEDICATION_FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                             </Select>
                                         </FormControl>
                                         <Box w="full">
@@ -1331,7 +1350,7 @@ const SidebarControls: React.FC = () => {
                                                 <Text fontSize="xs" color="gray.700" fontWeight="500">Font Size</Text>
                                                 <Text fontSize="xs" color="gray.500">{dedicationFontSize}px</Text>
                                             </HStack>
-                                            <Slider value={dedicationFontSize} min={12} max={48} step={1} onChange={setDedicationFontSize}>
+                                            <Slider value={dedicationFontSize} min={12} max={150} step={1} onChange={setDedicationFontSize}>
                                                 <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                                 <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                                             </Slider>
@@ -1356,11 +1375,12 @@ const SidebarControls: React.FC = () => {
                                                 <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                                             </Slider>
                                         </Box>
+                                        {dedicationFont === 'Mapped Moment Script' && <GlyphPicker defaultField="dedication" />}
                                     </VStack>
-                                </Box>
+                                )}
 
                                 {/* Divider Controls */}
-                                <Box>
+                                <Box pt={2} borderTop="1px solid" borderColor="gray.100">
                                     <HStack justify="space-between" mb={3}>
                                         <Text fontSize="sm" fontWeight="600" color="gray.900">Divider</Text>
                                         <Switch
@@ -1490,25 +1510,47 @@ const SidebarControls: React.FC = () => {
                                         />
                                     </HStack>
                                 </HStack>
-                                <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                                    <Text fontSize="sm" color="gray.700" fontWeight="500">Map Background</Text>
-                                    <HStack>
-                                        <Text fontSize="xs" color="gray.500" fontFamily="mono">{useStore.getState().mapInteriorColor}</Text>
-                                        <Input
-                                            type="color"
-                                            w={8}
-                                            h={8}
-                                            p={0}
-                                            border="1px solid"
-                                            borderColor="gray.300"
-                                            borderRadius="md"
-                                            bg="transparent"
-                                            value={useStore.getState().mapInteriorColor}
-                                            onChange={(e) => useStore.getState().setMapInteriorColor(e.target.value)}
-                                            cursor="pointer"
-                                        />
+                                {posterType === 'streetmap' ? (
+                                    <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Streets</Text>
+                                        <HStack>
+                                            <Text fontSize="xs" color="gray.500" fontFamily="mono">{mapStreetColor}</Text>
+                                            <Input
+                                                type="color"
+                                                w={8}
+                                                h={8}
+                                                p={0}
+                                                border="1px solid"
+                                                borderColor="gray.300"
+                                                borderRadius="md"
+                                                bg="transparent"
+                                                value={mapStreetColor}
+                                                onChange={(e) => setMapStreetColor(e.target.value)}
+                                                cursor="pointer"
+                                            />
+                                        </HStack>
                                     </HStack>
-                                </HStack>
+                                ) : (
+                                    <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Map Background</Text>
+                                        <HStack>
+                                            <Text fontSize="xs" color="gray.500" fontFamily="mono">{useStore.getState().mapInteriorColor}</Text>
+                                            <Input
+                                                type="color"
+                                                w={8}
+                                                h={8}
+                                                p={0}
+                                                border="1px solid"
+                                                borderColor="gray.300"
+                                                borderRadius="md"
+                                                bg="transparent"
+                                                value={useStore.getState().mapInteriorColor}
+                                                onChange={(e) => useStore.getState().setMapInteriorColor(e.target.value)}
+                                                cursor="pointer"
+                                            />
+                                        </HStack>
+                                    </HStack>
+                                )}
                             </VStack>
                         </AccordionPanel>
                     </AccordionItem >
@@ -1530,12 +1572,7 @@ const SidebarControls: React.FC = () => {
                                     <Switch
                                         isChecked={showBorder}
                                         onChange={(e) => setShowBorder(e.target.checked)}
-                                        colorScheme="blackAlpha"
-                                        sx={{
-                                            'span[data-checked]': {
-                                                bg: 'gray.900'
-                                            }
-                                        }}
+                                        colorScheme="blue"
                                     />
                                 </HStack>
 
@@ -1545,7 +1582,7 @@ const SidebarControls: React.FC = () => {
                                         <Button
                                             onClick={() => {
                                                 setDesignStyle('standard');
-                                                setShapeOutlineWidth(2.0);
+                                                setShapeOutlineWidth(1.0);
                                             }}
                                             {...toggleButtonStyles(designStyle === 'standard')}
                                         >
@@ -1565,18 +1602,27 @@ const SidebarControls: React.FC = () => {
 
                                 <FormControl>
                                     <FormLabel {...labelStyles}>Mask Shape</FormLabel>
-                                    <HStack spacing={2}>
+                                    <HStack spacing={1}>
                                         <Button
                                             onClick={() => setMaskShape('circle')}
                                             {...toggleButtonStyles(maskShape === 'circle')}
+                                            fontSize="xs"
                                         >
-                                            Circle
+                                            ○ Circle
                                         </Button>
                                         <Button
                                             onClick={() => setMaskShape('heart')}
                                             {...toggleButtonStyles(maskShape === 'heart')}
+                                            fontSize="xs"
                                         >
-                                            Heart
+                                            ♥ Heart
+                                        </Button>
+                                        <Button
+                                            onClick={() => setMaskShape('house')}
+                                            {...toggleButtonStyles(maskShape === 'house')}
+                                            fontSize="xs"
+                                        >
+                                            ⌂ House
                                         </Button>
                                     </HStack>
                                 </FormControl>
@@ -1586,25 +1632,19 @@ const SidebarControls: React.FC = () => {
                                     <Switch
                                         isChecked={isLightMode}
                                         onChange={(e) => setIsLightMode(e.target.checked)}
-                                        colorScheme="blackAlpha"
-                                        sx={{
-                                            'span[data-checked]': {
-                                                bg: 'gray.900'
-                                            }
-                                        }}
+                                        colorScheme="blue"
                                     />
                                 </HStack>
 
-                                {/* Sliders */}
+                                {/* Star-map-only sliders — hidden in street/colored map mode */}
+                                {posterType === 'starmap' && (<>
                                 <Box>
                                     <HStack justify="space-between" mb={2}>
                                         <Text fontSize="sm" color="gray.700" fontWeight="500">Star Size</Text>
                                         <Text fontSize="xs" color="gray.500" fontWeight="600">{starScale.toFixed(1)}x</Text>
                                     </HStack>
                                     <Slider value={starScale} min={0.5} max={2.2} step={0.1} onChange={setStarScale}>
-                                        <SliderTrack bg="gray.200">
-                                            <SliderFilledTrack bg="gray.900" />
-                                        </SliderTrack>
+                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                         <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
                                     </Slider>
                                 </Box>
@@ -1615,9 +1655,7 @@ const SidebarControls: React.FC = () => {
                                         <Text fontSize="xs" color="gray.500" fontWeight="600">{lineWeight.toFixed(1)}pt</Text>
                                     </HStack>
                                     <Slider value={lineWeight} min={0.1} max={1.8} step={0.1} onChange={setLineWeight}>
-                                        <SliderTrack bg="gray.200">
-                                            <SliderFilledTrack bg="gray.900" />
-                                        </SliderTrack>
+                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                         <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
                                     </Slider>
                                 </Box>
@@ -1628,9 +1666,7 @@ const SidebarControls: React.FC = () => {
                                         <Text fontSize="xs" color="gray.500" fontWeight="600">{gridWidth.toFixed(1)}pt</Text>
                                     </HStack>
                                     <Slider value={gridWidth} min={0.1} max={1.2} step={0.1} onChange={setGridWidth}>
-                                        <SliderTrack bg="gray.200">
-                                            <SliderFilledTrack bg="gray.900" />
-                                        </SliderTrack>
+                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                         <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
                                     </Slider>
                                 </Box>
@@ -1641,9 +1677,7 @@ const SidebarControls: React.FC = () => {
                                         <Text fontSize="xs" color="gray.500" fontWeight="600">{glowIntensity}</Text>
                                     </HStack>
                                     <Slider value={glowIntensity} min={0} max={20} step={1} onChange={setGlowIntensity}>
-                                        <SliderTrack bg="gray.200">
-                                            <SliderFilledTrack bg="gray.900" />
-                                        </SliderTrack>
+                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                         <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
                                     </Slider>
                                 </Box>
@@ -1654,12 +1688,11 @@ const SidebarControls: React.FC = () => {
                                         <Text fontSize="xs" color="gray.500" fontWeight="600">{Math.round(gridOpacity * 100)}%</Text>
                                     </HStack>
                                     <Slider value={gridOpacity} min={0} max={1} step={0.05} onChange={setGridOpacity}>
-                                        <SliderTrack bg="gray.200">
-                                            <SliderFilledTrack bg="gray.900" />
-                                        </SliderTrack>
+                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                         <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
                                     </Slider>
                                 </Box>
+                                </>)}
 
                                 {maskShape === 'circle' && (
                                     <Box>
@@ -1683,6 +1716,21 @@ const SidebarControls: React.FC = () => {
                                             <Text fontSize="xs" color="gray.500" fontWeight="600">{heartSize.toFixed(2)}x</Text>
                                         </HStack>
                                         <Slider value={heartSize} min={0.5} max={1.5} step={0.05} onChange={setHeartSize}>
+                                            <SliderTrack bg="gray.200">
+                                                <SliderFilledTrack bg="gray.900" />
+                                            </SliderTrack>
+                                            <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
+                                        </Slider>
+                                    </Box>
+                                )}
+
+                                {maskShape === 'house' && (
+                                    <Box>
+                                        <HStack justify="space-between" mb={2}>
+                                            <Text fontSize="sm" color="gray.700" fontWeight="500">House Size</Text>
+                                            <Text fontSize="xs" color="gray.500" fontWeight="600">{houseSize.toFixed(2)}x</Text>
+                                        </HStack>
+                                        <Slider value={houseSize} min={0.5} max={1.5} step={0.05} onChange={setHouseSize}>
                                             <SliderTrack bg="gray.200">
                                                 <SliderFilledTrack bg="gray.900" />
                                             </SliderTrack>
@@ -1741,12 +1789,7 @@ const SidebarControls: React.FC = () => {
                                         <Switch
                                             isChecked={showFrame}
                                             onChange={(e) => setShowFrame(e.target.checked)}
-                                            colorScheme="blackAlpha"
-                                            sx={{
-                                                'span[data-checked]': {
-                                                    bg: 'gray.900'
-                                                }
-                                            }}
+                                            colorScheme="blue"
                                         />
                                     </HStack>
 
@@ -1784,14 +1827,187 @@ const SidebarControls: React.FC = () => {
                     </AccordionItem >
                 </Accordion >
 
-                <Box p={6} borderTop="1px" borderColor="gray.200">
-                    <DownloadButton />
-                    <Text fontSize="xs" textAlign="center" color="gray.400" mt={3} fontWeight="400">
-                        Exporting at 300 DPI for {printSize.label} print
-                    </Text>
-                </Box>
+                <OrderSection />
             </Box >
         </Box >
+    );
+};
+
+// ─── Order Section ───────────────────────────────────────────────────────────
+
+const ETSY_DIGITAL_URL = 'https://www.etsy.com/shop/TheMappedMoment';
+const ETSY_PRINT_URL   = 'https://www.etsy.com/shop/TheMappedMoment';
+const API_BASE = ''; // relative — served by same nginx
+
+function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+const OrderSection: React.FC = () => {
+    const store = useStore();
+    const [token, setToken] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [orderType, setOrderType] = useState<'digital' | 'print' | null>(null);
+    const [copied, setCopied] = useState(false);
+
+    const saveDesign = useCallback(async (type: 'digital' | 'print') => {
+        setLoading(true);
+        setOrderType(type);
+        try {
+            // Capture a clean snapshot of store state (no functions, no DOM refs)
+            const state = {
+                title: store.title, subtitle: store.subtitle,
+                date: store.date, time: store.time,
+                location: store.location, lat: store.lat, lng: store.lng,
+                posterColor: store.posterColor, textColor: store.textColor,
+                starColor: store.starColor, mapInteriorColor: store.mapInteriorColor,
+                mapStreetColor: store.mapStreetColor, mapColorPreset: store.mapColorPreset,
+                posterType: store.posterType, maskShape: store.maskShape,
+                designStyle: store.designStyle, printSize: store.printSize,
+                titleFont: store.titleFont, subtitleFont: store.subtitleFont,
+                detailsFont: store.detailsFont, dedicationFont: store.dedicationFont,
+                titleFontSize: store.titleFontSize, subtitleFontSize: store.subtitleFontSize,
+                detailsFontSize: store.detailsFontSize,
+                customText: store.customText,
+                showBorder: store.showBorder, showFrame: store.showFrame,
+                borderStyle: store.borderStyle, circleSize: store.circleSize,
+                showConstellations: store.showConstellations, showGrid: store.showGrid,
+                mapCenterLat: store.mapCenterLat, mapCenterLng: store.mapCenterLng,
+                mapZoom: store.mapZoom, mapCity: store.mapCity,
+            };
+
+            // Render the poster to PNG (300 DPI, no watermark) and include in save request
+            let renderedPng: string | undefined;
+            try {
+                const svgEl = document.getElementById('poster-preview')?.querySelector('svg') as SVGSVGElement | null;
+                if (svgEl) {
+                    const blob = await renderPosterToBlob(svgEl, store.printSize.width, store.printSize.height, 300, false);
+                    renderedPng = await blobToBase64(blob);
+                }
+            } catch (renderErr) {
+                console.warn('Pre-render failed (non-fatal):', renderErr);
+            }
+
+            const res = await fetch(`${API_BASE}/api/save-design`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state, renderedPng }),
+            });
+            if (!res.ok) throw new Error('Server error');
+            const { token: t } = await res.json();
+            setToken(t);
+        } catch {
+            setToken('ERROR');
+        } finally {
+            setLoading(false);
+        }
+    }, [store]);
+
+    const copyToken = () => {
+        if (!token) return;
+        navigator.clipboard.writeText(token);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const openEtsy = () => {
+        const url = orderType === 'print' ? ETSY_PRINT_URL : ETSY_DIGITAL_URL;
+        window.open(url, '_blank');
+    };
+
+    const reset = () => { setToken(null); setOrderType(null); };
+
+    return (
+        <Box p={6} borderTop="1px" borderColor="gray.200">
+            <DownloadButton />
+            <Text fontSize="xs" textAlign="center" color="gray.400" mt={2} mb={5} fontWeight="400">
+                Preview only · 150 DPI · watermarked
+            </Text>
+
+            {!token ? (
+                <>
+                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase"
+                        letterSpacing="0.1em" mb={3} textAlign="center">
+                        Order print-quality file
+                    </Text>
+                    <VStack spacing={2}>
+                        <Button
+                            onClick={() => saveDesign('digital')}
+                            isLoading={loading && orderType === 'digital'}
+                            loadingText="Saving design…"
+                            size="md" width="full" borderRadius="md"
+                            bg="gray.900" color="white" fontWeight="600" fontSize="sm"
+                            _hover={{ bg: 'gray.700' }}
+                        >
+                            Order Digital File — 300 DPI PNG
+                        </Button>
+                        <Button
+                            onClick={() => saveDesign('print')}
+                            isLoading={loading && orderType === 'print'}
+                            loadingText="Saving design…"
+                            size="md" width="full" borderRadius="md"
+                            variant="outline" borderColor="gray.300"
+                            fontWeight="600" fontSize="sm" color="gray.700"
+                            _hover={{ bg: 'gray.50' }}
+                        >
+                            Order Printed Poster
+                        </Button>
+                    </VStack>
+                </>
+            ) : token === 'ERROR' ? (
+                <Box textAlign="center">
+                    <Text fontSize="sm" color="red.500" mb={2}>Could not save design. Try again.</Text>
+                    <Button size="sm" onClick={reset} variant="ghost">Back</Button>
+                </Box>
+            ) : (
+                <Box bg="gray.50" borderRadius="lg" p={4} border="1px solid" borderColor="gray.200">
+                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase"
+                        letterSpacing="0.08em" mb={3}>
+                        Your design is saved!
+                    </Text>
+
+                    <HStack justify="space-between" align="center" mb={1}>
+                        <Text fontSize="xs" color="gray.500">Your design token:</Text>
+                        <Button size="xs" variant="ghost" color="gray.500" onClick={copyToken}>
+                            {copied ? '✓ Copied' : 'Copy'}
+                        </Button>
+                    </HStack>
+                    <Box bg="white" border="2px solid" borderColor="gray.900" borderRadius="md"
+                        p={3} mb={4} textAlign="center" cursor="pointer" onClick={copyToken}>
+                        <Text fontSize="2xl" fontWeight="800" letterSpacing="0.2em" color="gray.900">
+                            {token}
+                        </Text>
+                    </Box>
+
+                    <Box bg="blue.50" borderRadius="md" p={3} mb={4} border="1px solid" borderColor="blue.100">
+                        <Text fontSize="xs" color="blue.700" lineHeight="1.6">
+                            <strong>On Etsy:</strong> paste <strong>{token}</strong> in the
+                            "personalisation" field when ordering. Your poster will be automatically
+                            prepared and sent to you.
+                        </Text>
+                    </Box>
+
+                    <VStack spacing={2}>
+                        <Button
+                            onClick={openEtsy}
+                            size="md" width="full" borderRadius="md"
+                            bg="orange.400" color="white" fontWeight="700" fontSize="sm"
+                            _hover={{ bg: 'orange.500' }}
+                        >
+                            Continue to Etsy →
+                        </Button>
+                        <Button size="xs" variant="ghost" color="gray.400" onClick={reset}>
+                            ← Back
+                        </Button>
+                    </VStack>
+                </Box>
+            )}
+        </Box>
     );
 };
 

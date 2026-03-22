@@ -17,11 +17,15 @@ const MainLayout: React.FC = () => {
         printSize,
         posterType,
         setMapBackgroundImage,
+        isInlineEditing,
     } = useStore();
 
     const [previewDimensions, setPreviewDimensions] = useState({ width: 0, height: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    // Ref so window-level move handler always reads the current editing state (avoids stale closure)
+    const isInlineEditingRef = useRef(false);
+    useEffect(() => { isInlineEditingRef.current = isInlineEditing; }, [isInlineEditing]);
 
     // ── Street map capture ───────────────────────────────────────────────────
     // When the street map renders, it calls onCapture → we store the data-URL
@@ -73,7 +77,7 @@ const MainLayout: React.FC = () => {
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        if (e.button === 0) {
+        if (e.button === 0 && !isInlineEditingRef.current) {
             setIsDragging(true);
             setDragStart({ x: e.clientX - previewPanX, y: e.clientY - previewPanY });
         }
@@ -81,7 +85,8 @@ const MainLayout: React.FC = () => {
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (isDragging) {
+            // Use ref — not closure state — so we always see current editing status
+            if (isDragging && !isInlineEditingRef.current) {
                 setPreviewPanX(e.clientX - dragStart.x);
                 setPreviewPanY(e.clientY - dragStart.y);
             }
@@ -177,14 +182,14 @@ const MainLayout: React.FC = () => {
                     <VectorStarMap />
                 </Box>
 
-                {/* Hidden street map renderer — offscreen, just captures canvas */}
-                {posterType === 'streetmap' && (
+                {/* Offscreen street map renderer — captures high-res canvas snapshot */}
+                {posterType !== 'starmap' && (
                     <Box
                         position="fixed"
                         top="-9999px"
                         left="-9999px"
-                        width="800px"
-                        height="800px"
+                        width="1200px"
+                        height="1200px"
                         pointerEvents="none"
                         aria-hidden
                     >

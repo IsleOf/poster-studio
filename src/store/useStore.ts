@@ -30,6 +30,7 @@ interface StoreState {
     // Shape Size & Position
     circleSize: number;
     heartSize: number;
+    houseSize: number;
     shapeOutlineWidth: number; // NEW: Outline width for circle/heart
     shapeOffsetY: number;
 
@@ -68,7 +69,7 @@ interface StoreState {
     showGrid: boolean;
     designStyle: 'standard' | 'fineline' | 'minimal';
     finelineWidth: number; // NEW: Width for fineline double lines
-    maskShape: 'circle' | 'heart';
+    maskShape: 'circle' | 'heart' | 'house';
     isLightMode: boolean;
 
     // Preview Pan/Drag State
@@ -93,8 +94,12 @@ interface StoreState {
     // Print Size
     printSize: { label: string; width: number; height: number; ratio: string };
 
+    // Map image pan offset (drag-to-reposition within the clip shape)
+    mapImageOffsetX: number;
+    mapImageOffsetY: number;
+
     // Poster Type
-    posterType: 'starmap' | 'streetmap';
+    posterType: 'starmap' | 'streetmap' | 'coloredmap';
 
     // Street Map Settings
     mapCity: string;
@@ -104,6 +109,7 @@ interface StoreState {
     mapBgColor: string;
     mapStreetColor: string;
     mapColorPreset: string;
+    mapStyleUrl: string | null; // null = custom 2-color style; URL = use prebuilt style (e.g. realistic)
 
     // Setters
     // Template System
@@ -138,7 +144,7 @@ interface StoreState {
     setShowMilkyWay: (show: boolean) => void;
     setShowGrid: (show: boolean) => void;
     setDesignStyle: (style: 'standard' | 'fineline' | 'minimal') => void;
-    setMaskShape: (shape: 'circle' | 'heart') => void;
+    setMaskShape: (shape: 'circle' | 'heart' | 'house') => void;
     setIsLightMode: (isLight: boolean) => void;
     setShowLocation: (show: boolean) => void;
     setShowDate: (show: boolean) => void;
@@ -151,6 +157,7 @@ interface StoreState {
     setCustomText: (key: keyof StoreState['customText'], value: string) => void;
     setCircleSize: (size: number) => void;
     setHeartSize: (size: number) => void;
+    setHouseSize: (size: number) => void;
     setShapeOutlineWidth: (width: number) => void;
     setShapeOffsetY: (offset: number) => void;
     setTitleFontSize: (size: number) => void;
@@ -168,6 +175,8 @@ interface StoreState {
     setPreviewZoom: (zoom: number) => void;
     setPreviewPanX: (x: number) => void;
     setPreviewPanY: (y: number) => void;
+    isInlineEditing: boolean;
+    setIsInlineEditing: (editing: boolean) => void;
     setShowFrame: (show: boolean) => void;
     setFrameInset: (inset: number) => void;
     setFrameWidth: (width: number) => void;
@@ -182,7 +191,7 @@ interface StoreState {
     setDedicationKerning: (kerning: number) => void;
 
     // Poster type setters
-    setPosterType: (type: 'starmap' | 'streetmap') => void;
+    setPosterType: (type: 'starmap' | 'streetmap' | 'coloredmap') => void;
     setMapCity: (city: string) => void;
     setMapCenterLat: (lat: number) => void;
     setMapCenterLng: (lng: number) => void;
@@ -190,6 +199,27 @@ interface StoreState {
     setMapBgColor: (color: string) => void;
     setMapStreetColor: (color: string) => void;
     setMapColorPreset: (preset: string) => void;
+    setMapStyleUrl: (url: string | null) => void;
+    setMapImageOffsetX: (x: number) => void;
+    setMapImageOffsetY: (y: number) => void;
+
+    // Active typography field (set when user clicks a text element in the poster)
+    activeTypoField: 'title' | 'subtitle' | 'details' | 'dedication' | null;
+    setActiveTypoField: (field: 'title' | 'subtitle' | 'details' | 'dedication' | null) => void;
+
+    // Pending glyph to be inserted at cursor in the inline edit input
+    pendingGlyphForInlineEdit: string | null;
+    setPendingGlyphForInlineEdit: (glyph: string | null) => void;
+
+    // Location pin (small red heart on map)
+    showLocationPin: boolean;
+    locationPinSize: number;
+    locationPinOffsetX: number;
+    locationPinOffsetY: number;
+    setShowLocationPin: (show: boolean) => void;
+    setLocationPinSize: (size: number) => void;
+    setLocationPinOffsetX: (x: number) => void;
+    setLocationPinOffsetY: (y: number) => void;
 }
 
 export const useStore = create<StoreState>((set) => ({
@@ -217,7 +247,8 @@ export const useStore = create<StoreState>((set) => ({
     // Shape Size & Position - Default Values
     circleSize: 1.0,
     heartSize: 1.0,
-    shapeOutlineWidth: 2.0,
+    houseSize: 1.0,
+    shapeOutlineWidth: 1.0,
     shapeOffsetY: -60, // Move shapes higher by default
 
     // Font Sizes - Default Values
@@ -250,6 +281,7 @@ export const useStore = create<StoreState>((set) => ({
     previewZoom: 1.0,
     previewPanX: 0,
     previewPanY: 0,
+    isInlineEditing: false,
 
     // Frame Defaults
     showFrame: true,
@@ -280,8 +312,18 @@ export const useStore = create<StoreState>((set) => ({
         dedication: 'Personal Dedication' // Default placeholder text
     },
 
-    // Print Size - Default 18x24
-    printSize: { label: '18x24"', width: 18, height: 24, ratio: '3/4' },
+    // Print Size - Default 8x10
+    printSize: { label: '8x10"', width: 8, height: 10, ratio: '4/5' },
+
+    // Map image pan offsets
+    mapImageOffsetX: 0,
+    mapImageOffsetY: 0,
+    activeTypoField: null,
+    pendingGlyphForInlineEdit: null,
+    showLocationPin: true,
+    locationPinSize: 70,
+    locationPinOffsetX: 0,
+    locationPinOffsetY: 0,
 
     // Poster Type - Default star map
     posterType: 'starmap',
@@ -290,10 +332,11 @@ export const useStore = create<StoreState>((set) => ({
     mapCity: '',
     mapCenterLat: 48.8566,
     mapCenterLng: 2.3522,
-    mapZoom: 13,
+    mapZoom: 14, // zoom 14+ is needed for OpenFreeMap to include residential streets
     mapBgColor: '#1a1a2e',
     mapStreetColor: '#3d5a80',
     mapColorPreset: 'midnight',
+    mapStyleUrl: null,
 
     // Setters
     // Template System - Default Values
@@ -439,22 +482,56 @@ export const useStore = create<StoreState>((set) => ({
     setShowConstellations: (showConstellations) => set({ showConstellations }),
     setShowMilkyWay: (showMilkyWay) => set({ showMilkyWay }),
     setShowGrid: (showGrid) => set({ showGrid }),
-    setDesignStyle: (designStyle) => set({ designStyle }),
+    setDesignStyle: (designStyle) => set({
+        designStyle,
+        borderStyle: designStyle === 'fineline' ? 'double-offset' : 'simple',
+    }),
     setMaskShape: (maskShape) => set({ maskShape }),
     setIsLightMode: (isLightMode) => set({ isLightMode }),
     setShowLocation: (showLocation) => set({ showLocation }),
     setShowDate: (showDate) => set({ showDate }),
     setShowCoords: (showCoords) => set({ showCoords }),
-    setPosterColor: (posterColor) => set({ posterColor }),
+    // Keep mapBgColor in sync with posterColor so street-map background always
+    // matches the overall design palette when the user changes the poster color.
+    setPosterColor: (posterColor) => set({ posterColor, mapBgColor: posterColor }),
     setTextColor: (textColor) => set({ textColor }),
     setStarColor: (starColor) => set({ starColor }),
     setMapInteriorColor: (mapInteriorColor) => set({ mapInteriorColor }),
-    setPrintSize: (printSize) => set({ printSize }),
+    setPrintSize: (printSize) => set(() => {
+        // All formats share the same circle size (1.0) — the SVG coordinate system handles
+        // the physical size difference. 8x10 and 16x20 are the same aspect ratio and thus
+        // identical SVG dimensions (1200×1500), so their designs should look identical.
+        // Fonts scale purely by SVG height ratio relative to the 18x24 baseline (1600px).
+        const svgHeights: Record<string, number> = {
+            '8x10"':  1500,   // ratio 4:5  → same SVG as 16x20
+            '11x14"': 1527,   // ratio 11:14
+            '18x24"': 1600,   // baseline
+            '24x36"': 1800,   // ratio 2:3
+        };
+        const baseH = svgHeights['18x24"'];
+        const h     = svgHeights[printSize.label] ?? baseH;
+        const r     = h / baseH;
+
+        return {
+            printSize,
+            // Circle identical across all sizes — proportions stay consistent
+            circleSize:   1.0,
+            heartSize:    1.0,
+            houseSize:    1.0,
+            shapeOffsetY: -60,
+            // Fonts scale with SVG canvas height so text occupies the same visual proportion
+            titleFontSize:      Math.round(80 * r),
+            subtitleFontSize:   Math.round(32 * r),
+            detailsFontSize:    Math.round(24 * r),
+            dedicationFontSize: Math.round(24 * r),
+        };
+    }),
     setCustomText: (key, value) => set((state) => ({
         customText: { ...state.customText, [key]: value }
     })),
     setCircleSize: (circleSize) => set({ circleSize }),
     setHeartSize: (heartSize) => set({ heartSize }),
+    setHouseSize: (houseSize) => set({ houseSize }),
     setShapeOutlineWidth: (shapeOutlineWidth) => set({ shapeOutlineWidth }),
     setShapeOffsetY: (shapeOffsetY) => set({ shapeOffsetY }),
     setTitleFontSize: (titleFontSize) => set({ titleFontSize }),
@@ -472,6 +549,7 @@ export const useStore = create<StoreState>((set) => ({
     setPreviewZoom: (previewZoom) => set({ previewZoom }),
     setPreviewPanX: (previewPanX) => set({ previewPanX }),
     setPreviewPanY: (previewPanY) => set({ previewPanY }),
+    setIsInlineEditing: (isInlineEditing) => set({ isInlineEditing }),
     setShowFrame: (showFrame) => set({ showFrame }),
     setFrameInset: (frameInset) => set({ frameInset }),
     setFrameWidth: (frameWidth) => set({ frameWidth }),
@@ -485,13 +563,28 @@ export const useStore = create<StoreState>((set) => ({
     setDetailsKerning: (detailsKerning) => set({ detailsKerning }),
     setDedicationKerning: (dedicationKerning) => set({ dedicationKerning }),
 
-    // Poster type setters
-    setPosterType: (posterType) => set({ posterType }),
-    setMapCity: (mapCity) => set({ mapCity }),
+    // Poster type setters — sync mapStyleUrl so StreetMapCapture uses the right style
+    setPosterType: (posterType) => set({
+        posterType,
+        showLocationPin: posterType === 'coloredmap',
+        mapStyleUrl: posterType === 'coloredmap'
+            ? 'https://tiles.openfreemap.org/styles/bright'
+            : null,
+    }),
+    setMapCity: (mapCity) => set({ mapCity, mapImageOffsetX: 0, mapImageOffsetY: 0, locationPinOffsetX: 0, locationPinOffsetY: 0 }),
     setMapCenterLat: (mapCenterLat) => set({ mapCenterLat }),
     setMapCenterLng: (mapCenterLng) => set({ mapCenterLng }),
     setMapZoom: (mapZoom) => set({ mapZoom }),
     setMapBgColor: (mapBgColor) => set({ mapBgColor }),
     setMapStreetColor: (mapStreetColor) => set({ mapStreetColor }),
     setMapColorPreset: (mapColorPreset) => set({ mapColorPreset }),
+    setMapStyleUrl: (mapStyleUrl) => set({ mapStyleUrl }),
+    setMapImageOffsetX: (mapImageOffsetX) => set({ mapImageOffsetX }),
+    setMapImageOffsetY: (mapImageOffsetY) => set({ mapImageOffsetY }),
+    setActiveTypoField: (activeTypoField) => set({ activeTypoField }),
+    setPendingGlyphForInlineEdit: (pendingGlyphForInlineEdit) => set({ pendingGlyphForInlineEdit }),
+    setShowLocationPin: (showLocationPin) => set({ showLocationPin }),
+    setLocationPinSize: (locationPinSize) => set({ locationPinSize }),
+    setLocationPinOffsetX: (locationPinOffsetX) => set({ locationPinOffsetX }),
+    setLocationPinOffsetY: (locationPinOffsetY) => set({ locationPinOffsetY }),
 }));
