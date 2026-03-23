@@ -69,6 +69,16 @@ export async function getTemplate(id: string) {
     return res.json();
 }
 
+export async function publishToEtsy(templateId: string, listing: object) {
+    const res = await adminFetch(`/api/admin/templates/${templateId}/publish-etsy`, {
+        method: 'POST',
+        body: JSON.stringify(listing),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Etsy publish failed (${res.status})`);
+    return data;
+}
+
 export async function createTemplate(data: Record<string, unknown>) {
     const res = await adminFetch('/api/admin/templates', {
         method: 'POST',
