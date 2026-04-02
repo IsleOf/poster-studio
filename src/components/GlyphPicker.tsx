@@ -263,8 +263,8 @@ const GlyphPicker: React.FC<GlyphPickerProps> = ({ defaultField = 'title' }) => 
                 ))}
             </HStack>
 
-            {/* Glyph grid */}
-            <Grid templateColumns="repeat(7, 1fr)" gap={1}>
+            {/* Glyph grid — 4 columns so wide swash glyphs (Alt1/Alt4/Alt5/Lig) have room */}
+            <Grid templateColumns="repeat(4, 1fr)" gap={1}>
                 {glyphs.map((g, i) => (
                     <Box
                         key={i}
@@ -283,15 +283,18 @@ const GlyphPicker: React.FC<GlyphPickerProps> = ({ defaultField = 'title' }) => 
                         _hover={{ bg: 'blue.50', borderColor: 'blue.300', cursor: 'pointer' }}
                         transition="all 0.1s"
                         position="relative"
+                        overflow="hidden"
                         title={`Insert ${g.label} (${activeTab})`}
                     >
                         <Text
-                            fontSize="2xl"
+                            fontSize="3xl"
                             fontFamily="'Mapped Moment Script', cursive"
                             fontWeight="400"
                             lineHeight={1}
                             userSelect="none"
                             pointerEvents="none"
+                            w="100%"
+                            textAlign="center"
                         >
                             {g.char}
                         </Text>

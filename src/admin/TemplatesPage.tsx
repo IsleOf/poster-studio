@@ -13,9 +13,14 @@ const TemplatesPage: React.FC = () => {
 
     const fetchData = async () => {
         setLoading(true);
-        const data = await getTemplates();
-        setTemplates(data);
-        setLoading(false);
+        try {
+            const data = await getTemplates();
+            setTemplates(Array.isArray(data) ? data : []);
+        } catch {
+            setTemplates([]);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => { fetchData(); }, []);

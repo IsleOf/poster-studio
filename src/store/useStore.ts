@@ -1,5 +1,40 @@
 import { create } from 'zustand';
 
+// ── History helpers ──────────────────────────────────────────────────────────
+
+const MAX_HISTORY = 30;
+
+// Design-affecting fields (excludes UI/preview state and history itself)
+const DESIGN_FIELDS = [
+    'title', 'subtitle', 'date', 'time', 'location', 'lat', 'lng',
+    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity',
+    'showBorder', 'posterColor', 'textColor', 'starColor', 'mapInteriorColor',
+    'showFrame', 'frameInset', 'frameWidth', 'finelineWidth',
+    'circleSize', 'heartSize', 'houseSize', 'shapeOutlineWidth', 'shapeOffsetY',
+    'titleFontSize', 'subtitleFontSize', 'detailsFontSize', 'dedicationFontSize',
+    'titleOffsetX', 'titleOffsetY', 'subtitleOffsetY', 'detailsOffsetY', 'dedicationOffsetY',
+    'heartDecorOffsetY', 'dividerOffsetY', 'showDivider', 'dividerLength', 'dividerThickness',
+    'showConstellations', 'showMilkyWay', 'showGrid', 'showLocation', 'showDate', 'showCoords',
+    'maskShape', 'isLightMode', 'designStyle', 'borderStyle',
+    'titleFont', 'subtitleFont', 'detailsFont', 'dedicationFont',
+    'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning',
+    'customText', 'posterType', 'printSize', 'selectedTemplate',
+    'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
+    'mapBgColor', 'mapStreetColor', 'mapColorPreset', 'mapStyleUrl',
+    'mapBackgroundImage', 'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
+    'showLocationPin', 'locationPinSize', 'locationPinOffsetX', 'locationPinOffsetY',
+] as const;
+
+type DesignField = typeof DESIGN_FIELDS[number];
+
+function captureDesignSnapshot(state: StoreState): Partial<StoreState> {
+    const snap: Partial<StoreState> = {};
+    for (const key of DESIGN_FIELDS) {
+        (snap as Record<string, unknown>)[key] = (state as unknown as Record<string, unknown>)[key];
+    }
+    return snap;
+}
+
 interface StoreState {
     // Core Data
     title: string;
@@ -41,10 +76,12 @@ interface StoreState {
     dedicationFontSize: number;
 
     // Text Positions
+    titleOffsetX: number;
     titleOffsetY: number;
     subtitleOffsetY: number;
     detailsOffsetY: number;
     dedicationOffsetY: number;
+    heartDecorOffsetY: number;
     dividerOffsetY: number;
     showDivider: boolean;
     dividerLength: number;
@@ -69,7 +106,7 @@ interface StoreState {
     showGrid: boolean;
     designStyle: 'standard' | 'fineline' | 'minimal';
     finelineWidth: number; // NEW: Width for fineline double lines
-    maskShape: 'circle' | 'heart' | 'house';
+    maskShape: 'circle' | 'heart' | 'house' | 'rect';
     isLightMode: boolean;
 
     // Preview Pan/Drag State
@@ -94,9 +131,12 @@ interface StoreState {
     // Print Size
     printSize: { label: string; width: number; height: number; ratio: string };
 
-    // Map image pan offset (drag-to-reposition within the clip shape)
+    // Map image pan offset and opacity
     mapImageOffsetX: number;
     mapImageOffsetY: number;
+    mapImageOpacity: number; // 0.1–1.0, controls map fade intensity
+    /** True while the user is actively dragging the map image in the poster preview */
+    isDraggingMapImage: boolean;
 
     // Poster Type
     posterType: 'starmap' | 'streetmap' | 'coloredmap';
@@ -106,6 +146,7 @@ interface StoreState {
     mapCenterLat: number;
     mapCenterLng: number;
     mapZoom: number;
+    mapBearing: number; // 0–360, degrees clockwise rotation of the map
     mapBgColor: string;
     mapStreetColor: string;
     mapColorPreset: string;
@@ -117,6 +158,10 @@ interface StoreState {
     mapBackgroundImage: string | null;
     borderStyle: 'simple' | 'double-offset' | 'dashed';
     templateSettings: Record<string, Partial<StoreState>>; // Store settings for each template
+
+    // High-res print capture — set by StreetMapCapture on mount, called by DownloadButton
+    captureHighResFn: (() => Promise<string>) | null;
+    setCaptureHighResFn: (fn: (() => Promise<string>) | null) => void;
 
     // Setters
     setSelectedTemplate: (template: string) => void;
@@ -144,7 +189,7 @@ interface StoreState {
     setShowMilkyWay: (show: boolean) => void;
     setShowGrid: (show: boolean) => void;
     setDesignStyle: (style: 'standard' | 'fineline' | 'minimal') => void;
-    setMaskShape: (shape: 'circle' | 'heart' | 'house') => void;
+    setMaskShape: (shape: 'circle' | 'heart' | 'house' | 'rect') => void;
     setIsLightMode: (isLight: boolean) => void;
     setShowLocation: (show: boolean) => void;
     setShowDate: (show: boolean) => void;
@@ -164,10 +209,12 @@ interface StoreState {
     setSubtitleFontSize: (size: number) => void;
     setDetailsFontSize: (size: number) => void;
     setDedicationFontSize: (size: number) => void;
+    setTitleOffsetX: (offset: number) => void;
     setTitleOffsetY: (offset: number) => void;
     setSubtitleOffsetY: (offset: number) => void;
     setDetailsOffsetY: (offset: number) => void;
     setDedicationOffsetY: (offset: number) => void;
+    setHeartDecorOffsetY: (offset: number) => void;
     setDividerOffsetY: (offset: number) => void;
     setShowDivider: (show: boolean) => void;
     setDividerLength: (length: number) => void;
@@ -196,12 +243,15 @@ interface StoreState {
     setMapCenterLat: (lat: number) => void;
     setMapCenterLng: (lng: number) => void;
     setMapZoom: (zoom: number) => void;
+    setMapBearing: (bearing: number) => void;
     setMapBgColor: (color: string) => void;
     setMapStreetColor: (color: string) => void;
     setMapColorPreset: (preset: string) => void;
     setMapStyleUrl: (url: string | null) => void;
     setMapImageOffsetX: (x: number) => void;
     setMapImageOffsetY: (y: number) => void;
+    setMapImageOpacity: (opacity: number) => void;
+    setIsDraggingMapImage: (v: boolean) => void;
 
     // Active typography field (set when user clicks a text element in the poster)
     activeTypoField: 'title' | 'subtitle' | 'details' | 'dedication' | null;
@@ -220,6 +270,25 @@ interface StoreState {
     setLocationPinSize: (size: number) => void;
     setLocationPinOffsetX: (x: number) => void;
     setLocationPinOffsetY: (y: number) => void;
+
+    // Template-link ordering flow
+    selectedTemplateEtsyUrl: string | null;
+    savedDesignToken: string | null;
+    selectedEtsyListingId: string | null;
+    selectedEtsyVariant: string | null;
+    setSelectedTemplateEtsyUrl: (url: string | null) => void;
+    setSavedDesignToken: (token: string | null) => void;
+    setSelectedEtsyListingId: (id: string | null) => void;
+    setSelectedEtsyVariant: (variant: string | null) => void;
+
+    // Undo / Redo
+    _historyPast: Partial<StoreState>[];
+    _historyFuture: Partial<StoreState>[];
+    _isUndoRedo: boolean;
+    canUndo: boolean;
+    canRedo: boolean;
+    undo: () => void;
+    redo: () => void;
 }
 
 export const useStore = create<StoreState>((set) => ({
@@ -258,10 +327,12 @@ export const useStore = create<StoreState>((set) => ({
     dedicationFontSize: 24,
 
     // Text Positions - Default Values
+    titleOffsetX: 0,
     titleOffsetY: 0,
     subtitleOffsetY: 0,
     detailsOffsetY: 0,
     dedicationOffsetY: 0,
+    heartDecorOffsetY: 0,
     dividerOffsetY: 0,
     showDivider: false, // Off by default for all templates except Modern White
     dividerLength: 90, // Total width in px
@@ -318,6 +389,8 @@ export const useStore = create<StoreState>((set) => ({
     // Map image pan offsets
     mapImageOffsetX: 0,
     mapImageOffsetY: 0,
+    mapImageOpacity: 1,
+    isDraggingMapImage: false,
     activeTypoField: null,
     pendingGlyphForInlineEdit: null,
     showLocationPin: true,
@@ -333,6 +406,7 @@ export const useStore = create<StoreState>((set) => ({
     mapCenterLat: 48.8566,
     mapCenterLng: 2.3522,
     mapZoom: 14, // zoom 14+ is needed for OpenFreeMap to include residential streets
+    mapBearing: 0,
     mapBgColor: '#1a1a2e',
     mapStreetColor: '#3d5a80',
     mapColorPreset: 'midnight',
@@ -344,11 +418,13 @@ export const useStore = create<StoreState>((set) => ({
     mapBackgroundImage: null,
     borderStyle: 'simple',
     templateSettings: {},
+    captureHighResFn: null,
 
     // Setters Implementation
     setSelectedTemplate: (selectedTemplate) => set({ selectedTemplate }),
     setMapBackgroundImage: (mapBackgroundImage) => set({ mapBackgroundImage }),
     setBorderStyle: (borderStyle) => set({ borderStyle }),
+    setCaptureHighResFn: (captureHighResFn) => set({ captureHighResFn }),
     saveTemplateSettings: (templateId) => set((state) => {
         // Create a snapshot of current visual settings
         const snapshot: Partial<StoreState> = {
@@ -538,10 +614,12 @@ export const useStore = create<StoreState>((set) => ({
     setSubtitleFontSize: (subtitleFontSize) => set({ subtitleFontSize }),
     setDetailsFontSize: (detailsFontSize) => set({ detailsFontSize }),
     setDedicationFontSize: (dedicationFontSize) => set({ dedicationFontSize }),
+    setTitleOffsetX: (titleOffsetX) => set({ titleOffsetX }),
     setTitleOffsetY: (titleOffsetY) => set({ titleOffsetY }),
     setSubtitleOffsetY: (subtitleOffsetY) => set({ subtitleOffsetY }),
     setDetailsOffsetY: (detailsOffsetY) => set({ detailsOffsetY }),
     setDedicationOffsetY: (dedicationOffsetY) => set({ dedicationOffsetY }),
+    setHeartDecorOffsetY: (heartDecorOffsetY) => set({ heartDecorOffsetY }),
     setDividerOffsetY: (dividerOffsetY) => set({ dividerOffsetY }),
     setShowDivider: (showDivider) => set({ showDivider }),
     setDividerLength: (dividerLength) => set({ dividerLength }),
@@ -564,9 +642,9 @@ export const useStore = create<StoreState>((set) => ({
     setDedicationKerning: (dedicationKerning) => set({ dedicationKerning }),
 
     // Poster type setters — sync mapStyleUrl so StreetMapCapture uses the right style
+    // Note: showLocationPin is intentionally NOT changed here — the user controls it independently.
     setPosterType: (posterType) => set({
         posterType,
-        showLocationPin: posterType === 'coloredmap',
         mapStyleUrl: posterType === 'coloredmap'
             ? 'https://tiles.openfreemap.org/styles/bright'
             : null,
@@ -575,16 +653,127 @@ export const useStore = create<StoreState>((set) => ({
     setMapCenterLat: (mapCenterLat) => set({ mapCenterLat }),
     setMapCenterLng: (mapCenterLng) => set({ mapCenterLng }),
     setMapZoom: (mapZoom) => set({ mapZoom }),
+    setMapBearing: (mapBearing) => set({ mapBearing }),
     setMapBgColor: (mapBgColor) => set({ mapBgColor }),
     setMapStreetColor: (mapStreetColor) => set({ mapStreetColor }),
     setMapColorPreset: (mapColorPreset) => set({ mapColorPreset }),
     setMapStyleUrl: (mapStyleUrl) => set({ mapStyleUrl }),
     setMapImageOffsetX: (mapImageOffsetX) => set({ mapImageOffsetX }),
     setMapImageOffsetY: (mapImageOffsetY) => set({ mapImageOffsetY }),
+    setMapImageOpacity: (mapImageOpacity) => set({ mapImageOpacity }),
+    setIsDraggingMapImage: (isDraggingMapImage) => set({ isDraggingMapImage }),
     setActiveTypoField: (activeTypoField) => set({ activeTypoField }),
     setPendingGlyphForInlineEdit: (pendingGlyphForInlineEdit) => set({ pendingGlyphForInlineEdit }),
     setShowLocationPin: (showLocationPin) => set({ showLocationPin }),
     setLocationPinSize: (locationPinSize) => set({ locationPinSize }),
     setLocationPinOffsetX: (locationPinOffsetX) => set({ locationPinOffsetX }),
     setLocationPinOffsetY: (locationPinOffsetY) => set({ locationPinOffsetY }),
+
+    // Template-link ordering flow
+    selectedTemplateEtsyUrl: null,
+    savedDesignToken: null,
+    selectedEtsyListingId: null,
+    selectedEtsyVariant: null,
+    setSelectedTemplateEtsyUrl: (selectedTemplateEtsyUrl) => set({ selectedTemplateEtsyUrl }),
+    setSavedDesignToken: (savedDesignToken) => set({ savedDesignToken }),
+    setSelectedEtsyListingId: (selectedEtsyListingId) => set({ selectedEtsyListingId }),
+    setSelectedEtsyVariant: (selectedEtsyVariant) => set({ selectedEtsyVariant }),
+
+    // Undo / Redo
+    _historyPast: [],
+    _historyFuture: [],
+    _isUndoRedo: false,
+    canUndo: false,
+    canRedo: false,
+    undo: () => set((state) => {
+        if (state._historyPast.length === 0) return {};
+        const past = [...state._historyPast];
+        const snapshot = past.pop()!;
+        const currentSnap = captureDesignSnapshot(state);
+        return {
+            ...snapshot,
+            _historyPast: past,
+            _historyFuture: [currentSnap, ...state._historyFuture].slice(0, MAX_HISTORY),
+            _isUndoRedo: true,
+            canUndo: past.length > 0,
+            canRedo: true,
+        };
+    }),
+    redo: () => set((state) => {
+        if (state._historyFuture.length === 0) return {};
+        const future = [...state._historyFuture];
+        const snapshot = future.shift()!;
+        const currentSnap = captureDesignSnapshot(state);
+        return {
+            ...snapshot,
+            _historyPast: [...state._historyPast, currentSnap].slice(-MAX_HISTORY),
+            _historyFuture: future,
+            _isUndoRedo: true,
+            canUndo: true,
+            canRedo: future.length > 0,
+        };
+    }),
 }));
+
+// ── History subscriber ────────────────────────────────────────────────────────
+// Watches for design field changes and pushes snapshots to _historyPast.
+// Debounced 400ms so rapid slider drags produce a single history entry.
+
+let _pendingSnapshot: Partial<StoreState> | null = null;
+let _historyTimer: ReturnType<typeof setTimeout> | null = null;
+
+useStore.subscribe((newState, prevState) => {
+    // Skip during undo/redo to avoid self-perpetuating history loops
+    if (newState._isUndoRedo) {
+        // Reset flag after undo/redo settles
+        setTimeout(() => useStore.setState({ _isUndoRedo: false }), 0);
+        return;
+    }
+
+    // Check if any design field changed
+    const changed = DESIGN_FIELDS.some(
+        k => newState[k as keyof StoreState] !== prevState[k as keyof StoreState]
+    );
+    if (!changed) return;
+
+    // Capture "before" snapshot on FIRST change of a batch
+    if (!_pendingSnapshot) {
+        _pendingSnapshot = captureDesignSnapshot(prevState);
+    }
+
+    if (_historyTimer) clearTimeout(_historyTimer);
+    _historyTimer = setTimeout(() => {
+        if (!_pendingSnapshot) return;
+        const snap = _pendingSnapshot;
+        _pendingSnapshot = null;
+        useStore.setState((state) => ({
+            _historyPast: [...state._historyPast, snap].slice(-MAX_HISTORY),
+            _historyFuture: [],
+            canUndo: true,
+            canRedo: false,
+        }));
+    }, 400);
+});
+
+// ── Auto-save to localStorage ─────────────────────────────────────────────────
+// Debounced 2s — saves design snapshot for crash/refresh recovery.
+
+export const AUTO_SAVE_KEY = 'poster_studio_autosave';
+
+let _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+useStore.subscribe((newState, prevState) => {
+    if (newState._isUndoRedo) return;
+    const changed = DESIGN_FIELDS.some(k => newState[k] !== prevState[k]);
+    if (!changed) return;
+
+    if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(() => {
+        try {
+            const snap = captureDesignSnapshot(newState);
+            // Serialize Date to ISO string for JSON storage
+            const serializable = { ...snap, date: (snap.date as Date)?.toISOString?.() ?? snap.date };
+            localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify({ ts: Date.now(), state: serializable }));
+        } catch { /* localStorage full or unavailable */ }
+    }, 2000);
+});

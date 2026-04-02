@@ -54,6 +54,9 @@ export async function fetchAndApplyTemplate(templateId: string): Promise<boolean
         const res = await fetch(`${API_URL}/api/templates/${templateId}`);
         if (!res.ok) return false;
         const data = await res.json();
+        // Store the Etsy listing URL so DownloadButton can show the right CTA
+        const { setSelectedTemplateEtsyUrl } = useStore.getState();
+        setSelectedTemplateEtsyUrl(data.etsy_listing_url || null);
         if (data.settings) {
             applyTemplate(data.settings);
             return true;

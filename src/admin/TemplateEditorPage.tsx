@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     Box, Heading, Text, VStack, HStack, Input, Textarea, Button, Select,
     FormLabel, Switch, Spinner, SimpleGrid, Divider, NumberInput, NumberInputField,
     Badge, Tabs, TabList, Tab, TabPanels, TabPanel, Tag, TagLabel, TagCloseButton,
-    Wrap, WrapItem,
+    Wrap, WrapItem, Table, Thead, Tbody, Tr, Th, Td, Tooltip,
 } from '@chakra-ui/react';
-import { getTemplate, createTemplate, updateTemplate, publishToEtsy } from './adminApi';
+import { getTemplate, createTemplate, updateTemplate, publishToEtsy, getFulfillmentProviders } from './adminApi';
 import { useStore } from '../store/useStore';
 import { applyTemplate } from '../utils/applyTemplate';
 
@@ -34,6 +34,29 @@ function captureSettings(): Record<string, unknown> {
     }
     return out;
 }
+
+interface FulfillmentRow {
+    id: number;
+    provider: string;
+    product_type: string;
+    size: string;
+    print_cost: number | null;
+    ship_cost_us: number | null;
+    ship_cost_intl: number | null;
+    has_api: number;
+    notes: string | null;
+    source_url: string | null;
+    last_updated: number;
+}
+
+const PRODUCT_TYPE_LABELS: Record<string, string> = {
+    poster_unframed: 'Poster (unframed)',
+    poster_framed: 'Framed poster',
+    poster_framed_mat: 'Framed + mat',
+    canvas: 'Canvas',
+};
+
+const SIZES = ['5x7', '8x10', '11x14', '11x17', '12x18', '16x20', '18x24', '24x36'];
 
 interface EtsyListing {
     title: string;
@@ -88,6 +111,13 @@ const TemplateEditorPage: React.FC = () => {
     const [publishMessage, setPublishMessage] = useState('');
     const [publishError, setPublishError] = useState('');
 
+    // Fulfillment selection state
+    const [fulfillmentProvider, setFulfillmentProvider] = useState('');
+    const [fulfillmentSize, setFulfillmentSize] = useState('18x24');
+    const [fulfillmentProductType, setFulfillmentProductType] = useState('poster_unframed');
+    const [fulfillmentRows, setFulfillmentRows] = useState<FulfillmentRow[]>([]);
+    const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
+
     // Store state for live display
     const posterType = useStore(s => s.posterType);
     const maskShape = useStore(s => s.maskShape);
@@ -101,17 +131,28 @@ const TemplateEditorPage: React.FC = () => {
                 setEtsyListingId(data.etsy_listing_id || '');
                 setEtsyListingUrl(data.etsy_listing_url || '');
                 setIsActive(!!data.is_active);
+                setFulfillmentProvider(data.fulfillment_provider || '');
+                setFulfillmentSize(data.fulfillment_size || '18x24');
                 if (data.settings) applyTemplate(data.settings);
                 if (data.etsyListing) {
                     setListing({ ...DEFAULT_LISTING, ...data.etsyListing });
                 } else {
-                    // Pre-fill title from template name
                     setListing(l => ({ ...l, title: data.name ? `Custom ${data.name} Poster` : '' }));
                 }
                 setLoading(false);
             });
         }
     }, [id, isNew]);
+
+    const loadFulfillmentOptions = useCallback(() => {
+        setFulfillmentLoading(true);
+        getFulfillmentProviders(fulfillmentSize, fulfillmentProductType)
+            .then(rows => setFulfillmentRows(rows))
+            .catch(() => setFulfillmentRows([]))
+            .finally(() => setFulfillmentLoading(false));
+    }, [fulfillmentSize, fulfillmentProductType]);
+
+    useEffect(() => { loadFulfillmentOptions(); }, [loadFulfillmentOptions]);
 
     const setL = (key: keyof EtsyListing, val: unknown) =>
         setListing(l => ({ ...l, [key]: val }));
@@ -139,6 +180,8 @@ const TemplateEditorPage: React.FC = () => {
             is_active: isActive,
             settings,
             etsy_listing: listing,
+            fulfillment_provider: fulfillmentProvider || null,
+            fulfillment_size: fulfillmentSize || null,
         };
         try {
             if (isNew) {
@@ -208,6 +251,12 @@ const TemplateEditorPage: React.FC = () => {
                 <TabList>
                     <Tab>Template Details</Tab>
                     <Tab>Etsy Listing</Tab>
+                    <Tab>
+                        Fulfillment
+                        {fulfillmentProvider && (
+                            <Badge ml={2} colorScheme="green" fontSize="9px">{fulfillmentProvider}</Badge>
+                        )}
+                    </Tab>
                 </TabList>
 
                 <TabPanels>
@@ -464,6 +513,197 @@ const TemplateEditorPage: React.FC = () => {
                                 {publishError && (
                                     <Text fontSize="sm" color="red.500" mt={2}>{publishError}</Text>
                                 )}
+                            </Box>
+                        </VStack>
+                    </TabPanel>
+                    {/* ── Tab 3: Fulfillment provider picker ──────────────────── */}
+                    <TabPanel px={0} pt={4}>
+                        <VStack align="stretch" spacing={4}>
+                            {/* Currently selected */}
+                            {fulfillmentProvider && (
+                                <Box bg="green.50" p={3} borderRadius="md" border="1px" borderColor="green.200">
+                                    <HStack>
+                                        <Badge colorScheme="green">Selected</Badge>
+                                        <Text fontSize="sm" fontWeight="600">{fulfillmentProvider}</Text>
+                                        <Text fontSize="sm" color="gray.500">·</Text>
+                                        <Text fontSize="sm">{PRODUCT_TYPE_LABELS[fulfillmentProductType] || fulfillmentProductType}</Text>
+                                        <Text fontSize="sm" color="gray.500">·</Text>
+                                        <Text fontSize="sm">{fulfillmentSize}"</Text>
+                                        <Button size="xs" variant="ghost" color="red.400" ml="auto"
+                                            onClick={() => setFulfillmentProvider('')}>
+                                            Clear
+                                        </Button>
+                                    </HStack>
+                                </Box>
+                            )}
+
+                            {/* Filters */}
+                            <Box bg="white" p={4} borderRadius="lg" border="1px" borderColor="gray.200">
+                                <Text fontSize="sm" fontWeight="600" mb={3}>Find Cheapest Option</Text>
+                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                                    <Box>
+                                        <FormLabel fontSize="xs" color="gray.600" mb={1}>Product Type</FormLabel>
+                                        <Select size="sm" value={fulfillmentProductType}
+                                            onChange={e => setFulfillmentProductType(e.target.value)}>
+                                            <option value="poster_unframed">Poster (unframed)</option>
+                                            <option value="poster_framed">Framed poster</option>
+                                            <option value="poster_framed_mat">Framed + mat</option>
+                                            <option value="canvas">Canvas</option>
+                                        </Select>
+                                    </Box>
+                                    <Box>
+                                        <FormLabel fontSize="xs" color="gray.600" mb={1}>Size</FormLabel>
+                                        <Select size="sm" value={fulfillmentSize}
+                                            onChange={e => setFulfillmentSize(e.target.value)}>
+                                            {SIZES.map(s => <option key={s} value={s}>{s}"</option>)}
+                                        </Select>
+                                    </Box>
+                                </SimpleGrid>
+                            </Box>
+
+                            {/* Provider comparison table */}
+                            <Box bg="white" borderRadius="lg" border="1px" borderColor="gray.200" overflow="hidden">
+                                <HStack px={4} py={3} borderBottom="1px" borderColor="gray.100" justify="space-between">
+                                    <Text fontSize="sm" fontWeight="600">
+                                        Providers for {fulfillmentSize}" {PRODUCT_TYPE_LABELS[fulfillmentProductType]}
+                                    </Text>
+                                    <Text fontSize="xs" color="gray.400">sorted by cheapest US total</Text>
+                                </HStack>
+
+                                {fulfillmentLoading ? (
+                                    <Box p={6} textAlign="center"><Spinner size="sm" /></Box>
+                                ) : fulfillmentRows.length === 0 ? (
+                                    <Box p={6} textAlign="center">
+                                        <Text fontSize="sm" color="gray.500">No pricing data for this combination.</Text>
+                                        <Text fontSize="xs" color="gray.400" mt={1}>Run <Text as="span" fontFamily="mono">/update-fulfillment-prices</Text> to refresh.</Text>
+                                    </Box>
+                                ) : (
+                                    <Box overflowX="auto">
+                                        <Table size="sm" variant="simple">
+                                            <Thead bg="gray.50">
+                                                <Tr>
+                                                    <Th fontSize="xs">Provider</Th>
+                                                    <Th fontSize="xs" isNumeric>Print</Th>
+                                                    <Th fontSize="xs" isNumeric>Ship (US)</Th>
+                                                    <Th fontSize="xs" isNumeric>Total US</Th>
+                                                    <Th fontSize="xs" isNumeric>Ship (Intl)</Th>
+                                                    <Th fontSize="xs">API</Th>
+                                                    <Th fontSize="xs">Updated</Th>
+                                                    <Th></Th>
+                                                </Tr>
+                                            </Thead>
+                                            <Tbody>
+                                                {fulfillmentRows.map((row, i) => {
+                                                    const totalUs = (row.print_cost ?? 0) + (row.ship_cost_us ?? 0);
+                                                    const isCheapest = i === 0;
+                                                    const isSelected = fulfillmentProvider === `${row.provider}:${row.product_type}:${row.size}`;
+                                                    const updatedDays = Math.floor((Date.now() / 1000 - row.last_updated) / 86400);
+                                                    return (
+                                                        <Tr key={row.id}
+                                                            bg={isSelected ? 'blue.50' : isCheapest ? 'green.50' : undefined}
+                                                            _hover={{ bg: isSelected ? 'blue.100' : 'gray.50' }}
+                                                        >
+                                                            <Td>
+                                                                <VStack align="start" spacing={0}>
+                                                                    <HStack spacing={1}>
+                                                                        <Text fontSize="xs" fontWeight="600" textTransform="capitalize">
+                                                                            {row.provider}
+                                                                        </Text>
+                                                                        {isCheapest && <Badge colorScheme="green" fontSize="8px">cheapest</Badge>}
+                                                                    </HStack>
+                                                                    {row.notes && (
+                                                                        <Tooltip label={row.notes} fontSize="xs">
+                                                                            <Text fontSize="10px" color="gray.400" noOfLines={1} maxW="140px">
+                                                                                {row.notes}
+                                                                            </Text>
+                                                                        </Tooltip>
+                                                                    )}
+                                                                </VStack>
+                                                            </Td>
+                                                            <Td isNumeric fontSize="xs">
+                                                                {row.print_cost != null ? `$${row.print_cost.toFixed(2)}` : '—'}
+                                                            </Td>
+                                                            <Td isNumeric fontSize="xs">
+                                                                {row.ship_cost_us != null ? `$${row.ship_cost_us.toFixed(2)}` : '—'}
+                                                            </Td>
+                                                            <Td isNumeric>
+                                                                <Text fontSize="xs" fontWeight="700"
+                                                                    color={isCheapest ? 'green.600' : 'gray.700'}>
+                                                                    ${totalUs.toFixed(2)}
+                                                                </Text>
+                                                            </Td>
+                                                            <Td isNumeric fontSize="xs" color="gray.500">
+                                                                {row.ship_cost_intl != null ? `$${row.ship_cost_intl.toFixed(2)}` : '—'}
+                                                            </Td>
+                                                            <Td>
+                                                                <Badge colorScheme={row.has_api ? 'purple' : 'gray'} fontSize="9px">
+                                                                    {row.has_api ? 'API' : 'manual'}
+                                                                </Badge>
+                                                            </Td>
+                                                            <Td fontSize="10px" color={updatedDays > 30 ? 'orange.500' : 'gray.400'}>
+                                                                {updatedDays === 0 ? 'today' : `${updatedDays}d ago`}
+                                                            </Td>
+                                                            <Td>
+                                                                <Button size="xs"
+                                                                    colorScheme={isSelected ? 'blue' : 'gray'}
+                                                                    variant={isSelected ? 'solid' : 'outline'}
+                                                                    onClick={() => {
+                                                                        setFulfillmentProvider(
+                                                                            isSelected ? '' : `${row.provider}:${row.product_type}:${row.size}`
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    {isSelected ? '✓ Selected' : 'Select'}
+                                                                </Button>
+                                                            </Td>
+                                                        </Tr>
+                                                    );
+                                                })}
+                                            </Tbody>
+                                        </Table>
+                                    </Box>
+                                )}
+                            </Box>
+
+                            {/* Margin calculator */}
+                            {fulfillmentRows.length > 0 && listing.price && (
+                                <Box bg="white" p={4} borderRadius="lg" border="1px" borderColor="gray.200">
+                                    <Text fontSize="sm" fontWeight="600" mb={3}>
+                                        Margin at ${listing.price} (Etsy listing price)
+                                    </Text>
+                                    <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} fontSize="xs">
+                                        {fulfillmentRows.slice(0, 4).map(row => {
+                                            const totalUs = (row.print_cost ?? 0) + (row.ship_cost_us ?? 0);
+                                            const sellPrice = parseFloat(listing.price) || 0;
+                                            const etsyFees = sellPrice * 0.065 + sellPrice * 0.03 + 0.25 + 0.20;
+                                            const net = sellPrice - totalUs - etsyFees;
+                                            const margin = sellPrice > 0 ? Math.round(net / sellPrice * 100) : 0;
+                                            return (
+                                                <Box key={row.id} p={3} bg="gray.50" borderRadius="md" textAlign="center">
+                                                    <Text fontWeight="600" textTransform="capitalize" mb={1}>{row.provider}</Text>
+                                                    <Text fontSize="sm" fontWeight="700" color={net > 0 ? 'green.600' : 'red.500'}>
+                                                        ${net.toFixed(2)}
+                                                    </Text>
+                                                    <Text color="gray.500">{margin}% margin</Text>
+                                                </Box>
+                                            );
+                                        })}
+                                    </SimpleGrid>
+                                    <Text fontSize="10px" color="gray.400" mt={2}>
+                                        Etsy fees estimated: 6.5% transaction + 3% + $0.25 payment processing + $0.20 listing fee.
+                                    </Text>
+                                </Box>
+                            )}
+
+                            {/* Refresh hint */}
+                            <Box bg="gray.50" p={3} borderRadius="md" border="1px" borderColor="gray.200">
+                                <Text fontSize="xs" color="gray.500">
+                                    Prices are sourced from provider websites. To refresh with current prices, run the Claude Code skill:
+                                </Text>
+                                <Text fontSize="xs" fontFamily="mono" color="blue.500" mt={1}>/update-fulfillment-prices</Text>
+                                <Text fontSize="xs" color="gray.400" mt={1}>
+                                    Prices marked orange are over 30 days old.
+                                </Text>
                             </Box>
                         </VStack>
                     </TabPanel>

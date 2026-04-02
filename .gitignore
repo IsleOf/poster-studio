@@ -3,6 +3,10 @@ outputs/
 .agent/
 server/
 
+# Claude memory (may contain credentials) — keep commands
+.claude/projects/
+test-results/
+
 # Logs
 logs
 *.log

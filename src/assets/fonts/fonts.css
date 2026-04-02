@@ -112,123 +112,59 @@
 }
 
 @font-face {
-  font-family: 'Montserrat';
+  font-family: 'Mapped2';
   font-style: normal;
   font-weight: 300;
   font-display: swap;
-  src: url('./Montserrat-300-normal.woff2') format('woff2');
+  src: url('./Mapped2-300-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-  src: url('./Montserrat-300-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-  src: url('./Montserrat-300-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-  src: url('./Montserrat-300-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 300;
-  font-display: swap;
-  src: url('./Montserrat-300-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Montserrat';
+  font-family: 'Mapped2';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('./Montserrat-400-normal.woff2') format('woff2');
+  src: url('./Mapped2-400-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Montserrat';
+  font-family: 'Mapped2';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 500;
   font-display: swap;
-  src: url('./Montserrat-400-normal.woff2') format('woff2');
+  src: url('./Mapped2-500-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Montserrat';
+  font-family: 'Mapped2';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 600;
   font-display: swap;
-  src: url('./Montserrat-400-normal.woff2') format('woff2');
+  src: url('./Mapped2-600-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./Montserrat-400-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./Montserrat-400-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Montserrat';
+  font-family: 'Mapped2';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('./Montserrat-700-normal.woff2') format('woff2');
+  src: url('./Mapped2-700-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Montserrat';
+  font-family: 'Mapped2';
   font-style: normal;
-  font-weight: 700;
+  font-weight: 800;
   font-display: swap;
-  src: url('./Montserrat-700-normal.woff2') format('woff2');
+  src: url('./Mapped2-800-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Montserrat';
+  font-family: 'Mapped2';
   font-style: normal;
-  font-weight: 700;
+  font-weight: 900;
   font-display: swap;
-  src: url('./Montserrat-700-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('./Montserrat-700-normal.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'Montserrat';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('./Montserrat-700-normal.woff2') format('woff2');
+  src: url('./Mapped2-900-normal.woff2') format('woff2');
 }
 
 @font-face {

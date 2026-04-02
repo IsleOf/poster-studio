@@ -1,14 +1,19 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
     Box, Flex, Slider, SliderTrack, SliderFilledTrack, SliderThumb,
-    Text, VStack, HStack, Button,
+    Text, VStack, HStack, Button, useToast, Tooltip,
 } from '@chakra-ui/react';
+import { renderPosterToBlob } from '../utils/renderPoster';
+import { useParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
+import { AUTO_SAVE_KEY } from '../store/useStore';
+import { trackEvent } from '../utils/analytics';
+import { fetchAndApplyTemplate } from '../utils/applyTemplate';
 import VectorStarMap from './VectorStarMap';
 import SidebarControls from './SidebarControls';
 import StreetMapCapture from './StreetMapCapture';
-
 const MainLayout: React.FC = () => {
+    const { templateId } = useParams<{ templateId?: string }>();
     const containerRef = useRef<HTMLDivElement>(null);
     const {
         previewZoom, setPreviewZoom,
@@ -20,21 +25,212 @@ const MainLayout: React.FC = () => {
         isInlineEditing,
     } = useStore();
 
+    const { canUndo, canRedo, undo, redo } = useStore();
+    const toast = useToast();
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isCopying, setIsCopying] = useState(false);
+    const [sidebarWidth, setSidebarWidth] = useState(400);
+    const sidebarDragRef = useRef(false);
+
+    const handleCopyImage = useCallback(async () => {
+        const svgEl = document.getElementById('poster-preview')?.querySelector('svg') as SVGSVGElement | null;
+        if (!svgEl || !navigator.clipboard?.write) return;
+        setIsCopying(true);
+        try {
+            // Render at 150 DPI for a reasonable clipboard image size
+            const blob = await renderPosterToBlob(svgEl, printSize.width, printSize.height, 150, true);
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+            toast({ title: 'Copied!', description: 'Poster image copied to clipboard.', status: 'success', duration: 2500, isClosable: true });
+            trackEvent('copy_image');
+        } catch {
+            toast({ title: 'Copy failed', description: 'Your browser may not support clipboard images.', status: 'error', duration: 3000, isClosable: true });
+        } finally {
+            setIsCopying(false);
+        }
+    }, [printSize, toast]);
+
+    // Page view tracking
+    useEffect(() => {
+        trackEvent('page_view', { path: window.location.pathname, template: templateId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Auto-save restore — offer to reload from localStorage on first mount (only if no template in URL)
+    useEffect(() => {
+        if (templateId) return; // template URL overrides autosave
+        try {
+            const raw = localStorage.getItem(AUTO_SAVE_KEY);
+            if (!raw) return;
+            const { ts, state } = JSON.parse(raw);
+            // Only offer restore if saved within last 7 days and has meaningful content
+            const ageHours = (Date.now() - ts) / 3600000;
+            if (ageHours > 168 || !state?.title) return;
+            toast({
+                title: 'Resume previous design?',
+                description: `Saved ${Math.round(ageHours)}h ago — "${state.title}"`,
+                status: 'info',
+                duration: null,
+                isClosable: true,
+                position: 'bottom-right',
+                render: ({ onClose }) => (
+                    <Box bg="white" border="1px" borderColor="gray.200" borderRadius="lg" p={4} boxShadow="lg" maxW="320px">
+                        <Text fontWeight="600" fontSize="sm" mb={1}>Resume previous design?</Text>
+                        <Text fontSize="xs" color="gray.500" mb={3}>
+                            Saved {Math.round(ageHours)}h ago — "{state.title}"
+                        </Text>
+                        <HStack spacing={2}>
+                            <Button size="xs" bg="gray.900" color="white" _hover={{ bg: 'gray.700' }}
+                                onClick={() => {
+                                    const patch: Record<string, unknown> = { ...state };
+                                    if (typeof patch.date === 'string') patch.date = new Date(patch.date as string);
+                                    useStore.setState(patch as unknown as Parameters<typeof useStore.setState>[0]);
+                                    onClose();
+                                }}>
+                                Restore
+                            </Button>
+                            <Button size="xs" variant="ghost" onClick={() => {
+                                localStorage.removeItem(AUTO_SAVE_KEY);
+                                onClose();
+                            }}>
+                                Discard
+                            </Button>
+                        </HStack>
+                    </Box>
+                ),
+            });
+        } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const [previewDimensions, setPreviewDimensions] = useState({ width: 0, height: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    // Touch pinch state
+    const [touchStartDist, setTouchStartDist] = useState<number | null>(null);
+    const [touchStartZoom, setTouchStartZoom] = useState(1);
     // Ref so window-level move handler always reads the current editing state (avoids stale closure)
     const isInlineEditingRef = useRef(false);
-    useEffect(() => { isInlineEditingRef.current = isInlineEditing; }, [isInlineEditing]);
+    // Use a Zustand subscribe instead of useEffect so the ref updates SYNCHRONOUSLY
+    // when setIsInlineEditing is called from a D3 native event handler.
+    // useEffect only runs after React re-renders, which is too late — the dblclick
+    // event fires before the next render, so the ref would still be stale.
+    useEffect(() => {
+        return useStore.subscribe((state) => {
+            isInlineEditingRef.current = state.isInlineEditing;
+        });
+    }, []);
+
+    // ── Load template from URL ──────────────────────────────────────────────
+    useEffect(() => {
+        // Check for shared design state in ?d= query param first
+        const params = new URLSearchParams(window.location.search);
+        const encoded = params.get('d');
+        if (encoded) {
+            try {
+                const c = JSON.parse(decodeURIComponent(escape(atob(encoded))));
+                const store = useStore.getState();
+                // Mode & shape
+                if (c.posterType) store.setPosterType(c.posterType);
+                if (c.maskShape) store.setMaskShape(c.maskShape);
+                if (c.designStyle) store.setDesignStyle(c.designStyle);
+                if (typeof c.isLightMode === 'boolean') store.setIsLightMode(c.isLightMode);
+                if (c.borderStyle) store.setBorderStyle(c.borderStyle);
+                // Colors
+                if (c.posterColor) store.setPosterColor(c.posterColor);
+                if (c.textColor) store.setTextColor(c.textColor);
+                if (c.starColor) store.setStarColor(c.starColor);
+                if (c.mapInteriorColor) store.setMapInteriorColor(c.mapInteriorColor);
+                // Visibility
+                if (typeof c.showBorder === 'boolean') store.setShowBorder(c.showBorder);
+                if (typeof c.showFrame === 'boolean') store.setShowFrame(c.showFrame);
+                if (c.frameInset != null) store.setFrameInset(c.frameInset);
+                if (c.frameWidth != null) store.setFrameWidth(c.frameWidth);
+                if (typeof c.showLocation === 'boolean') store.setShowLocation(c.showLocation);
+                if (typeof c.showDate === 'boolean') store.setShowDate(c.showDate);
+                if (typeof c.showCoords === 'boolean') store.setShowCoords(c.showCoords);
+                if (typeof c.showDivider === 'boolean') store.setShowDivider(c.showDivider);
+                if (c.dividerLength != null) store.setDividerLength(c.dividerLength);
+                if (c.dividerThickness != null) store.setDividerThickness(c.dividerThickness);
+                if (typeof c.showConstellations === 'boolean') store.setShowConstellations(c.showConstellations);
+                if (typeof c.showMilkyWay === 'boolean') store.setShowMilkyWay(c.showMilkyWay);
+                if (typeof c.showGrid === 'boolean') store.setShowGrid(c.showGrid);
+                // Text content
+                if (c.title) store.setCustomText('title', c.title);
+                if (c.subtitle) store.setCustomText('subtitle', c.subtitle);
+                if (c.customDate != null) store.setCustomText('date', c.customDate);
+                if (c.customLocation != null) store.setCustomText('location', c.customLocation);
+                if (c.customCoords != null) store.setCustomText('coords', c.customCoords);
+                if (c.customDedication != null) store.setCustomText('dedication', c.customDedication);
+                // Star map location & time
+                if (c.location) store.setLocation(c.location);
+                if (c.lat) store.setLat(c.lat);
+                if (c.lng) store.setLng(c.lng);
+                if (c.date) store.setDate(new Date(c.date));
+                if (c.time) store.setTime(c.time);
+                // Fonts
+                if (c.titleFont) store.setTitleFont(c.titleFont);
+                if (c.subtitleFont) store.setSubtitleFont(c.subtitleFont);
+                if (c.detailsFont) store.setDetailsFont(c.detailsFont);
+                if (c.dedicationFont) store.setDedicationFont(c.dedicationFont);
+                // Font sizes
+                if (c.titleFontSize) store.setTitleFontSize(c.titleFontSize);
+                if (c.subtitleFontSize) store.setSubtitleFontSize(c.subtitleFontSize);
+                if (c.detailsFontSize) store.setDetailsFontSize(c.detailsFontSize);
+                if (c.dedicationFontSize) store.setDedicationFontSize(c.dedicationFontSize);
+                // Kerning
+                if (c.titleKerning != null) store.setTitleKerning(c.titleKerning);
+                if (c.subtitleKerning != null) store.setSubtitleKerning(c.subtitleKerning);
+                if (c.detailsKerning != null) store.setDetailsKerning(c.detailsKerning);
+                if (c.dedicationKerning != null) store.setDedicationKerning(c.dedicationKerning);
+                // Text position offsets
+                if (c.titleOffsetY != null) store.setTitleOffsetY(c.titleOffsetY);
+                if (c.subtitleOffsetY != null) store.setSubtitleOffsetY(c.subtitleOffsetY);
+                if (c.detailsOffsetY != null) store.setDetailsOffsetY(c.detailsOffsetY);
+                if (c.dedicationOffsetY != null) store.setDedicationOffsetY(c.dedicationOffsetY);
+                if (c.heartDecorOffsetY != null) store.setHeartDecorOffsetY(c.heartDecorOffsetY);
+                if (c.dividerOffsetY != null) store.setDividerOffsetY(c.dividerOffsetY);
+                // Shape
+                if (c.circleSize != null) store.setCircleSize(c.circleSize);
+                if (c.heartSize != null) store.setHeartSize(c.heartSize);
+                if (c.houseSize != null) store.setHouseSize(c.houseSize);
+                if (c.shapeOutlineWidth != null) store.setShapeOutlineWidth(c.shapeOutlineWidth);
+                if (c.shapeOffsetY != null) store.setShapeOffsetY(c.shapeOffsetY);
+                // Star map
+                if (c.starScale != null) store.setStarScale(c.starScale);
+                if (c.lineWeight != null) store.setLineWeight(c.lineWeight);
+                if (c.glowIntensity != null) store.setGlowIntensity(c.glowIntensity);
+                // Map
+                if (c.mapCity) store.setMapCity(c.mapCity);
+                if (c.mapCenterLat) store.setMapCenterLat(c.mapCenterLat);
+                if (c.mapCenterLng) store.setMapCenterLng(c.mapCenterLng);
+                if (c.mapZoom) store.setMapZoom(c.mapZoom);
+                if (c.mapBearing != null) store.setMapBearing(c.mapBearing);
+                if (c.mapBgColor) store.setMapBgColor(c.mapBgColor);
+                if (c.mapStreetColor) store.setMapStreetColor(c.mapStreetColor);
+                if (c.mapColorPreset) store.setMapColorPreset(c.mapColorPreset);
+                // Location pin
+                if (typeof c.showLocationPin === 'boolean') store.setShowLocationPin(c.showLocationPin);
+                if (c.locationPinSize != null) store.setLocationPinSize(c.locationPinSize);
+                if (c.locationPinOffsetX != null) store.setLocationPinOffsetX(c.locationPinOffsetX);
+                if (c.locationPinOffsetY != null) store.setLocationPinOffsetY(c.locationPinOffsetY);
+                // Print size
+                if (c.printSize) store.setPrintSize(c.printSize);
+            } catch { /* ignore malformed ?d= */ }
+        } else if (templateId) {
+            fetchAndApplyTemplate(templateId);
+            trackEvent('template_load', { templateId });
+        }
+    }, [templateId]);
 
     // ── Street map capture ───────────────────────────────────────────────────
-    // When the street map renders, it calls onCapture → we store the data-URL
-    // which VectorStarMap uses as mapBackgroundImage inside the poster template.
     const handleMapCapture = useCallback((dataUrl: string) => {
+        // Clear any drag offset from the previous image — the new capture is
+        // already centred at the new map position, so offset must be reset to 0.
+        useStore.getState().setMapImageOffsetX(0);
+        useStore.getState().setMapImageOffsetY(0);
         setMapBackgroundImage(dataUrl);
     }, [setMapBackgroundImage]);
 
-    // Clear background image when switching back to star map
     useEffect(() => {
         if (posterType === 'starmap') {
             setMapBackgroundImage(null);
@@ -46,7 +242,8 @@ const MainLayout: React.FC = () => {
         const updateDimensions = () => {
             if (containerRef.current) {
                 const { clientWidth, clientHeight } = containerRef.current;
-                const padding = 80;
+                const isMobile = window.innerWidth < 768;
+                const padding = isMobile ? 12 : 80;
                 const availableWidth = clientWidth - padding * 2;
                 const availableHeight = clientHeight - padding * 2;
                 const aspectRatio = printSize.width / printSize.height;
@@ -66,7 +263,19 @@ const MainLayout: React.FC = () => {
         return () => window.removeEventListener('resize', updateDimensions);
     }, [printSize]);
 
-    // ── Zoom / Pan ───────────────────────────────────────────────────────────
+    // ── Keyboard shortcuts: Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo ─────────
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            const ctrl = e.ctrlKey || e.metaKey;
+            if (!ctrl) return;
+            if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+            if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [undo, redo]);
+
+    // ── Mouse Zoom / Pan ─────────────────────────────────────────────────────
     const handleWheel = (e: React.WheelEvent) => {
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
@@ -78,6 +287,9 @@ const MainLayout: React.FC = () => {
 
     const handleMouseDown = (e: React.MouseEvent) => {
         if (e.button === 0 && !isInlineEditingRef.current) {
+            // Don't start poster pan when clicking on SVG text/interactive elements —
+            // those have their own D3 drag handlers and should not also pan the poster.
+            if ((e.target as Element).closest('#text-layer')) return;
             setIsDragging(true);
             setDragStart({ x: e.clientX - previewPanX, y: e.clientY - previewPanY });
         }
@@ -85,7 +297,6 @@ const MainLayout: React.FC = () => {
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            // Use ref — not closure state — so we always see current editing status
             if (isDragging && !isInlineEditingRef.current) {
                 setPreviewPanX(e.clientX - dragStart.x);
                 setPreviewPanY(e.clientY - dragStart.y);
@@ -103,32 +314,201 @@ const MainLayout: React.FC = () => {
     }, [isDragging, dragStart, setPreviewPanX, setPreviewPanY]);
 
     const handleDoubleClick = () => {
+        // Don't reset pan if inline editing just opened — the first click of a double-click
+        // opens the editor (setting isInlineEditing=true synchronously via D3 → Zustand),
+        // so the second click's dblclick event fires with isInlineEditingRef already true.
+        if (isInlineEditingRef.current) return;
         setPreviewPanX(0);
         setPreviewPanY(0);
     };
 
+    // ── Touch Pinch-to-zoom / Pan ────────────────────────────────────────────
+    const getTouchDist = (touches: React.TouchList) => {
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            setTouchStartDist(getTouchDist(e.touches));
+            setTouchStartZoom(previewZoom);
+        } else if (e.touches.length === 1 && !isInlineEditingRef.current) {
+            setIsDragging(true);
+            setDragStart({
+                x: e.touches[0].clientX - previewPanX,
+                y: e.touches[0].clientY - previewPanY,
+            });
+        }
+    };
+
+    // Non-passive touchmove so we can call preventDefault (prevents scroll interference)
+    const handleTouchMoveNative = useCallback((e: TouchEvent) => {
+        if (e.touches.length === 2 && touchStartDist !== null) {
+            e.preventDefault();
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const scale = dist / touchStartDist;
+            setPreviewZoom(Math.min(Math.max(0.5, touchStartZoom * scale), 3));
+        } else if (e.touches.length === 1 && isDragging && !isInlineEditingRef.current) {
+            e.preventDefault();
+            setPreviewPanX(e.touches[0].clientX - dragStart.x);
+            setPreviewPanY(e.touches[0].clientY - dragStart.y);
+        }
+    }, [touchStartDist, touchStartZoom, isDragging, dragStart, setPreviewZoom, setPreviewPanX, setPreviewPanY]);
+
+    const handleTouchEnd = () => {
+        setIsDragging(false);
+        setTouchStartDist(null);
+    };
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        el.addEventListener('touchmove', handleTouchMoveNative, { passive: false });
+        return () => el.removeEventListener('touchmove', handleTouchMoveNative);
+    }, [handleTouchMoveNative]);
+
+    // ── Sidebar resize drag ──────────────────────────────────────────────────
+    const handleSidebarDragStart = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        sidebarDragRef.current = true;
+        const onMove = (ev: MouseEvent) => {
+            if (!sidebarDragRef.current) return;
+            // Sidebar is on the right; dragging left = wider, right = narrower
+            const newWidth = window.innerWidth - ev.clientX;
+            setSidebarWidth(Math.min(Math.max(280, newWidth), 700));
+        };
+        const onUp = () => {
+            sidebarDragRef.current = false;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    }, []);
+
     return (
-        <Flex h="100vh" overflow="hidden" bg="gray.50">
-            {/* ── Left: Preview ─────────────────────────────────────────── */}
+        <>
+        {/* Skip-to-content for keyboard users */}
+        <Box
+            as="a" href="#sidebar-controls"
+            position="absolute" top="-100px" left={2} zIndex={9999}
+            bg="gray.900" color="white" px={3} py={2} borderRadius="md" fontSize="sm"
+            _focus={{ top: 2 }}
+        >
+            Skip to controls
+        </Box>
+        <Flex
+            h={{ base: 'auto', md: '100vh' }}
+            minH="100vh"
+            overflow={{ base: 'visible', md: 'hidden' }}
+            bg="gray.50"
+            flexDirection={{ base: 'column', md: 'row' }}
+        >
+            {/* ── Preview area ──────────────────────────────────────────── */}
             <Box
                 ref={containerRef}
-                flex="1"
-                h="100vh"
+                as="main"
+                aria-label="Poster preview"
+                // Mobile: sticky so preview stays visible while controls scroll
+                // Desktop: fill remaining width
+                flex={{ base: 'none', md: '1' }}
+                h={{ base: '45vh', md: '100vh' }}
+                w={{ base: '100%', md: 'auto' }}
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
                 bg="gray.50"
-                p={8}
+                p={{ base: 3, md: 8 }}
                 overflow="hidden"
-                position="relative"
+                position={{ base: 'sticky', md: 'relative' }}
+                top={{ base: 0, md: 'auto' }}
+                zIndex={{ base: 20, md: 'auto' }}
                 onWheelCapture={handleWheel}
                 onMouseDown={handleMouseDown}
                 onDoubleClick={handleDoubleClick}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
                 cursor={isDragging ? 'grabbing' : 'grab'}
                 userSelect="none"
+                // Prevent browser default touch behaviours (scroll, zoom) on preview
+                style={{ touchAction: 'none' }}
             >
-                {/* Zoom Controls */}
+                {/* Undo / Redo buttons */}
                 <Box
+                    position="absolute"
+                    top={4}
+                    left={4}
+                    zIndex={100}
+                    bg="white"
+                    borderRadius="md"
+                    border="1px solid"
+                    borderColor="gray.200"
+                    boxShadow="sm"
+                    overflow="hidden"
+                >
+                    <HStack spacing={0}>
+                        <Button
+                            size="xs"
+                            variant="ghost"
+                            borderRadius={0}
+                            isDisabled={!canUndo}
+                            onClick={undo}
+                            title="Undo (Ctrl+Z)"
+                            px={3}
+                            py={2}
+                            h="auto"
+                            fontSize="13px"
+                            color="gray.600"
+                            _hover={{ bg: 'gray.50' }}
+                            _disabled={{ opacity: 0.35, cursor: 'not-allowed' }}
+                        >
+                            ↩
+                        </Button>
+                        <Box w="1px" bg="gray.200" h="24px" />
+                        <Button
+                            size="xs"
+                            variant="ghost"
+                            borderRadius={0}
+                            isDisabled={!canRedo}
+                            onClick={redo}
+                            title="Redo (Ctrl+Y)"
+                            px={3}
+                            py={2}
+                            h="auto"
+                            fontSize="13px"
+                            color="gray.600"
+                            _hover={{ bg: 'gray.50' }}
+                            _disabled={{ opacity: 0.35, cursor: 'not-allowed' }}
+                        >
+                            ↪
+                        </Button>
+                        <Box w="1px" bg="gray.200" h="24px" />
+                        <Tooltip label="Copy poster as image" placement="bottom" fontSize="xs" openDelay={500}>
+                            <Button
+                                size="xs"
+                                variant="ghost"
+                                borderRadius={0}
+                                onClick={handleCopyImage}
+                                isLoading={isCopying}
+                                px={3}
+                                py={2}
+                                h="auto"
+                                fontSize="11px"
+                                color="gray.500"
+                                _hover={{ bg: 'gray.50', color: 'gray.900' }}
+                            >
+                                ⧉
+                            </Button>
+                        </Tooltip>
+                    </HStack>
+                </Box>
+
+                {/* Zoom controls — desktop only (mobile uses pinch-to-zoom) */}
+                <Box
+                    display={{ base: 'none', md: 'block' }}
                     position="absolute"
                     top={4}
                     right={4}
@@ -162,27 +542,102 @@ const MainLayout: React.FC = () => {
                     </VStack>
                 </Box>
 
+                {/* Mobile zoom reset hint — tap to reset */}
+                <Box
+                    display={{ base: 'block', md: 'none' }}
+                    position="absolute"
+                    top={2}
+                    right={2}
+                    zIndex={100}
+                >
+                    <Button
+                        size="xs"
+                        variant="ghost"
+                        color="gray.500"
+                        fontSize="10px"
+                        px={2}
+                        py={1}
+                        h="auto"
+                        onClick={() => { setPreviewZoom(1); setPreviewPanX(0); setPreviewPanY(0); }}
+                    >
+                        Reset
+                    </Button>
+                </Box>
+
+                {/* Fullscreen toggle — desktop only */}
+                <Box
+                    display={{ base: 'none', md: 'flex' }}
+                    gap={2}
+                    position="absolute"
+                    bottom={4}
+                    right={4}
+                    zIndex={100}
+                >
+                    <Button
+                        size="xs"
+                        variant="ghost"
+                        color="gray.400"
+                        fontSize="11px"
+                        px={2} py={1} h="auto"
+                        _hover={{ color: 'gray.700', bg: 'white' }}
+                        onClick={() => setIsFullscreen(f => !f)}
+                        title={isFullscreen ? 'Exit fullscreen preview' : 'Fullscreen preview'}
+                    >
+                        {isFullscreen ? '✕ Exit fullscreen' : '⛶ Fullscreen'}
+                    </Button>
+                </Box>
+
                 {/* Poster Preview */}
                 <Box
                     id="poster-preview"
-                    boxShadow="sm"
-                    width={`${previewDimensions.width}px`}
-                    height={`${previewDimensions.height}px`}
-                    maxWidth="100%"
-                    maxHeight="100%"
-                    transform={`scale(${previewZoom}) translate(${previewPanX / previewZoom}px, ${previewPanY / previewZoom}px)`}
-                    transformOrigin="center center"
-                    transition={isDragging ? 'none' : 'transform 0.2s ease-out'}
-                    bg="white"
-                    border="1px solid"
-                    borderColor="gray.200"
-                    pointerEvents="none"
-                >
-                    {/* VectorStarMap is always rendered — it handles both modes via mapBackgroundImage */}
-                    <VectorStarMap />
+                        position="relative"
+                        boxShadow="sm"
+                        width={`${previewDimensions.width}px`}
+                        height={`${previewDimensions.height}px`}
+                        maxWidth="100%"
+                        maxHeight="100%"
+                        transform={`scale(${previewZoom}) translate(${previewPanX / previewZoom}px, ${previewPanY / previewZoom}px)`}
+                        transformOrigin="center center"
+                        transition={isDragging ? 'none' : 'transform 0.2s ease-out'}
+                        bg="white"
+                        border="1px solid"
+                        borderColor="gray.200"
+                        pointerEvents="none"
+                    >
+                        <VectorStarMap />
+                        {/* DEMO watermark overlay — matches the watermark baked into exports */}
+                        <Box
+                            position="absolute"
+                            inset={0}
+                            pointerEvents="none"
+                            overflow="hidden"
+                            zIndex={5}
+                            aria-hidden
+                        >
+                            {/* Diagonal DEMO tiles — same pattern as drawDemoWatermark in renderPoster.ts */}
+                            {Array.from({ length: 12 }).map((_, i) => (
+                                <Text
+                                    key={i}
+                                    position="absolute"
+                                    left={`${(i % 4) * 30 - 10}%`}
+                                    top={`${Math.floor(i / 4) * 36 - 5}%`}
+                                    fontSize="13%"
+                                    fontWeight="bold"
+                                    color="white"
+                                    opacity={0.18}
+                                    transform="rotate(-36deg)"
+                                    fontFamily="Arial, sans-serif"
+                                    letterSpacing="0.05em"
+                                    whiteSpace="nowrap"
+                                    userSelect="none"
+                                >
+                                    DEMO
+                                </Text>
+                            ))}
+                        </Box>
                 </Box>
 
-                {/* Offscreen street map renderer — captures high-res canvas snapshot */}
+                {/* Offscreen street map renderer */}
                 {posterType !== 'starmap' && (
                     <Box
                         position="fixed"
@@ -198,19 +653,45 @@ const MainLayout: React.FC = () => {
                 )}
             </Box>
 
-            {/* ── Right: Controls ───────────────────────────────────────── */}
+            {/* ── Sidebar controls ──────────────────────────────────────── */}
+            {!isFullscreen && (
             <Box
-                w="400px"
-                bg="white"
-                overflowY="auto"
-                borderLeft="1px"
+                id="sidebar-controls"
+                as="aside"
+                aria-label="Poster design controls"
+                // Mobile: full width below preview, natural height (page scrolls)
+                // Desktop: resizable column on the right, scrolls internally
+                w={{ base: '100%', md: `${sidebarWidth}px` }}
+                minW={{ base: 'unset', md: '280px' }}
+                flex={{ base: 'none', md: 'none' }}
+                h={{ base: 'auto', md: '100vh' }}
+                overflowY={{ base: 'visible', md: 'auto' }}
+                borderLeft={{ base: 'none', md: '1px' }}
+                borderTop={{ base: '1px', md: 'none' }}
                 borderColor="gray.200"
-                boxShadow="none"
-                zIndex={10}
+                bg="white"
+                zIndex={{ base: 1, md: 10 }}
+                position="relative"
             >
+                {/* Drag handle — desktop only */}
+                <Box
+                    display={{ base: 'none', md: 'block' }}
+                    position="absolute"
+                    left="-4px"
+                    top={0}
+                    bottom={0}
+                    w="8px"
+                    cursor="col-resize"
+                    zIndex={20}
+                    onMouseDown={handleSidebarDragStart}
+                    _hover={{ bg: 'blue.100', opacity: 0.6 }}
+                    transition="background 0.15s"
+                />
                 <SidebarControls />
             </Box>
+            )}
         </Flex>
+        </>
     );
 };
 

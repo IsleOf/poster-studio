@@ -49,7 +49,72 @@ export type MapColorPreset = {
     streetColor: string;
     /** When set, use this pre-built style URL instead of the 2-color custom style. */
     styleUrl?: string;
+    /** When set, use this custom style function instead of createMapStyle(). */
+    customStyle?: () => maplibregl.StyleSpecification;
 };
+
+/** Rectangle template: white bg, black highways, gray minor roads + land use fills */
+function createDesign2Style(): maplibregl.StyleSpecification {
+    const bg = '#ffffff';
+    const highwayColor  = '#111111';  // black — motorway, trunk
+    const arterialColor = '#444444';  // dark gray — primary, secondary
+    const streetColor   = '#777777';  // medium gray — tertiary, residential, minor
+    const serviceColor  = '#aaaaaa';  // light gray — service lanes, paths
+    const waterColor = '#888888';
+    const landUseColor = '#cccccc';
+    const buildingColor = '#dddddd';
+    return {
+        version: 8,
+        sources: {
+            openmaptiles: {
+                type: 'vector',
+                url: 'https://tiles.openfreemap.org/planet',
+                attribution: '© OpenFreeMap © OpenStreetMap',
+            },
+        },
+        layers: [
+            { id: 'background', type: 'background', paint: { 'background-color': bg } },
+            { id: 'water', type: 'fill', source: 'openmaptiles', 'source-layer': 'water',
+              paint: { 'fill-color': waterColor } },
+            { id: 'waterway', type: 'line', source: 'openmaptiles', 'source-layer': 'waterway',
+              paint: { 'line-color': waterColor, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 14, 4] as maplibregl.ExpressionSpecification } },
+            { id: 'landuse', type: 'fill', source: 'openmaptiles', 'source-layer': 'landuse',
+              filter: ['in', ['get', 'class'], ['literal', ['grass', 'park', 'forest', 'recreation_ground', 'meadow', 'garden', 'wood', 'nature_reserve']]] as maplibregl.ExpressionSpecification,
+              paint: { 'fill-color': landUseColor } },
+            { id: 'building', type: 'fill', source: 'openmaptiles', 'source-layer': 'building',
+              paint: { 'fill-color': buildingColor, 'fill-opacity': 0.9 } },
+            {
+                id: 'roads_all', type: 'line', source: 'openmaptiles', 'source-layer': 'transportation',
+                minzoom: 6,
+                paint: {
+                    'line-color': [
+                        'match', ['get', 'class'],
+                        'motorway',   highwayColor,
+                        'trunk',      highwayColor,
+                        'primary',    arterialColor,
+                        'secondary',  arterialColor,
+                        'tertiary',   streetColor,
+                        'minor',      streetColor,
+                        'residential',streetColor,
+                        serviceColor,
+                    ] as maplibregl.ExpressionSpecification,
+                    'line-width': [
+                        'interpolate', ['exponential', 1.5], ['zoom'],
+                        6,  ['match', ['get', 'class'], 'motorway', 1.5, 'trunk', 1.2, 'primary', 0.7, 'secondary', 0.4, 0.15],
+                        14, ['match', ['get', 'class'],
+                            'motorway', 10, 'trunk', 8, 'primary', 5.5, 'secondary', 4,
+                            'tertiary', 1.8, 'minor', 1.0, 'service', 0.6, 'residential', 1.0, 0.6,
+                        ],
+                        18, ['match', ['get', 'class'],
+                            'motorway', 28, 'trunk', 24, 'primary', 16, 'secondary', 11,
+                            'tertiary', 5, 'minor', 3, 'service', 1.8, 'residential', 3, 1.8,
+                        ],
+                    ] as maplibregl.ExpressionSpecification,
+                },
+            },
+        ],
+    };
+}
 
 export const MAP_COLOR_PRESETS: MapColorPreset[] = [
     { id: 'midnight',  name: 'Midnight',   bgColor: '#1a1a2e', streetColor: '#3d5a80' },
@@ -60,6 +125,8 @@ export const MAP_COLOR_PRESETS: MapColorPreset[] = [
     { id: 'blueprint', name: 'Blueprint',  bgColor: '#0a192f', streetColor: '#64ffda' },
     { id: 'sepia',     name: 'Sepia',      bgColor: '#2c1810', streetColor: '#d4a96a' },
     { id: 'neon',      name: 'Neon',       bgColor: '#0d0d0d', streetColor: '#ff00ff' },
+    // ── Rectangle: white bg, black highways, gray minor roads + land use fills ─
+    { id: 'design2', name: 'Rectangle (B&W)', bgColor: '#ffffff', streetColor: '#111111', customStyle: createDesign2Style },
     // ── Realistic multicolor (uses OpenFreeMap's pre-built bright style) ──────
     {
         id: 'realistic',
@@ -84,6 +151,47 @@ function latFromMercatorY(y: number, zoom: number): number {
     const scale = 512 * Math.pow(2, zoom);
     const n = Math.PI - (2 * Math.PI * y) / scale;
     return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+
+// ─── Predictive tile prefetcher ───────────────────────────────────────────────
+
+/**
+ * After a stitch completes, quietly jump the offscreen map to adjacent zoom
+ * levels and pan offsets so MapLibre loads those tiles into its in-memory
+ * cache AND the service worker caches them on disk.  Runs entirely in the
+ * background; never updates onCapture and never blocks the UI.
+ */
+function prefetchNearbyTiles(
+    map: maplibregl.Map,
+    lng: number,
+    lat: number,
+    currentZoom: number,
+): void {
+    // Prefetch at zoom-1 (wider view) and zoom+1 (closer view), plus
+    // a couple of small pan offsets at the current zoom.
+    const targets: Array<{ lng: number; lat: number; zoom: number }> = [
+        { lng, lat, zoom: Math.max(1,  currentZoom - 1) },
+        { lng, lat, zoom: Math.min(20, currentZoom + 1) },
+        { lng: lng + 0.02, lat, zoom: currentZoom },
+        { lng: lng - 0.02, lat, zoom: currentZoom },
+    ];
+
+    let idx = 0;
+    function loadNext() {
+        if (idx >= targets.length) {
+            // Restore to original position silently
+            map.jumpTo({ center: [lng, lat], zoom: currentZoom });
+            return;
+        }
+        const t = targets[idx++];
+        map.once('idle', loadNext);
+        map.jumpTo({ center: [t.lng, t.lat], zoom: t.zoom });
+    }
+
+    // Only start if map is currently idle (don't interrupt a real capture)
+    if (map.isMoving() || map.isZooming()) return;
+    map.once('idle', loadNext);
+    map.jumpTo({ center: [targets[0].lng, targets[0].lat], zoom: targets[0].zoom });
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -139,20 +247,32 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     const isCapturingRef = useRef(false);
     const pendingCaptureRef = useRef(false);
     const suppressNextMoveendRef = useRef(false);
+    // Incremented whenever the desired map position (coords/zoom) changes.
+    // captureStitched snapshots this at start and discards the result if it
+    // changed mid-stitch, preventing stale captures from overwriting newer ones.
+    const captureVersionRef = useRef(0);
     const colorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const stitchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const { mapCenterLat, mapCenterLng, mapZoom, mapStreetColor, posterColor, mapStyleUrl } = useStore();
+    const { mapCenterLat, mapCenterLng, mapZoom, mapBearing, mapStreetColor, posterColor, mapStyleUrl, mapColorPreset, setCaptureHighResFn } = useStore();
+    const activePreset = MAP_COLOR_PRESETS.find(p => p.id === mapColorPreset);
+    const getActiveStyle = () => activePreset?.customStyle ? activePreset.customStyle() : createMapStyle(posterColor, mapStreetColor);
 
     // Always-current snapshot of the map position — read inside async captureStitched
-    const storeRef = useRef({ mapCenterLat, mapCenterLng, mapZoom });
+    const storeRef = useRef({ mapCenterLat, mapCenterLng, mapZoom, mapBearing });
     useEffect(() => {
-        storeRef.current = { mapCenterLat, mapCenterLng, mapZoom };
+        storeRef.current = { mapCenterLat, mapCenterLng, mapZoom, mapBearing };
     });
 
     /**
      * Captures a 2×2 grid of tiles at (displayZoom + 1) and stitches them into
      * a single 7200×7200 JPEG that covers the same geographic area as a single
      * displayZoom capture — but with one extra zoom level of tile detail.
+     *
+     * Critical ordering rule: always register map.once('idle') BEFORE calling
+     * map.jumpTo(). If the listener is registered after jumpTo, tiles may already
+     * be cached and the map might never leave the idle state, so the listener
+     * would fire for a *future* unrelated event (capturing the wrong frame).
      */
     const captureStitched = useCallback(async () => {
         const map = mapRef.current;
@@ -165,12 +285,19 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
         isCapturingRef.current = true;
         pendingCaptureRef.current = false;
+        // Snapshot the current version — if it changes before we finish, the result is stale
+        const startVersion = captureVersionRef.current;
+        // Non-null cast: we already returned above if map was null.
+        const m = map as maplibregl.Map;
 
-        const { mapCenterLat: lat, mapCenterLng: lng, mapZoom: zoom } = storeRef.current;
-        const captureZoom = zoom + 1;
+        const { mapCenterLat: lat, mapCenterLng: lng, mapZoom: zoom, mapBearing: bearing } = storeRef.current;
+        // Cap at 20 — slider max; above 20 MapLibre scales up rather than loading
+        // finer tiles, causing identical-tile artefacts and useless stitching.
+        const effectiveZoom = Math.min(zoom, 20);
+        const captureZoom = Math.min(effectiveZoom + 1, 21);
 
         const pixelOffset = 300;
-        const lngPerPx = 360 / (512 * Math.pow(2, zoom));
+        const lngPerPx = 360 / (512 * Math.pow(2, effectiveZoom));
         const lngOffset = pixelOffset * lngPerPx;
 
         const centerY = mercatorY(lat, zoom);
@@ -193,18 +320,37 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             const col = i % 2;
             const row = Math.floor(i / 2);
             await new Promise<void>(resolve => {
-                map.once('idle', () => {
-                    ctx.drawImage(map.getCanvas(), col * TILE_CANVAS_SIZE, row * TILE_CANVAS_SIZE);
-                    resolve();
-                });
-                map.jumpTo({ center: [tiles[i].lng, tiles[i].lat], zoom: captureZoom });
+                // Register BEFORE jumpTo so we can't miss the idle event
+                // even when tiles are already cached.
+                function onIdle() {
+                    if (m.areTilesLoaded()) {
+                        // All tiles at captureZoom are present — safe to capture.
+                        ctx.drawImage(m.getCanvas(), col * TILE_CANVAS_SIZE, row * TILE_CANVAS_SIZE);
+                        resolve();
+                    } else {
+                        // Some tiles still loading (parent-tile placeholders visible) —
+                        // wait for the next idle, which fires once they arrive.
+                        m.once('idle', onIdle);
+                    }
+                }
+                m.once('idle', onIdle);
+                m.jumpTo({ center: [tiles[i].lng, tiles[i].lat], zoom: captureZoom, bearing: bearing ?? 0 });
             });
         }
 
+        // Restore to the CURRENT store position (user may have changed it mid-capture).
+        // This avoids a visible snap-back to the pre-capture position.
+        const { mapCenterLat: latNow, mapCenterLng: lngNow, mapZoom: zoomNow, mapBearing: bearingNow } = storeRef.current;
         suppressNextMoveendRef.current = true;
-        map.jumpTo({ center: [lng, lat], zoom });
+        m.jumpTo({ center: [lngNow, latNow], zoom: Math.min(zoomNow, 20), bearing: bearingNow ?? 0 });
 
         isCapturingRef.current = false;
+
+        // Discard stale result — position changed while we were stitching
+        if (captureVersionRef.current !== startVersion) {
+            if (pendingCaptureRef.current) { pendingCaptureRef.current = false; captureStitched(); }
+            return;
+        }
 
         const dataUrl = await new Promise<string>((resolve, reject) => {
             stitchedCanvas.toBlob(blob => {
@@ -215,7 +361,13 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 reader.readAsDataURL(blob);
             }, 'image/jpeg', 0.92);
         });
-        onCapture(dataUrl);
+        // Don't push the new image while the user is mid-drag — it would interrupt
+        // their drag gesture by causing the SVG effect to re-run and reset the offset.
+        // After drag ends, the coordinate useEffect fires map.jumpTo() which triggers
+        // another captureStitched, so the image will update shortly after.
+        if (!useStore.getState().isDraggingMapImage) {
+            onCapture(dataUrl);
+        }
 
         if (pendingCaptureRef.current) {
             pendingCaptureRef.current = false;
@@ -224,18 +376,27 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     }, [onCapture]);
 
     /**
-     * Fast single-tile capture — used for immediate color-change preview (~100ms).
+     * Fast single-tile capture — downscaled to ~800px so the data URL is small
+     * (~50 KB vs ~1 MB) and React re-renders are near-instant.
+     * Used for live preview while the user is dragging/zooming.
      */
     const captureQuick = useCallback(() => {
         const map = mapRef.current;
         if (!map || isCapturingRef.current) return;
         map.once('idle', () => {
-            map.getCanvas().toBlob(blob => {
+            if (useStore.getState().isDraggingMapImage) return;
+            const src = map.getCanvas();
+            const PREVIEW_SIZE = 800;
+            const preview = document.createElement('canvas');
+            preview.width  = PREVIEW_SIZE;
+            preview.height = PREVIEW_SIZE;
+            preview.getContext('2d')!.drawImage(src, 0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
+            preview.toBlob(blob => {
                 if (!blob) return;
                 const reader = new FileReader();
                 reader.onload = () => onCapture(reader.result as string);
                 reader.readAsDataURL(blob);
-            }, 'image/jpeg', 0.92);
+            }, 'image/jpeg', 0.75);
         });
         map.triggerRepaint();
     }, [onCapture]);
@@ -245,13 +406,15 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         if (!containerRef.current || mapRef.current) return;
 
         const initialStyleUrl = useStore.getState().mapStyleUrl;
-        const initialStyle = initialStyleUrl ?? createMapStyle(posterColor, mapStreetColor);
+        const initialPresetId = useStore.getState().mapColorPreset;
+        const initialPreset = MAP_COLOR_PRESETS.find(p => p.id === initialPresetId);
+        const initialStyle = initialStyleUrl ?? (initialPreset?.customStyle ? initialPreset.customStyle() : createMapStyle(posterColor, mapStreetColor));
 
         const map = new maplibregl.Map({
             container: containerRef.current,
             style: initialStyle,
             center: [mapCenterLng, mapCenterLat],
-            zoom: mapZoom,
+            zoom: Math.min(mapZoom, 20),
             pixelRatio: PIXEL_RATIO,
             canvasContextAttributes: { preserveDrawingBuffer: true },
             interactive: true,
@@ -269,9 +432,12 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 suppressNextMoveendRef.current = false;
                 return;
             }
-            if (!isCapturingRef.current) {
-                captureStitched();
-            }
+            // Ignore moves our own capture code triggered (stitch tile jumps)
+            if (isCapturingRef.current) return;
+            // Wait 1.2 s after the last moveend before stitching — ensures the
+            // user has finished dragging/zooming before we start the 4-tile capture.
+            if (stitchDebounceRef.current) clearTimeout(stitchDebounceRef.current);
+            stitchDebounceRef.current = setTimeout(() => captureStitched(), 1200);
         });
 
         return () => {
@@ -288,7 +454,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         const map = mapRef.current;
         if (!map) return;
 
-        const newStyle = mapStyleUrl ?? createMapStyle(posterColor, mapStreetColor);
+        const newStyle = mapStyleUrl ?? getActiveStyle();
         map.setStyle(newStyle);
 
         // After the style loads, apply POI filter (prebuilt styles only) then stitch
@@ -307,7 +473,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     // after 1.2s debounce so rapid color-picker dragging stays smooth.
     useEffect(() => {
         const map = mapRef.current;
-        if (!map || !map.isStyleLoaded() || mapStyleUrl !== null) return;
+        if (!map || !map.isStyleLoaded() || mapStyleUrl !== null || activePreset?.customStyle) return;
         map.setPaintProperty('background', 'background-color', posterColor);
         map.setPaintProperty('water', 'fill-color', posterColor);
         map.setPaintProperty('roads_all', 'line-color', mapStreetColor);
@@ -316,12 +482,119 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         colorDebounceRef.current = setTimeout(() => captureStitched(), 1200);
     }, [posterColor, mapStreetColor, mapStyleUrl, captureQuick, captureStitched]);
 
-    // ── Fly to new location when store coords change ───────────────────────────
+    // ── Synchronous version increment via Zustand subscription ───────────────
+    // React useEffects run *after* the render, so there is a window where an
+    // in-flight stitch could complete between setState() and the next effect,
+    // slipping past a useEffect-based version check.  Zustand's subscribe fires
+    // synchronously inside set(), so by the time any async stitch code resumes
+    // the version is already incremented.
+    useEffect(() => {
+        return useStore.subscribe((state, prev) => {
+            if (state.mapCenterLat   !== prev.mapCenterLat   ||
+                state.mapCenterLng   !== prev.mapCenterLng   ||
+                state.mapZoom        !== prev.mapZoom        ||
+                state.mapBearing     !== prev.mapBearing     ||
+                // Also invalidate stale stitches when style/type/colors change so
+                // old-style captures can't overwrite new ones (global fix for all
+                // map types — not just colored maps)
+                state.mapStyleUrl    !== prev.mapStyleUrl    ||
+                state.posterType     !== prev.posterType     ||
+                state.mapBgColor     !== prev.mapBgColor     ||
+                state.mapStreetColor !== prev.mapStreetColor ||
+                state.mapColorPreset !== prev.mapColorPreset) {
+                captureVersionRef.current++;
+            }
+        });
+    }, []);
+
+    // ── Fly to new location / bearing when store coords change ────────────────
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        map.flyTo({ center: [mapCenterLng, mapCenterLat], zoom: mapZoom, duration: 1200 });
-    }, [mapCenterLat, mapCenterLng, mapZoom]);
+        // Never interrupt an ongoing stitch — it reads storeRef.current at each
+        // iteration so it will naturally pick up the latest position.
+        if (isCapturingRef.current) {
+            pendingCaptureRef.current = true;
+            return;
+        }
+        map.jumpTo({ center: [mapCenterLng, mapCenterLat], zoom: Math.min(mapZoom, 20), bearing: mapBearing });
+    }, [mapCenterLat, mapCenterLng, mapZoom, mapBearing]);
+
+    // ── High-res print capture — 3×3 grid at zoom+2 ───────────────────────────
+    // Registered in the store so DownloadButton can call it before exporting.
+    // Produces a 10800×10800 JPEG (3 × 3600px tiles × 3×3 grid) — sufficient
+    // for prints up to 36×36" at 300 DPI with twice the tile-detail of preview.
+    const captureHighRes = useCallback(async (): Promise<string> => {
+        const map = mapRef.current;
+        if (!map) throw new Error('Map not initialised');
+
+        // Wait for any ongoing capture to finish
+        while (isCapturingRef.current) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        isCapturingRef.current = true;
+        // Non-null cast: we already returned above if map was null.
+        const m = map as maplibregl.Map;
+
+        const { mapCenterLat: lat, mapCenterLng: lng, mapZoom: zoom, mapBearing: bearing } = storeRef.current;
+        const effectiveZoom = Math.min(zoom, 20);
+        // Capture at zoom+2 for extra tile detail (one more doubling vs preview stitch)
+        const captureZoom = Math.min(effectiveZoom + 2, 21);
+
+        // 3×3 grid: offsets of -400, 0, +400 px at display zoom
+        // At captureZoom=zoom+2, 1200 CSS px covers 300 display-px, so centres 400px apart
+        // cover: -400-150=-550 … +400+150=+550 display px → ~1100×1100 px at display zoom.
+        // Multiply by PIXEL_RATIO=3: 10800×10800 output.
+        const offsets = [-400, 0, 400];
+        const lngPerPx = 360 / (512 * Math.pow(2, effectiveZoom));
+        const centerY = mercatorY(lat, effectiveZoom);
+
+        const GRID = 3;
+        const stitched = document.createElement('canvas');
+        stitched.width  = TILE_CANVAS_SIZE * GRID;
+        stitched.height = TILE_CANVAS_SIZE * GRID;
+        const ctx = stitched.getContext('2d')!;
+
+        for (let row = 0; row < GRID; row++) {
+            for (let col = 0; col < GRID; col++) {
+                const lngOffset = offsets[col] * lngPerPx;
+                const latCenter = latFromMercatorY(centerY + offsets[row], effectiveZoom);
+                await new Promise<void>(resolve => {
+                    function onIdle() {
+                        if (m.areTilesLoaded()) {
+                            ctx.drawImage(m.getCanvas(), col * TILE_CANVAS_SIZE, row * TILE_CANVAS_SIZE);
+                            resolve();
+                        } else {
+                            m.once('idle', onIdle);
+                        }
+                    }
+                    m.once('idle', onIdle);
+                    m.jumpTo({ center: [lng + lngOffset, latCenter], zoom: captureZoom });
+                });
+            }
+        }
+
+        // Restore original position
+        suppressNextMoveendRef.current = true;
+        m.jumpTo({ center: [lng, lat], zoom: effectiveZoom, bearing: bearing ?? 0 });
+        isCapturingRef.current = false;
+
+        return new Promise<string>((resolve, reject) => {
+            stitched.toBlob(blob => {
+                if (!blob) { reject(new Error('toBlob failed')); return; }
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            }, 'image/jpeg', 0.94);
+        });
+    }, [storeRef]);
+
+    // Register/unregister the high-res capture function in the store
+    useEffect(() => {
+        setCaptureHighResFn(captureHighRes);
+        return () => setCaptureHighResFn(null);
+    }, [captureHighRes, setCaptureHighResFn]);
 
     return (
         <div

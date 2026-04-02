@@ -51,19 +51,20 @@ const VectorStarMap: React.FC = () => {
         posterColor, textColor, glowIntensity, gridOpacity, showBorder, showConstellations,
         showGrid, designStyle, maskShape, isLightMode, showLocation, showDate,
         showCoords, customText, printSize, circleSize, heartSize, houseSize, shapeOffsetY, titleFontSize,
-        subtitleFontSize, detailsFontSize, dedicationFontSize, titleOffsetY, subtitleOffsetY,
-        detailsOffsetY, dedicationOffsetY, dividerOffsetY, shapeOutlineWidth, showFrame, frameInset, frameWidth,
+        subtitleFontSize, detailsFontSize, dedicationFontSize, titleOffsetX, titleOffsetY, subtitleOffsetY,
+        detailsOffsetY, dedicationOffsetY, heartDecorOffsetY, dividerOffsetY, shapeOutlineWidth, showFrame, frameInset, frameWidth,
         titleFont, subtitleFont, detailsFont, dedicationFont,
         titleKerning, subtitleKerning, detailsKerning, dedicationKerning,
         mapBackgroundImage, borderStyle, selectedTemplate, starColor, mapInteriorColor,
         showDivider, dividerLength, dividerThickness,
-        setTitleOffsetY, setSubtitleOffsetY, setDetailsOffsetY, setDedicationOffsetY, setDividerOffsetY,
-        posterType, mapImageOffsetX, mapImageOffsetY, setMapImageOffsetX, setMapImageOffsetY,
+        setTitleOffsetX, setTitleOffsetY, setSubtitleOffsetY, setDetailsOffsetY, setDedicationOffsetY, setHeartDecorOffsetY, setDividerOffsetY,
+        posterType, mapImageOffsetX, mapImageOffsetY, mapImageOpacity, setMapImageOffsetX, setMapImageOffsetY,
         mapStreetColor, setCustomText,
         setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize,
         setIsInlineEditing,
         setActiveTypoField,
         pendingGlyphForInlineEdit, setPendingGlyphForInlineEdit,
+        previewZoom,
         showLocationPin, locationPinSize,
         locationPinOffsetX, locationPinOffsetY,
         setLocationPinOffsetX, setLocationPinOffsetY,
@@ -118,16 +119,32 @@ const VectorStarMap: React.FC = () => {
     const ratioVal = rW / rH;
     const height = width / ratioVal;
 
-    // Fetch Data Effect (Runs once)
+    // Fetch Data Effect (Runs once) — Cache API for offline support + faster repeat visits
     useEffect(() => {
+        const STARS_URL = 'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/stars.6.json';
+        const CONSTELLATIONS_URL = 'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.lines.json';
+        const CACHE_NAME = 'star-data-v1';
+
+        const fetchCached = async (url: string): Promise<any> => {
+            try {
+                const cache = await caches.open(CACHE_NAME);
+                const cached = await cache.match(url);
+                if (cached) return cached.json();
+                const res = await fetch(url);
+                if (res.ok) await cache.put(url, res.clone());
+                return res.json();
+            } catch {
+                // CacheStorage not available (e.g. non-HTTPS dev) — fall through to direct fetch
+                return fetch(url).then(r => r.json());
+            }
+        };
+
         const fetchData = async () => {
             try {
-                const [starsRes, constellationsRes] = await Promise.all([
-                    fetch('https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/stars.6.json'),
-                    fetch('https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.lines.json')
+                const [stars, constellations] = await Promise.all([
+                    fetchCached(STARS_URL),
+                    fetchCached(CONSTELLATIONS_URL),
                 ]);
-                const stars = await starsRes.json();
-                const constellations = await constellationsRes.json();
                 setStarsData(stars);
                 setConstellationsData(constellations);
             } catch (error) {
@@ -178,13 +195,22 @@ const VectorStarMap: React.FC = () => {
         defsLayer.selectAll('*').remove();
 
         // --- Map Logic ---
+        const RECT_MAP_H = height * 0.74; // rect mask: total map section height
+        // Inset padding — creates white frame around the map (matches SVG reference: 50/800 = 6.25%)
+        const RECT_MAP_PAD = width * 0.0625;
+        const RECT_MAP_INNER_X = RECT_MAP_PAD;
+        const RECT_MAP_INNER_Y = RECT_MAP_PAD;
+        const RECT_MAP_INNER_W = width - 2 * RECT_MAP_PAD;
+        const RECT_MAP_INNER_H = RECT_MAP_H - 2 * RECT_MAP_PAD;
         const baseMapRadius = Math.min(width, height) * 0.4;
-        const mapRadius = baseMapRadius * (
+        const mapRadius = maskShape === 'rect' ? RECT_MAP_INNER_W / 2 : baseMapRadius * (
             maskShape === 'circle' ? debouncedCircleSize :
             maskShape === 'heart'  ? debouncedHeartSize  :
                                      debouncedHouseSize
         );
-        const center = [width / 2, (height * 0.45) + debouncedShapeOffsetY];
+        const center = maskShape === 'rect'
+            ? [width / 2, RECT_MAP_INNER_Y + RECT_MAP_INNER_H / 2]
+            : [width / 2, (height * 0.45) + debouncedShapeOffsetY];
 
         // Setup Clip Path
         const clipPath = defsLayer.append('clipPath').attr('id', 'map-clip');
@@ -209,7 +235,9 @@ const VectorStarMap: React.FC = () => {
             return `translate(${center[0]}, ${center[1]}) scale(${s}) translate(-${houseOrigCX}, -${houseOrigCY})`;
         };
 
-        if (maskShape === 'heart') {
+        if (maskShape === 'rect') {
+            clipPath.append('rect').attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H);
+        } else if (maskShape === 'heart') {
             clipPath.append('path').attr('d', userHeartPath).attr('transform', getHeartTransform(1));
         } else if (maskShape === 'house') {
             clipPath.append('path').attr('d', userHousePath).attr('transform', getHouseTransform(1));
@@ -249,12 +277,18 @@ const VectorStarMap: React.FC = () => {
                 .attr('y', center[1] - imgSize / 2 + imgOffsetY)
                 .attr('width', imgSize)
                 .attr('height', imgSize)
-                .attr('preserveAspectRatio', 'none');
+                .attr('preserveAspectRatio', 'none')
+                .attr('opacity', mapImageOpacity ?? 1);
 
             // Transparent drag hit area over the shape — lets users reposition the map image
             const hitGroup = mapLayer.append('g').style('cursor', 'grab');
 
-            if (maskShape === 'heart') {
+            if (maskShape === 'rect') {
+                hitGroup.append('rect')
+                    .attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H)
+                    .attr('fill', 'transparent')
+                    .style('pointer-events', 'all');
+            } else if (maskShape === 'heart') {
                 hitGroup.append('path')
                     .attr('d', userHeartPath)
                     .attr('transform', getHeartTransform(1))
@@ -275,44 +309,63 @@ const VectorStarMap: React.FC = () => {
                     .style('pointer-events', 'all');
             }
 
+            // Track where the drag started so we only apply the DELTA of this
+            // drag session — not the full accumulated imgOffsetX which may already
+            // be reflected in mapCenterLng from a previous drag.
+            let dragStartOffsetX = imgOffsetX;
+            let dragStartOffsetY = imgOffsetY;
+
             hitGroup.call(
                 drag<SVGGElement, unknown>()
                     .on('start', (event) => {
                         event.sourceEvent.stopPropagation();
                         hitGroup.style('cursor', 'grabbing');
+                        dragStartOffsetX = imgOffsetX;
+                        dragStartOffsetY = imgOffsetY;
+                        useStore.getState().setIsDraggingMapImage(true);
                     })
                     .on('drag', (event) => {
                         event.sourceEvent.stopPropagation();
-                        imgOffsetX += event.dx;
-                        imgOffsetY += event.dy;
+                        const zoom = useStore.getState().previewZoom;
+                        imgOffsetX += event.dx / zoom;
+                        imgOffsetY += event.dy / zoom;
                         imgEl
                             .attr('x', center[0] - imgSize / 2 + imgOffsetX)
                             .attr('y', center[1] - imgSize / 2 + imgOffsetY);
                     })
                     .on('end', () => {
                         hitGroup.style('cursor', 'grab');
-                        if (imgOffsetX !== 0 || imgOffsetY !== 0) {
+                        // Only the movement added in THIS drag session
+                        const deltaX = imgOffsetX - dragStartOffsetX;
+                        const deltaY = imgOffsetY - dragStartOffsetY;
+                        if (deltaX !== 0 || deltaY !== 0) {
+                            // Persist the drag offset so the SVG keeps showing the image
+                            // in the dragged position while MapLibre re-renders at the new center.
+                            // MainLayout's handleMapCapture will clear these to 0 once the
+                            // new tile capture arrives, so no snap-back occurs.
+                            const state = useStore.getState();
+                            state.setMapImageOffsetX(imgOffsetX);
+                            state.setMapImageOffsetY(imgOffsetY);
+
                             // Convert SVG pixel delta → geographic delta and tell MapLibre
                             // to re-render at the new center. The fresh capture will be
                             // perfectly centred in the shape — no rectangular edges visible.
-                            const state = useStore.getState();
-                            // The offscreen capture canvas is 1200×1200 px; image is displayed
-                            // at imgSize SVG pixels. Scale: SVG px → canvas px.
                             const svgToCanvas = 1200 / imgSize;
-                            // MapLibre 512-px tiles: world width in canvas pixels at current zoom
                             const worldWidthPx = 512 * Math.pow(2, state.mapZoom);
                             const degPerCanvasPx = 360 / worldWidthPx;
-                            // Dragging image right (+dx) reveals content to the left →
-                            // map center moved left (−lng). Dragging down (+dy) reveals
-                            // content above → center moved north (+lat).
-                            const newLng = state.mapCenterLng - imgOffsetX * svgToCanvas * degPerCanvasPx;
-                            const newLat = state.mapCenterLat + imgOffsetY * svgToCanvas * degPerCanvasPx
+                            const newLng = state.mapCenterLng - deltaX * svgToCanvas * degPerCanvasPx;
+                            const newLat = state.mapCenterLat + deltaY * svgToCanvas * degPerCanvasPx
                                 * Math.cos(state.mapCenterLat * Math.PI / 180);
+                            // Set coords FIRST — Zustand subscribe fires synchronously here,
+                            // incrementing captureVersionRef before any awaiting stitch resumes.
+                            // Then clear isDraggingMapImage so no stale capture can slip through
+                            // the guard with the old version number.
                             state.setMapCenterLng(newLng);
                             state.setMapCenterLat(newLat);
-                            // Don't persist imgOffset — after recapture the new image is
-                            // naturally centred (offset 0) so there are no edge artefacts.
                         }
+                        // Clear dragging flag AFTER coordinate updates so the synchronous
+                        // version increment happens before any stale stitch checks the flag.
+                        useStore.getState().setIsDraggingMapImage(false);
                     })
             );
 
@@ -320,7 +373,9 @@ const VectorStarMap: React.FC = () => {
         } else if (posterType !== 'starmap') {
             // Street/colored map mode but image not yet captured — show placeholder
             const shapeFillColor = mapInteriorColor;
-            if (maskShape === 'heart') {
+            if (maskShape === 'rect') {
+                mapContent.append('rect').attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H).attr('fill', shapeFillColor);
+            } else if (maskShape === 'heart') {
                 mapContent.append('path').attr('d', userHeartPath).attr('transform', getHeartTransform(1)).attr('fill', shapeFillColor);
             } else if (maskShape === 'house') {
                 mapContent.append('path').attr('d', userHousePath).attr('transform', getHouseTransform(1)).attr('fill', shapeFillColor);
@@ -340,7 +395,9 @@ const VectorStarMap: React.FC = () => {
         } else if (!isLightMode) {
             // Dark background inside shape (using mapInteriorColor)
             const shapeFillColor = mapInteriorColor;
-            if (maskShape === 'heart') {
+            if (maskShape === 'rect') {
+                mapContent.append('rect').attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H).attr('fill', shapeFillColor);
+            } else if (maskShape === 'heart') {
                 mapContent.append('path').attr('d', userHeartPath).attr('transform', getHeartTransform(1)).attr('fill', shapeFillColor);
             } else if (maskShape === 'house') {
                 mapContent.append('path').attr('d', userHousePath).attr('transform', getHouseTransform(1)).attr('fill', shapeFillColor);
@@ -420,8 +477,9 @@ const VectorStarMap: React.FC = () => {
                     })
                     .on('drag', (event) => {
                         event.sourceEvent.stopPropagation();
-                        pinDx += event.dx;
-                        pinDy += event.dy;
+                        const zoom = useStore.getState().previewZoom;
+                        pinDx += event.dx / zoom;
+                        pinDy += event.dy / zoom;
                         pinGroup.attr('transform', `translate(${pinX + pinDx}, ${pinY + pinDy})`);
                     })
                     .on('end', () => {
@@ -447,12 +505,13 @@ const VectorStarMap: React.FC = () => {
 
         if (showBorder) {
             const appendShapePath = (layer: typeof mapLayer, scaleMult: number, fill: string, stroke: string, strokeWidth: number) => {
-                if (maskShape === 'heart') {
+                if (maskShape === 'rect') {
+                    layer.append('rect').attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H)
+                        .attr('fill', fill).attr('stroke', stroke).attr('stroke-width', strokeWidth);
+                } else if (maskShape === 'heart') {
                     layer.append('path').attr('d', userHeartPath).attr('transform', getHeartTransform(scaleMult))
                         .attr('fill', fill).attr('stroke', stroke).attr('stroke-width', strokeWidth);
                 } else if (maskShape === 'house') {
-                    // House path is scaled by ~10× so normalise: divide by scale factor
-                    // so stroke-width behaves like circle (actual SVG px, not scaled px).
                     const houseScale = (mapRadius * 2.0 * scaleMult) / houseOrigHeight;
                     layer.append('path').attr('d', userHousePath).attr('transform', getHouseTransform(scaleMult))
                         .attr('fill', fill).attr('stroke', stroke).attr('stroke-width', strokeWidth / houseScale);
@@ -485,7 +544,7 @@ const VectorStarMap: React.FC = () => {
         showBorder, showConstellations, showGrid, designStyle, maskShape, isLightMode, // Toggles
         debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetY, debouncedShapeOutlineWidth, // Shape
         posterColor, textColor, starColor, mapInteriorColor, mapStreetColor, width, height, // Colors & Dims
-        mapBackgroundImage, borderStyle, posterType, // New Props
+        mapBackgroundImage, mapImageOpacity, borderStyle, posterType, // New Props
         showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY, // Location pin
     ]);
 
@@ -512,21 +571,33 @@ const VectorStarMap: React.FC = () => {
     // Text Rendering Effect
     useEffect(() => {
         if (!svgRef.current) return;
+        // Do not re-render text while the inline editor is open — this effect
+        // calls textLayer.selectAll('*').remove() which destroys the SVG text
+        // elements. The element whose visibility was set to 'hidden' would be
+        // destroyed, causing the text to reappear/jump next to the input overlay.
+        // The effect re-runs when inlineEdit becomes null (editing ends).
+        if (inlineEdit !== null) return;
         const svg = select(svgRef.current);
         const textLayer = svg.select('#text-layer');
         textLayer.selectAll('*').remove();
 
-        // Anchor text below actual circle bottom — adapts correctly to all print sizes and circle sizes
+        // Anchor text below the shape — for rect, anchored to fixed map height
+        const _RECT_MAP_H = height * 0.74;
         const _baseRadius = Math.min(width, height) * 0.4;
-        const _shapeRadius = _baseRadius * (maskShape === 'circle' ? circleSize : maskShape === 'heart' ? heartSize : houseSize);
-        const _shapeBottomY = (height * 0.45 + shapeOffsetY) + _shapeRadius;
-        const textStartY = _shapeBottomY + height * 0.08;
+        const _shapeRadius = maskShape === 'rect' ? 0 : _baseRadius * (maskShape === 'circle' ? circleSize : maskShape === 'heart' ? heartSize : houseSize);
+        const _shapeBottomY = maskShape === 'rect' ? _RECT_MAP_H : (height * 0.45 + shapeOffsetY) + _shapeRadius;
+        const textStartY = maskShape === 'rect'
+            ? _shapeBottomY + height * 0.03
+            : _shapeBottomY + height * 0.05;
 
         // --- Independent Text Groups & Drag Logic ---
 
         let naturalY = 0; // Tracks the "natural" flow position without offsets
 
-        // Helper to create drag behavior — tracks movement to distinguish click vs drag
+        // Helper to create drag behavior — tracks movement to distinguish click vs drag.
+        // Divides event.dx/dy by previewZoom because CSS scale() on the preview container
+        // is not reflected in SVGElement.getScreenCTM(), causing drag distances to be
+        // multiplied by the zoom factor in browsers that don't account for CSS transforms.
         const createDragBehavior = (
             currentOffset: number,
             setOffset: (val: number) => void,
@@ -538,8 +609,10 @@ const VectorStarMap: React.FC = () => {
             return drag<SVGGElement, unknown>()
                 .on('start', () => { dragStartOffset = 0; totalMoved = 0; })
                 .on('drag', function (event) {
+                    const zoom = useStore.getState().previewZoom;
+                    const dy = event.dy / zoom;
                     totalMoved += Math.abs(event.dx) + Math.abs(event.dy);
-                    dragStartOffset += event.dy;
+                    dragStartOffset += dy;
                     select(this).attr('transform', `translate(${width / 2}, ${textStartY + naturalBaseY + currentOffset + dragStartOffset})`);
                 })
                 .on('end', function () {
@@ -547,6 +620,9 @@ const VectorStarMap: React.FC = () => {
                         setOffset(currentOffset + dragStartOffset);
                     }
                     if (totalMoved < 4 && onEditClick) {
+                        // Set synchronously before React re-render so MainLayout's
+                        // isInlineEditingRef is true before the dblclick event fires.
+                        useStore.getState().setIsInlineEditing(true);
                         onEditClick(this as unknown as SVGGElement);
                     }
                 });
@@ -628,7 +704,7 @@ const VectorStarMap: React.FC = () => {
                         accDy = 0;
                     })
                     .on('drag', (event) => {
-                        accDy += event.dy;
+                        accDy += event.dy / useStore.getState().previewZoom;
                         const newSize = Math.max(10, Math.min(400, startSize - accDy * 0.5));
                         textNode.attr('font-size', `${newSize}px`);
                     })
@@ -666,6 +742,14 @@ const VectorStarMap: React.FC = () => {
                 detailsSpacing: 0,
                 dedicationTopMargin: RHYTHM_UNIT * 5,
             },
+            'design2-bw': {
+                titleBottomMargin: RHYTHM_UNIT * 0.5,
+                subtitleBottomMargin: RHYTHM_UNIT * 1,
+                dividerPadding: 0,
+                detailsLineHeight: 1.35,
+                detailsSpacing: 0,
+                dedicationTopMargin: RHYTHM_UNIT * 1.5,
+            },
             'default': {
                 titleBottomMargin: RHYTHM_UNIT * 2,
                 subtitleBottomMargin: RHYTHM_UNIT * 3,
@@ -689,14 +773,14 @@ const VectorStarMap: React.FC = () => {
 
         // 1. Title Group
         const titleGroup = textLayer.append('g')
-            .attr('transform', `translate(${width / 2}, ${textStartY + naturalY + titleOffsetY})`)
+            .attr('transform', `translate(${width / 2 + titleOffsetX}, ${textStartY + naturalY + titleOffsetY})`)
             .attr('text-anchor', 'middle');
 
         const titleNode = titleGroup.append('text')
             .attr('fill', textColor)
             .attr('font-family', `${titleFont}, serif`)
             .attr('font-size', `${titleFontSize}px`)
-            .attr('font-weight', titleFont === 'Mapped Moment Script' ? '400' : 'bold')
+            .attr('font-weight', (titleFont === 'Mapped Moment Script' || titleFont === 'Mapped2') ? '400' : 'bold')
             .attr('letter-spacing', titleFont === 'Mapped Moment Script' ? '0' : `${debouncedTitleKerning}em`)
             .style('white-space', 'pre')
             .text((customText.title || title));
@@ -713,15 +797,50 @@ const VectorStarMap: React.FC = () => {
         }
 
         addTextInteraction(titleGroup, titleNode, titleFontSize, setTitleFontSize);
-        titleGroup.call(createDragBehavior(titleOffsetY, setTitleOffsetY, naturalY, (el) => {
-            const textEl = el.querySelector('text') as SVGTextElement;
-            if (!textEl) return;
-            const r = textEl.getBoundingClientRect();
-            textEl.style.visibility = 'hidden';
-            const titleVal = customText.title || title;
-            setInlineEdit({ field: 'title', value: titleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: titleFont });
-            setActiveTypoField('title');
-        }));
+
+        // Title drag: supports both X (horizontal) and Y (vertical) movement.
+        // X snaps back to center (offsetX=0) when within ±15 SVG units of center.
+        // Capture naturalY NOW (by value) — naturalY is a let accumulator that gets
+        // mutated as subtitle/divider/details/dedication are added below. If we used
+        // it directly inside the closure it would reflect the final accumulated value
+        // (e.g. 200+) instead of 0, causing the title to jump on drag start.
+        const titleNaturalY = naturalY;
+        {
+            const SNAP_THRESHOLD = 15;
+            let dxAcc = 0, dyAcc = 0, totalMoved = 0;
+            titleGroup.call(
+                drag<SVGGElement, unknown>()
+                    .on('start', () => { dxAcc = 0; dyAcc = 0; totalMoved = 0; })
+                    .on('drag', function(event) {
+                        const zoom = useStore.getState().previewZoom;
+                        const dx = event.dx / zoom;
+                        const dy = event.dy / zoom;
+                        totalMoved += Math.abs(event.dx) + Math.abs(event.dy);
+                        dxAcc += dx;
+                        dyAcc += dy;
+                        select(this).attr('transform', `translate(${width / 2 + titleOffsetX + dxAcc}, ${textStartY + titleNaturalY + titleOffsetY + dyAcc})`);
+                    })
+                    .on('end', function() {
+                        if (totalMoved < 4) {
+                            const textEl = (this as SVGGElement).querySelector('text') as SVGTextElement;
+                            if (!textEl) return;
+                            const r = textEl.getBoundingClientRect();
+                            textEl.style.visibility = 'hidden';
+                            // Set synchronously (before React re-render) so MainLayout's
+                            // isInlineEditingRef updates before the dblclick event fires.
+                            useStore.getState().setIsInlineEditing(true);
+                            const titleVal = customText.title || title;
+                            setInlineEdit({ field: 'title', value: titleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: titleFont });
+                            setActiveTypoField('title');
+                            return;
+                        }
+                        let newOffsetX = titleOffsetX + dxAcc;
+                        if (Math.abs(newOffsetX) < SNAP_THRESHOLD) newOffsetX = 0;
+                        setTitleOffsetX(newOffsetX);
+                        if (dyAcc !== 0) setTitleOffsetY(titleOffsetY + dyAcc);
+                    })
+            );
+        }
 
         // Advance Natural Y — use reference size so resizing title doesn't move other elements
         naturalY += (refTitleSize * 0.8) + config.titleBottomMargin;
@@ -868,7 +987,7 @@ const VectorStarMap: React.FC = () => {
                 drag<SVGRectElement, unknown>()
                     .on('start', (event) => { event.sourceEvent.stopPropagation(); dStartSize = detailsFontSize; dAccDy = 0; })
                     .on('drag', (event) => {
-                        dAccDy += event.dy;
+                        dAccDy += event.dy / useStore.getState().previewZoom;
                         const s = Math.max(8, Math.min(80, dStartSize - dAccDy * 0.4));
                         detailsGroup.selectAll('text').attr('font-size', `${s}px`);
                     })
@@ -896,6 +1015,7 @@ const VectorStarMap: React.FC = () => {
                         const textEl = this as SVGTextElement;
                         const r = textEl.getBoundingClientRect();
                         textEl.style.visibility = 'hidden';
+                        useStore.getState().setIsInlineEditing(true);
                         setInlineEdit({ field, value: text, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont });
                         setActiveTypoField('details');
                     });
@@ -935,17 +1055,57 @@ const VectorStarMap: React.FC = () => {
             }));
         }
 
+        // Small decorative heart below dedication — draggable, matches SVG reference
+        if (maskShape === 'rect') {
+            const heartGapY = (customText.dedication ? dedicationFontSize * 2.5 : height * 0.04);
+            const heartBaseY = textStartY + naturalY + dedicationOffsetY + heartGapY;
+            const heartScale = (height / 1200) * 0.5;
+            // hitPad in un-scaled units so the click target is large
+            const hitPad = 30 / heartScale;
+
+            const heartGroup = textLayer.append('g')
+                .attr('transform', `translate(${width / 2}, ${heartBaseY + heartDecorOffsetY}) scale(${heartScale})`)
+                .style('cursor', 'move');
+
+            // Large transparent hit area (scale-compensated so it's ~60×60px on screen)
+            heartGroup.append('rect')
+                .attr('x', -hitPad / 2).attr('y', -hitPad / 4)
+                .attr('width', hitPad).attr('height', hitPad)
+                .attr('fill', 'transparent')
+                .style('pointer-events', 'all');
+
+            heartGroup.append('path')
+                .attr('d', 'M0,15.5 C-10,5 -25,10 -25,25 C-25,45 0,65 0,65 C0,65 25,45 25,25 C25,10 10,5 0,15.5 Z')
+                .attr('fill', textColor)
+                .style('pointer-events', 'none');
+
+            let heartDragAcc = 0;
+            heartGroup.call(
+                drag<SVGGElement, unknown>()
+                    .on('start', (event) => { event.sourceEvent.stopPropagation(); heartDragAcc = 0; })
+                    .on('drag', function(event) {
+                        heartDragAcc += event.dy / useStore.getState().previewZoom;
+                        const newY = heartBaseY + heartDecorOffsetY + heartDragAcc;
+                        select(this).attr('transform', `translate(${width / 2}, ${newY}) scale(${heartScale})`);
+                    })
+                    .on('end', () => {
+                        if (heartDragAcc !== 0) setHeartDecorOffsetY(heartDecorOffsetY + heartDragAcc);
+                    })
+            );
+        }
+
     }, [
         title, subtitle, customText, location, date, lat, lng, // Content
         titleFont, subtitleFont, detailsFont, dedicationFont, // Fonts
         titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, // Sizes
         debouncedTitleKerning, debouncedSubtitleKerning, debouncedDetailsKerning, debouncedDedicationKerning, // Kerning
-        titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, // Offsets
+        titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, heartDecorOffsetY, // Offsets
         showDate, showLocation, showCoords, showDivider, dividerOffsetY, dividerLength, dividerThickness, // Toggles
         circleSize, heartSize, houseSize, maskShape, shapeOffsetY, // Shape — textStartY depends on these
         textColor, width, height, frameInset, // Global
         selectedTemplate, // Template
         setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setCustomText, setInlineEdit, // Stable setters
+        inlineEdit, // Guard: effect is skipped while editing (inlineEdit !== null), re-runs when it closes
     ]);
 
     // Scroll-wheel zoom over the map shape (street map mode only).
@@ -981,10 +1141,14 @@ const VectorStarMap: React.FC = () => {
 
             const dx = svgPt.x - cx;
             const dy = svgPt.y - cy;
-            // House uses bounding-box check; circle/heart use circular approximation
-            const inShape = state.maskShape === 'house'
-                ? Math.abs(dx) <= r * 0.89 && dy >= -r && dy <= r
-                : dx * dx + dy * dy <= r * r;
+            // Rect: entire top portion is interactive for scroll zoom
+            const RECT_H_WZ = svgH * 0.74;
+            const RECT_PAD_WZ = svgW * 0.0625;
+            const inShape = state.maskShape === 'rect'
+                ? svgPt.x >= RECT_PAD_WZ && svgPt.x <= svgW - RECT_PAD_WZ && svgPt.y >= RECT_PAD_WZ && svgPt.y <= RECT_H_WZ - RECT_PAD_WZ
+                : state.maskShape === 'house'
+                    ? Math.abs(dx) <= r * 0.89 && dy >= -r && dy <= r
+                    : dx * dx + dy * dy <= r * r;
             if (inShape) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1010,8 +1174,18 @@ const VectorStarMap: React.FC = () => {
                 const displayValue = uppercase ? inlineEdit.value.toUpperCase() : inlineEdit.value;
                 // Compensate for CSS size-adjust on Mapped Moment Script (250%) to avoid double-scaling
                 const sizeAdjust = fontFamily === 'Mapped Moment Script' ? 2.5 : 1;
+                // editRect comes from getBoundingClientRect() which already returns
+                // screen-space pixels (CSS scale() is baked in). The input uses
+                // position:fixed which is also in screen-space — so we must NOT
+                // divide by previewZoom here. Dividing shrinks the font by the zoom
+                // factor, making it appear tiny at high zoom levels.
                 const fontSize = Math.max(10, (editRect.height * 0.82) / sizeAdjust);
                 const commit = () => {
+                    // Restore visibility before unmounting — the text effect guard
+                    // kept the element alive with visibility:hidden while editing.
+                    // Restoring here makes it briefly visible until the effect re-runs
+                    // and recreates it, preventing a flash of empty space.
+                    inlineEdit.svgEl.style.visibility = 'visible';
                     setCustomText(inlineEdit.field, inlineEdit.value);
                     setInlineEdit(null);
                 };
