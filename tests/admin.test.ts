@@ -98,7 +98,7 @@ test.describe('Dashboard', () => {
 
     test('nav sidebar links all visible', async ({ page }) => {
         await asAdmin(page, '/admin/dashboard');
-        for (const label of ['Dashboard', 'Orders', 'Templates', 'Etsy', 'Assets', 'Settings']) {
+        for (const label of ['Dashboard', 'Orders', 'Listings', 'Etsy', 'Assets', 'Settings']) {
             await expect(page.getByRole('link', { name: label })).toBeVisible();
         }
     });

@@ -480,14 +480,13 @@ test.describe('14. Verify order', () => {
         await shot(page, 'comp-14-verify-idle');
     });
 
-    test('digital ready state: download button', async ({ page }) => {
+    test('digital ready state: auto-downloads and shows delivered confirmation', async ({ page }) => {
         await setupMockApi(page);
         await page.goto('/verify');
         await page.waitForSelector('input#verify-order-id', { timeout: 8000 });
         await page.locator('input#verify-order-id').fill('9999999999');
         await page.getByRole('button', { name: /Get My Poster/i }).click();
-        await expect(page.getByText(/Your poster is ready/i)).toBeVisible({ timeout: 5000 });
-        await expect(page.getByRole('link', { name: /Download PNG/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /your file has been delivered/i })).toBeVisible({ timeout: 8000 });
         await shot(page, 'comp-14-verify-digital');
     });
 

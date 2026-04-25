@@ -40,7 +40,7 @@ test.describe('Dashboard revenue panel', () => {
 
     test('shows weekly trend sparkline', async ({ page }) => {
         await asAdmin(page, '/admin/dashboard');
-        await expect(page.getByText('Last 7 days')).toBeVisible();
+        await expect(page.getByText('Order trend')).toBeVisible();
         const sparkline = page.locator('svg rect').first();
         await expect(sparkline).toBeTruthy();
     });
@@ -271,55 +271,48 @@ test.describe('Share Design URL', () => {
 // ═══════════════════════════════════════════════════════════
 
 test.describe('Verify page status polling', () => {
+    // Uses mock order ID 7777777777 which setupMockApi already maps to 'rendering' status.
+    // We only add extra handlers for /api/order-status (not covered by setupMockApi).
     test('shows rendering spinner when order is still rendering', async ({ page }) => {
         await setupMockApi(page);
-        await page.route('**/api/verify-order', route => {
-            route.fulfill({ json: { listingType: 'digital', status: 'rendering' } });
-        });
         await page.route('**/api/order-status**', route => {
             route.fulfill({ json: { status: 'rendering', listingType: 'digital' } });
         });
         await page.goto('/verify');
-        await page.getByPlaceholder('e.g. 1234567890').fill('12345');
+        await page.getByPlaceholder('e.g. 1234567890').fill('7777777777');
         await page.getByRole('button', { name: 'Get My Poster' }).click();
-        await expect(page.getByText(/being generated/i)).toBeVisible({ timeout: 5000 });
-        await expect(page.getByText(/last checked/i)).toBeVisible();
+        await expect(page.getByRole('heading', { name: /being generated/i })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByText(/last checked/i)).toBeVisible({ timeout: 5000 });
     });
 
-    test('transitions to ready state after poll returns sent', async ({ page }) => {
+    test('transitions to downloaded state after poll returns sent', async ({ page }) => {
         test.setTimeout(25000);
         await setupMockApi(page);
-        await page.route('**/api/verify-order', route => {
-            route.fulfill({ json: { listingType: 'digital', status: 'rendering' } });
-        });
         let pollCount = 0;
         await page.route('**/api/order-status**', route => {
             pollCount++;
             if (pollCount >= 2) {
-                route.fulfill({ json: { status: 'sent', listingType: 'digital', downloadUrl: '/api/download-file/1?exp=9999999&sig=mocksig' } });
+                route.fulfill({ json: { status: 'sent', listingType: 'digital', downloadUrl: '/api/download-file/1?t=mock&exp=9999999999&sig=mocksig' } });
             } else {
                 route.fulfill({ json: { status: 'rendering', listingType: 'digital' } });
             }
         });
         await page.goto('/verify');
-        await page.getByPlaceholder('e.g. 1234567890').fill('12345');
+        await page.getByPlaceholder('e.g. 1234567890').fill('7777777777');
         await page.getByRole('button', { name: 'Get My Poster' }).click();
-        await expect(page.getByText(/being generated/i)).toBeVisible({ timeout: 5000 });
-        // After 2 polls (~10s), transitions to ready
-        await expect(page.getByText('Your poster is ready')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('heading', { name: /being generated/i })).toBeVisible({ timeout: 10000 });
+        // After 2 polls (~10s), auto-downloads and transitions to delivered state
+        await expect(page.getByRole('heading', { name: /your file has been delivered/i })).toBeVisible({ timeout: 15000 });
     });
 
     test('shows error state when render fails', async ({ page }) => {
         await setupMockApi(page);
-        await page.route('**/api/verify-order', route => {
-            route.fulfill({ json: { listingType: 'digital', status: 'rendering' } });
-        });
         await page.route('**/api/order-status**', route => {
             route.fulfill({ json: { status: 'failed', listingType: 'digital' } });
         });
         await page.goto('/verify');
-        await page.getByPlaceholder('e.g. 1234567890').fill('12345');
+        await page.getByPlaceholder('e.g. 1234567890').fill('7777777777');
         await page.getByRole('button', { name: 'Get My Poster' }).click();
-        await expect(page.getByText(/Render failed/i)).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole('alert').filter({ hasText: /Render failed/i })).toBeVisible({ timeout: 10000 });
     });
 });

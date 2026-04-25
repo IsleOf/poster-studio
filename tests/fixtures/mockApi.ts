@@ -292,6 +292,18 @@ async function handleRoute(route: Route) {
         return route.fulfill({ json: { ok: true, listing_id: etsyListingMatch[1] } });
     }
 
+    // ── Admin fulfillment providers ───────────────────────────────────────────
+    if (path === '/api/admin/fulfillment-providers' && method === 'GET') {
+        return route.fulfill({ json: [
+            { id: 1, provider: 'printful', product_type: 'poster_unframed', size: '18x24', print_cost: 10.00, ship_cost_us: 4.49, ship_cost_intl: 4.59, has_api: 1, notes: null },
+            { id: 2, provider: 'printify', product_type: 'poster_unframed', size: '18x24', print_cost: 8.00, ship_cost_us: 4.00, ship_cost_intl: null, has_api: 1, notes: null },
+            { id: 3, provider: 'shortrunposters', product_type: 'poster_unframed', size: '18x24', print_cost: 5.00, ship_cost_us: 5.00, ship_cost_intl: null, has_api: 0, notes: null },
+        ] });
+    }
+    if (path === '/api/admin/fulfillment-providers' && method === 'PUT') {
+        return route.fulfill({ json: { ok: true } });
+    }
+
     // ── Admin Printify ────────────────────────────────────────────────────────
     if (path === '/api/admin/printify/products' && method === 'GET') {
         return route.fulfill({ json: { products: MOCK_PRINTIFY_PRODUCTS } });
@@ -340,6 +352,39 @@ async function handleRoute(route: Route) {
     }
     if (path === '/api/admin/assets/upload' && method === 'POST') {
         return route.fulfill({ json: { id: 'asset-1', name: 'Test Font', type: 'font', filename: 'test.woff2' } });
+    }
+
+    // ── Admin fulfillment options ───────────────────────────────────────────
+    const foptionsMatch = path.match(/^\/api\/admin\/listings\/(\d+)\/fulfillment-options$/);
+    if (foptionsMatch && method === 'GET') {
+        return route.fulfill({ json: [
+            { id: 1, listing_id: parseInt(foptionsMatch[1]), option_type: 'digital', is_enabled: 1, label: 'Digital Download', provider: null, price_cents: 1299, position: 0, production_days_min: 0, production_days_max: 0, shipping_days_us_min: 0, shipping_days_us_max: 0, shipping_days_intl_min: 0, shipping_days_intl_max: 0, etsy_variation_value: null },
+            { id: 2, listing_id: parseInt(foptionsMatch[1]), option_type: 'print_unframed', is_enabled: 0, label: 'Printed Poster', provider: 'printful', price_cents: 2999, position: 1, production_days_min: 2, production_days_max: 5, shipping_days_us_min: 3, shipping_days_us_max: 7, shipping_days_intl_min: 7, shipping_days_intl_max: 21, etsy_variation_value: null },
+            { id: 3, listing_id: parseInt(foptionsMatch[1]), option_type: 'print_framed', is_enabled: 0, label: 'Framed Poster', provider: 'printops', price_cents: 5999, position: 2, production_days_min: 3, production_days_max: 7, shipping_days_us_min: 3, shipping_days_us_max: 7, shipping_days_intl_min: 7, shipping_days_intl_max: 21, etsy_variation_value: null },
+            { id: 4, listing_id: parseInt(foptionsMatch[1]), option_type: 'canvas', is_enabled: 0, label: 'Canvas Print', provider: 'prodigi', price_cents: 4999, position: 3, production_days_min: 3, production_days_max: 7, shipping_days_us_min: 3, shipping_days_us_max: 7, shipping_days_intl_min: 7, shipping_days_intl_max: 21, etsy_variation_value: null },
+        ] });
+    }
+    if (foptionsMatch && method === 'PUT') {
+        const body = JSON.parse(route.request().postData() || '{}');
+        return route.fulfill({ json: body.options || [] });
+    }
+    const etsySyncMatch = path.match(/^\/api\/admin\/listings\/(\d+)\/sync-etsy-inventory$/);
+    if (etsySyncMatch && method === 'POST') {
+        return route.fulfill({ json: { ok: true, products: 2 } });
+    }
+
+    // ── Template fulfillment options (per-size) ───────────────────────────────
+    const tplFoptionsMatch = path.match(/^\/api\/admin\/templates\/([^/]+)\/fulfillment-options$/);
+    if (tplFoptionsMatch && method === 'GET') {
+        return route.fulfill({ json: [
+            { id: 1, template_id: tplFoptionsMatch[1], option_type: 'digital',        is_enabled: 1, label: 'Digital Download', provider: null,       price_cents: 1299, position: 0, production_days_min: 0, production_days_max: 0, shipping_days_us_min: 0, shipping_days_us_max: 0, shipping_days_intl_min: 0,  shipping_days_intl_max: 0  },
+            { id: 2, template_id: tplFoptionsMatch[1], option_type: 'print_unframed', is_enabled: 0, label: 'Printed Poster',   provider: 'printful', price_cents: 2999, position: 1, production_days_min: 2, production_days_max: 5, shipping_days_us_min: 3, shipping_days_us_max: 7, shipping_days_intl_min: 7,  shipping_days_intl_max: 21 },
+            { id: 3, template_id: tplFoptionsMatch[1], option_type: 'print_framed',   is_enabled: 0, label: 'Framed Poster',   provider: 'printops', price_cents: 5999, position: 2, production_days_min: 3, production_days_max: 7, shipping_days_us_min: 3, shipping_days_us_max: 7, shipping_days_intl_min: 7,  shipping_days_intl_max: 21 },
+            { id: 4, template_id: tplFoptionsMatch[1], option_type: 'canvas',         is_enabled: 0, label: 'Canvas Print',    provider: 'prodigi',  price_cents: 4999, position: 3, production_days_min: 3, production_days_max: 7, shipping_days_us_min: 3, shipping_days_us_max: 7, shipping_days_intl_min: 7,  shipping_days_intl_max: 21 },
+        ] });
+    }
+    if (tplFoptionsMatch && method === 'PUT') {
+        return route.fulfill({ json: { ok: true } });
     }
 
     // ── Order notes ───────────────────────────────────────────────────────────
@@ -402,10 +447,15 @@ async function handleRoute(route: Route) {
     if (path.match(/^\/api\/design\//)) {
         return route.fulfill({ json: { token: 'TST999', state_json: '{}', created_at: Date.now() } });
     }
+    // Paid download delivery — return a 1×1 binary blob so silentDownload() succeeds in tests
+    if (path.startsWith('/api/download-file/')) {
+        const tiny = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG magic bytes
+        return route.fulfill({ status: 200, contentType: 'application/octet-stream', body: Buffer.from(tiny) });
+    }
     if (path === '/api/verify-order' && method === 'POST') {
         const body = JSON.parse(route.request().postData() || '{}');
         if (body.etsyOrderId === '9999999999') {
-            return route.fulfill({ json: { listingType: 'digital', downloadUrl: 'https://example.com/poster.png', buyerName: 'Test Buyer', revisionsUsed: 0, revisionsRemaining: 3 } });
+            return route.fulfill({ json: { listingType: 'digital', downloadUrl: '/api/download-file/1?t=mock&exp=9999999999&sig=mocksig', buyerName: 'Test Buyer', revisionsUsed: 0, revisionsRemaining: 3 } });
         }
         if (body.etsyOrderId === '8888888888') {
             return route.fulfill({ json: { listingType: 'print', printifyOrderId: 'PF-123456', buyerName: 'Print Buyer' } });

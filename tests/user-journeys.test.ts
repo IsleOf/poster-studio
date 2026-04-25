@@ -262,7 +262,7 @@ test.describe('Verify order journey', () => {
         await expect(page.getByText(/being generated/i)).toBeVisible({ timeout: 5000 });
     });
 
-    test('sent status shows "Your poster is ready"', async ({ page }) => {
+    test('sent status auto-downloads and shows delivered confirmation', async ({ page }) => {
         test.setTimeout(25000);
         await setupMockApi(page);
         await page.route('**/api/verify-order', route => {
@@ -274,13 +274,14 @@ test.describe('Verify order journey', () => {
             route.fulfill({ json: {
                 status: pollCount >= 2 ? 'sent' : 'rendering',
                 listingType: 'digital',
-                downloadUrl: pollCount >= 2 ? '/api/download-file/1?exp=9999&sig=mock' : undefined,
+                downloadUrl: pollCount >= 2 ? '/api/download-file/1?t=mock&exp=9999999999&sig=mock' : undefined,
             }});
         });
         await page.goto('/verify');
         await page.getByPlaceholder('e.g. 1234567890').fill('DEF456');
         await page.getByRole('button', { name: 'Get My Poster' }).click();
-        await expect(page.getByText('Your poster is ready')).toBeVisible({ timeout: 20000 });
+        // Transitions through rendering → auto_downloading → downloaded
+        await expect(page.getByRole('heading', { name: /your file has been delivered/i })).toBeVisible({ timeout: 20000 });
     });
 });
 

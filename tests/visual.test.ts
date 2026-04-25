@@ -19,9 +19,13 @@ async function shot(page: Page, name: string) {
 
 async function waitForSvg(page: Page) {
     await page.waitForSelector('svg', { timeout: 12000 });
-    await page.waitForLoadState('networkidle');
-    // Extra wait for star data / map tiles
-    await page.waitForTimeout(800);
+    // Don't use networkidle — star data CDN keeps network active and times out.
+    // Wait for star circles to render (>50 circles = stars loaded) or 5s fallback.
+    await Promise.race([
+        page.waitForFunction(() => document.querySelectorAll('svg circle').length > 50, { timeout: 15000 }),
+        page.waitForTimeout(5000),
+    ]).catch(() => {});
+    await page.waitForTimeout(500);
 }
 
 async function asAdmin(page: Page, route: string) {
