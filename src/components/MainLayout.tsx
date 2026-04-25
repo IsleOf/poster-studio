@@ -22,7 +22,10 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 const MainLayout: React.FC = () => {
     const { templateId, slug, designSlug } = useParams<{ templateId?: string; slug?: string; designSlug?: string }>();
     const [designGroups, setDesignGroups] = useState<DesignGroup[]>([]);
-    const [templateLoading, setTemplateLoading] = useState(!!slug || !!templateId);
+    // Always start in loading state — even on /, we auto-load Design001 below.
+    // This prevents the legacy default "My Star Map" from flickering before
+    // the real first design loads.
+    const [templateLoading, setTemplateLoading] = useState(true);
     const containerRef = useRef<HTMLDivElement>(null);
     const {
         previewZoom, setPreviewZoom,
@@ -61,6 +64,31 @@ const MainLayout: React.FC = () => {
     // Page view tracking
     useEffect(() => {
         trackEvent('page_view', { path: window.location.pathname, template: templateId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Auto-load Design001 (or the first available design for the default map type)
+    // when the user lands on / with no template/listing URL. Without this, the page
+    // shows the bare Zustand defaults ("My Star Map") which is not a finished design.
+    // Autosave restore (below) can still override if the user clicks Restore.
+    useEffect(() => {
+        if (templateId || slug) return;
+        const API = API_URL;
+        fetch(`${API}/api/templates`)
+            .then(r => r.ok ? r.json() : [])
+            .then(async (rows: Array<{ id: string; design_group_id: string | null; posterType?: string }>) => {
+                if (!Array.isArray(rows) || rows.length === 0) {
+                    setTemplateLoading(false);
+                    return;
+                }
+                const starmaps = rows.filter(r => r.design_group_id && (r.posterType ?? 'starmap') === 'starmap');
+                const design001 = starmaps.find(r => /-design001$/i.test(r.design_group_id || '')) || starmaps[0];
+                if (design001) {
+                    await fetchAndApplyTemplate(design001.id, { designGroupId: design001.design_group_id || undefined });
+                }
+                setTemplateLoading(false);
+            })
+            .catch(() => { setTemplateLoading(false); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

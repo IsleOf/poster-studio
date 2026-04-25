@@ -374,9 +374,13 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                 ) : (
                                     <Box display="grid" gridTemplateColumns={`repeat(${Math.min(designsForCurrentMapType.length, 3)}, 1fr)`} gap={3}>
                                         {designsForCurrentMapType.map((d) => {
-                                            // Card label: strip trailing size suffix from name (e.g. "Design001 — 8×10\"" → "Design001")
+                                            // Card label: derive "DesignNNN" from design_group_id (e.g.
+                                            // "sm001-design001" → "Design001"). Avoids depending on the
+                                            // template `name` string which has drifted over time.
+                                            const idMatch = (d.design_group_id || '').toLowerCase().match(/-design(\d+)$/);
                                             const labelParts = d.name.split(' — ');
-                                            const label = labelParts.length > 1 ? labelParts.slice(0, -1).join(' — ') : d.name;
+                                            const fallback = labelParts.length > 1 ? labelParts.slice(0, -1).join(' — ') : d.name;
+                                            const label = idMatch ? `Design${idMatch[1]}` : fallback;
                                             const API = import.meta.env.VITE_API_URL || '';
                                             const isActive = selectedTemplate === d.id;
                                             return (
