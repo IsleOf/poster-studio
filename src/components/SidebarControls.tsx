@@ -117,8 +117,6 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
         borderStyle, setBorderStyle,
         setPosterColor, setTextColor, setStarColor, setMapInteriorColor,
         mapInteriorColor, posterColor, textColor, starColor,
-        saveTemplateSettings, restoreTemplateSettings, templateSettings,
-        saveTemplateDefaults, loadTemplateDefaults,
         // Street map / poster type
         posterType, setPosterType,
         mapCity, setMapCity,
@@ -151,6 +149,28 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
         const m = lower.match(/(?:^|-)(design[\w-]*)$/);
         return m ? m[1] : lower;
     }, []);
+    // ── All-designs gallery (main page only — fetched once) ──────────────────
+    interface RemoteDesign {
+        id: string;
+        name: string;
+        thumbnail_path: string | null;
+        design_group_id: string | null;
+        posterType: 'starmap' | 'streetmap' | 'coloredmap';
+    }
+    const [remoteDesigns, setRemoteDesigns] = useState<RemoteDesign[]>([]);
+    const isMainPage = !designGroups?.length && !editorSiblings?.length;
+    useEffect(() => {
+        if (!isMainPage) return;
+        const API = import.meta.env.VITE_API_URL || '';
+        fetch(`${API}/api/templates`)
+            .then(r => r.ok ? r.json() : [])
+            .then((data: RemoteDesign[]) => setRemoteDesigns(Array.isArray(data) ? data : []))
+            .catch(() => setRemoteDesigns([]));
+    }, [isMainPage]);
+    // Only show designs that belong to a design_group — legacy ungrouped templates
+    // (classic-dark, modern-white, etc.) are hidden from the main page gallery.
+    const designsForCurrentMapType = remoteDesigns.filter(d => d.posterType === posterType && d.design_group_id);
+
     // Typography tab — syncs when user clicks a text element in the poster
     const [typoTab, setTypoTab] = useState<'title' | 'subtitle' | 'details' | 'dedication' | 'names'>('title');
     const typoButtonRef = useRef<HTMLButtonElement>(null);
@@ -297,126 +317,6 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                     );
                 })()}
 
-                {/* ── Templates (hidden in listing mode) ──────────────── */}
-                {!(designGroups && designGroups.length > 0) && <Accordion allowToggle allowMultiple defaultIndex={[0]}>
-                    <AccordionItem border="none" borderBottom="1px" borderColor="gray.200">
-                        <h2>
-                            <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
-                                <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
-                                    Templates
-                                </Box>
-                                <AccordionIcon color="gray.400" />
-                            </AccordionButton>
-                        </h2>
-                        <AccordionPanel pb={6} px={6}>
-                            <Grid templateColumns="repeat(3, 1fr)" gap={3}>
-                                {[
-                                    { id: 'classic-dark', label: 'Classic Dark', bg: '#1B2735', text: '#ffffff', shape: 'circle', border: 'simple', mapBg: null, font: 'Lato' },
-                                    { id: 'love-dark', label: 'Love Dark', bg: '#0f172a', text: '#ffffff', shape: 'heart', border: 'simple', mapBg: null, font: 'Great Vibes' },
-                                    { id: 'modern-white', label: 'Modern White', bg: '#ffffff', text: '#000000', shape: 'circle', border: 'double-offset', mapBg: null, font: 'Great Vibes' },
-                                    { id: 'home-street', label: 'Home Street', bg: '#ffffff', text: '#111111', shape: 'house', border: 'simple', mapBg: null, font: 'Cinzel' },
-                                    { id: 'design2-bw', label: 'Rectangle', bg: '#ffffff', text: '#111111', shape: 'rect', border: 'none', mapBg: null, font: 'Lato' },
-                                ].map((template) => (
-                                    <VStack key={template.id} as="div" spacing={2}>
-                                        <Box
-                                            as="button" w="full" h={24} bg={template.bg}
-                                            borderRadius="md" borderWidth={2}
-                                            borderColor={selectedTemplate === template.id ? 'blue.500' : 'gray.200'}
-                                            position="relative" overflow="hidden"
-                                            _hover={{ borderColor: 'blue.400', cursor: 'pointer' }}
-                                            display="flex" alignItems="center" justifyContent="center"
-                                            onClick={() => {
-                                                saveTemplateSettings(selectedTemplate);
-                                                setSelectedTemplate(template.id);
-                                                const customDefaults = loadTemplateDefaults(template.id);
-                                                if (customDefaults) {
-                                                    Object.keys(customDefaults).forEach(key => {
-                                                        const setter = `set${key.charAt(0).toUpperCase()}${key.slice(1)}` as any;
-                                                        if (typeof (useStore.getState() as any)[setter] === 'function') {
-                                                            (useStore.getState() as any)[setter](customDefaults[key as keyof typeof customDefaults]);
-                                                        }
-                                                    });
-                                                } else if (templateSettings[template.id]) {
-                                                    restoreTemplateSettings(template.id);
-                                                } else {
-                                                    setPosterColor(template.bg);
-                                                    setMapInteriorColor(template.id === 'modern-white' ? '#1B2735' : template.bg);
-                                                    setTextColor(template.text);
-                                                    setMaskShape(template.shape as any);
-                                                    setBorderStyle(template.border as any);
-                                                    setMapBackgroundImage(template.mapBg);
-                                                    if (template.id === 'modern-white') {
-                                                        setIsLightMode(false); setStarColor('#ffffff'); setShowFrame(true); setFrameWidth(1); setFrameInset(20); setShowBorder(true); setShapeOutlineWidth(1.5); setStarScale(1.6); setLineWeight(0.8); setTitleFontSize(56); setSubtitleFontSize(16); setDetailsFontSize(12); setDedicationFontSize(13); setTitleOffsetX(0); setTitleOffsetY(0); setSubtitleOffsetY(0); setDetailsOffsetY(0); setDedicationOffsetY(0); setSubtitleFont('DM Sans'); setDetailsFont('DM Sans'); setDedicationFont('Cormorant Garamond'); setTitleFont('Cormorant Garamond'); setShowDivider(true);
-                                                    } else if (template.id === 'love-dark') {
-                                                        setIsLightMode(false); setStarColor('#ffffff'); setShowFrame(true); setFrameWidth(5); setShapeOutlineWidth(2); setStarScale(1.9); setLineWeight(1.0); setTitleFontSize(48); setTitleOffsetX(0); setTitleOffsetY(0); setSubtitleOffsetY(0); setDetailsOffsetY(0); setSubtitleFont('Lato'); setDetailsFont('Lato'); setTitleFont('Playfair Display');
-                                                    } else if (template.id === 'home-street') {
-                                                        setPosterType('coloredmap'); setIsLightMode(false); setShowFrame(true); setFrameWidth(3); setFrameInset(16); setShapeOutlineWidth(3); setTitleFontSize(52); setSubtitleFontSize(14); setDetailsFontSize(12); setDedicationFontSize(13); setTitleOffsetX(0); setTitleOffsetY(0); setSubtitleOffsetY(0); setDetailsOffsetY(0); setDedicationOffsetY(0); setSubtitleFont('DM Sans'); setDetailsFont('DM Sans'); setDedicationFont('DM Sans'); setTitleFont('Cinzel'); setShowDivider(true); setMapBgColor('#f8f4f0'); setMapStreetColor('#fc8'); setPosterColor('#ffffff'); setTextColor('#1a1a1a'); setMapColorPreset('realistic'); setMapStyleUrl('https://tiles.openfreemap.org/styles/bright');
-                                                    } else if (template.id === 'design2-bw') {
-                                                        setPosterType('streetmap'); setIsLightMode(true); setMaskShape('rect'); setBorderStyle('simple'); setShowBorder(false); setShowFrame(false); setShapeOutlineWidth(0); setPosterColor('#ffffff'); setTextColor('#111111'); setMapColorPreset('design2'); setMapStyleUrl(null); setMapBgColor('#ffffff'); setMapStreetColor('#111111'); setShowLocationPin(true); setLocationPinSize(32); setTitleFont('Mapped2'); setSubtitleFont('Mapped2'); setDetailsFont('Mapped2'); setDedicationFont('Mapped2'); setTitleFontSize(72); setSubtitleFontSize(22); setDetailsFontSize(18); setDedicationFontSize(16); setTitleOffsetX(0); setTitleOffsetY(0); setSubtitleOffsetY(0); setDetailsOffsetY(0); setDedicationOffsetY(0); setShowDivider(false); setCustomText('title', 'Jessica & Michael'); setCustomText('subtitle', 'THE VENUE NAME'); setCustomText('location', '52.9540° N, 1.1550° W'); setCustomText('date', '25TH AUGUST 2025'); setCustomText('dedication', 'LIFE IS AN ADVENTURE WITH YOU...');
-                                                    } else {
-                                                        setIsLightMode(false); setStarColor('#ffffff'); setShowFrame(true); setFrameWidth(5); setShapeOutlineWidth(2); setStarScale(1.5); setTitleFontSize(48); setTitleOffsetX(0); setTitleOffsetY(0); setSubtitleOffsetY(0); setDetailsOffsetY(0); setSubtitleFont('Lato'); setDetailsFont('Lato'); setTitleFont('Lato');
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            <Box w={16} h={16}
-                                                bg={template.id === 'modern-white' ? '#CBD5E0' : template.id === 'home-street' ? '#CBD5E0' : template.id === 'design2-bw' ? '#111111' : (template.mapBg ? `url(${template.mapBg})` : (template.bg === '#ffffff' ? '#000' : '#fff'))}
-                                                backgroundSize="cover"
-                                                borderRadius={template.shape === 'circle' ? 'full' : 'none'}
-                                                opacity={0.9} pointerEvents="none"
-                                                style={{ clipPath: template.shape === 'heart' ? 'path("M32 56.93l-3.86-3.52C14.4 40.96 5.33 32.75 5.33 22.67 5.33 14.45 11.78 8 20 8c4.64 0 9.09 2.16 12 5.57C34.91 10.16 39.36 8 44 8c8.22 0 14.67 6.45 14.67 14.67 0 10.08-9.07 18.29-22.8 30.77L32 56.93z")' : template.shape === 'house' ? 'polygon(20% 90%, 20% 40%, 10% 40%, 50% 0%, 60% 10%, 60% 2%, 70% 2%, 70% 20%, 90% 40%, 80% 40%, 80% 90%)' : undefined }}
-                                            />
-                                        </Box>
-                                        <VStack w="full" spacing={1}>
-                                            <Button w="full" size="xs" variant="outline"
-                                                borderColor={selectedTemplate === template.id ? 'blue.500' : 'gray.300'}
-                                                color={selectedTemplate === template.id ? 'blue.600' : 'gray.700'}
-                                                _hover={{ borderColor: 'blue.400', bg: 'blue.50' }}
-                                                onClick={() => {
-                                                    saveTemplateSettings(selectedTemplate);
-                                                    setSelectedTemplate(template.id);
-                                                    const customDefaults = loadTemplateDefaults(template.id);
-                                                    if (customDefaults) {
-                                                        Object.keys(customDefaults).forEach(key => {
-                                                            const value = customDefaults[key as keyof typeof customDefaults];
-                                                            if (value !== undefined) {
-                                                                const setter = `set${key.charAt(0).toUpperCase()}${key.slice(1)}`;
-                                                                // @ts-ignore
-                                                                if (typeof useStore.getState()[setter] === 'function') { // @ts-ignore
-                                                                    useStore.getState()[setter](value);
-                                                                }
-                                                            }
-                                                        });
-                                                    } else if (templateSettings[template.id]) {
-                                                        restoreTemplateSettings(template.id);
-                                                    } else {
-                                                        setPosterColor(template.bg); setMapInteriorColor(template.bg); setTextColor(template.text); setMaskShape(template.shape as any); setBorderStyle(template.border as any); setMapBackgroundImage(template.mapBg); setTitleFont(template.font);
-                                                        if (template.id === 'modern-white') {
-                                                            setIsLightMode(false); setStarColor('#ffffff'); setShowFrame(true); setFrameWidth(1); setFrameInset(20); setShowBorder(true); setShapeOutlineWidth(1.5); setStarScale(1.6); setLineWeight(0.8); setTitleFontSize(56); setSubtitleFontSize(16); setDetailsFontSize(12); setDedicationFontSize(13); setTitleOffsetX(0); setTitleOffsetY(0); setSubtitleOffsetY(0); setDetailsOffsetY(0); setDedicationOffsetY(0); setSubtitleFont('DM Sans'); setDetailsFont('DM Sans'); setDedicationFont('Cormorant Garamond'); setTitleFont('Cormorant Garamond');
-                                                        } else if (template.id === 'love-dark') {
-                                                            setIsLightMode(false); setStarColor('#ffffff'); setShowFrame(true); setFrameWidth(5); setShapeOutlineWidth(2); setStarScale(1.9); setLineWeight(1.0); setTitleFontSize(48); setTitleOffsetX(0); setTitleOffsetY(0); setSubtitleOffsetY(0); setDetailsOffsetY(0); setSubtitleFont('Lato'); setDetailsFont('Lato'); setTitleFont('Playfair Display');
-                                                        } else if (template.id === 'home-street') {
-                                                            setPosterType('streetmap'); setIsLightMode(false); setShowFrame(true); setFrameWidth(3); setFrameInset(16); setShapeOutlineWidth(3); setTitleFontSize(52); setSubtitleFontSize(14); setDetailsFontSize(12); setDedicationFontSize(13); setTitleOffsetX(0); setTitleOffsetY(0); setSubtitleOffsetY(0); setDetailsOffsetY(0); setDedicationOffsetY(0); setSubtitleFont('DM Sans'); setDetailsFont('DM Sans'); setDedicationFont('DM Sans'); setTitleFont('Cinzel'); setShowDivider(true); setMapBgColor('#f8f4f0'); setMapStreetColor('#fc8'); setPosterColor('#ffffff'); setTextColor('#1a1a1a'); setMapColorPreset('realistic'); setMapStyleUrl('https://tiles.openfreemap.org/styles/bright');
-                                                        } else {
-                                                            setIsLightMode(false); setStarColor('#ffffff'); setShowFrame(true); setFrameWidth(5); setShapeOutlineWidth(2); setStarScale(1.5); setTitleFontSize(48); setTitleOffsetX(0); setTitleOffsetY(0); setSubtitleOffsetY(0); setDetailsOffsetY(0); setSubtitleFont('Lato'); setDetailsFont('Lato'); setTitleFont('Lato');
-                                                        }
-                                                    }
-                                                }}
-                                            >
-                                                <Text fontSize="xs" fontWeight="600">{template.label}</Text>
-                                            </Button>
-                                            <Button w="full" size="xs" colorScheme="green" variant="ghost" fontSize="10px"
-                                                onClick={(e) => { e.stopPropagation(); saveTemplateDefaults(template.id); alert(`Saved current settings as default for ${template.label}`); }}
-                                            >
-                                                💾 Save as Default
-                                            </Button>
-                                        </VStack>
-                                    </VStack>
-                                ))}
-                            </Grid>
-                        </AccordionPanel>
-                    </AccordionItem>
-                </Accordion>}
 
                 {/* ── Poster Type Toggle — hidden in listing/customer mode ── */}
                 {!(designGroups && designGroups.length > 0) && <Box px={6} py={4} borderBottom="1px" borderColor="gray.200">
@@ -453,6 +353,73 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                         </Button>
                     </HStack>
                 </Box>}
+
+                {/* ── Designs gallery (main page only — filtered by current map type) ── */}
+                {isMainPage && (
+                    <Accordion allowToggle allowMultiple defaultIndex={[0]}>
+                        <AccordionItem border="none" borderBottom="1px" borderColor="gray.200">
+                            <h2>
+                                <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
+                                    <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
+                                        Designs
+                                    </Box>
+                                    <AccordionIcon color="gray.400" />
+                                </AccordionButton>
+                            </h2>
+                            <AccordionPanel pb={4} px={4}>
+                                {designsForCurrentMapType.length === 0 ? (
+                                    <Text fontSize="xs" color="gray.500" textAlign="center" py={4}>
+                                        No designs available for this map type yet.
+                                    </Text>
+                                ) : (
+                                    <Box display="grid" gridTemplateColumns={`repeat(${Math.min(designsForCurrentMapType.length, 3)}, 1fr)`} gap={3}>
+                                        {designsForCurrentMapType.map((d) => {
+                                            // Card label: strip trailing size suffix from name (e.g. "Design001 — 8×10\"" → "Design001")
+                                            const labelParts = d.name.split(' — ');
+                                            const label = labelParts.length > 1 ? labelParts.slice(0, -1).join(' — ') : d.name;
+                                            const API = import.meta.env.VITE_API_URL || '';
+                                            const isActive = selectedTemplate === d.id;
+                                            return (
+                                                <Box
+                                                    key={d.id}
+                                                    cursor="pointer"
+                                                    borderRadius="lg"
+                                                    overflow="hidden"
+                                                    border="2px solid"
+                                                    borderColor={isActive ? 'gray.900' : 'gray.200'}
+                                                    _hover={{ borderColor: 'gray.500' }}
+                                                    transition="border-color 0.15s"
+                                                    onClick={() => {
+                                                        setSelectedTemplate(d.id);
+                                                        fetchAndApplyTemplate(d.id, { designGroupId: d.design_group_id || undefined });
+                                                        navigate(`/t/${d.id}`, { replace: true });
+                                                        trackEvent('design_select_main', { templateId: d.id, posterType: d.posterType });
+                                                    }}
+                                                >
+                                                    <Box
+                                                        as="img"
+                                                        src={d.thumbnail_path
+                                                            ? `${API}${d.thumbnail_path}?v=3`
+                                                            : `${API}/api/templates/${d.id}/thumbnail`}
+                                                        alt={label}
+                                                        w="100%"
+                                                        display="block"
+                                                        style={{ aspectRatio: '4/5', objectFit: 'cover' }}
+                                                    />
+                                                    <Box px={1.5} py={1.5} bg="white">
+                                                        <Text fontSize="11px" fontWeight="600" color={isActive ? 'gray.900' : 'gray.500'} textAlign="center">
+                                                            {label}
+                                                        </Text>
+                                                    </Box>
+                                                </Box>
+                                            );
+                                        })}
+                                    </Box>
+                                )}
+                            </AccordionPanel>
+                        </AccordionItem>
+                    </Accordion>
+                )}
 
                 {/* ── Street/Colored Map Controls ──────────────────────── */}
                 {posterType !== 'starmap' && <MapControlsPanel />}
