@@ -7,6 +7,18 @@ import {
 
 const API = import.meta.env.VITE_API_URL || '';
 
+interface FulfillmentOption {
+    option_type: string;
+    label: string;
+    price_cents?: number;
+    production_days_min?: number;
+    production_days_max?: number;
+    shipping_days_us_min?: number;
+    shipping_days_us_max?: number;
+    shipping_days_intl_min?: number;
+    shipping_days_intl_max?: number;
+}
+
 interface ListingTemplate {
     id: string;
     name: string;
@@ -21,6 +33,7 @@ interface Listing {
     description?: string;
     banner_image?: string;
     templates: ListingTemplate[];
+    fulfillmentOptions?: FulfillmentOption[];
 }
 
 const ListingPage: React.FC = () => {
@@ -98,6 +111,26 @@ const ListingPage: React.FC = () => {
                 </Box>
             </Box>
 
+            {/* Fulfillment options bar */}
+            {listing.fulfillmentOptions && listing.fulfillmentOptions.length > 0 && (
+                <Box bg="white" borderBottom="1px" borderColor="gray.100">
+                    <Box maxW="1100px" mx="auto" px={{ base: 4, md: 8 }} py={{ base: 4, md: 5 }}>
+                        <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" letterSpacing="0.08em" mb={3}>
+                            Available formats
+                        </Text>
+                        <Flex
+                            gap={{ base: 3, md: 4 }}
+                            direction={{ base: 'column', sm: 'row' }}
+                            flexWrap="wrap"
+                        >
+                            {listing.fulfillmentOptions.map(opt => (
+                                <FulfillmentOptionBadge key={opt.option_type} option={opt} />
+                            ))}
+                        </Flex>
+                    </Box>
+                </Box>
+            )}
+
             {/* Template grid */}
             <Box maxW="1100px" mx="auto" px={{ base: 4, md: 8 }} py={{ base: 10, md: 16 }}>
                 {listing.templates.length === 0 ? (
@@ -151,7 +184,7 @@ const TemplateCard: React.FC<{
             {t.thumbnail_path ? (
                 <Box
                     as="img"
-                    src={`${API}${t.thumbnail_path}`}
+                    src={`${API}${t.thumbnail_path}?v=3`}
                     alt={t.name}
                     w="100%"
                     h="100%"
@@ -198,5 +231,93 @@ const TemplateCard: React.FC<{
         </VStack>
     </Box>
 );
+
+// ── Fulfillment option icons (inline SVGs, no deps) ────────────────────────
+
+const OPTION_ICONS: Record<string, React.ReactNode> = {
+    digital: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+    ),
+    print_unframed: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" />
+        </svg>
+    ),
+    print_framed: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="2" /><rect x="5" y="5" width="14" height="14" rx="1" />
+        </svg>
+    ),
+    canvas: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 15l4-4 3 3 4-4 7 7" />
+        </svg>
+    ),
+};
+
+function formatDayRange(min?: number | null, max?: number | null): string | null {
+    if (min == null && max == null) return null;
+    if (min === 0 && max === 0) return 'Instant';
+    if (min === max || max == null) return `${min} day${min === 1 ? '' : 's'}`;
+    if (min == null) return `up to ${max} days`;
+    return `${min}-${max} days`;
+}
+
+const FulfillmentOptionBadge: React.FC<{ option: FulfillmentOption }> = ({ option: o }) => {
+    const icon = OPTION_ICONS[o.option_type] || OPTION_ICONS.digital;
+    const prodTime = formatDayRange(o.production_days_min, o.production_days_max);
+    const shipTimeUs = formatDayRange(o.shipping_days_us_min, o.shipping_days_us_max);
+
+    // Total estimated delivery (production + shipping)
+    let totalMin = (o.production_days_min ?? 0) + (o.shipping_days_us_min ?? 0);
+    let totalMax = (o.production_days_max ?? 0) + (o.shipping_days_us_max ?? 0);
+    const totalTime = totalMin === 0 && totalMax === 0
+        ? null
+        : formatDayRange(totalMin, totalMax);
+
+    return (
+        <Box
+            bg="gray.50"
+            border="1px"
+            borderColor="gray.200"
+            borderRadius="xl"
+            px={4}
+            py={3}
+            minW={{ base: 'auto', sm: '200px' }}
+            flex={{ base: '1', sm: '0 1 auto' }}
+        >
+            <HStack spacing={2.5} mb={1.5}>
+                <Box color="gray.600">{icon}</Box>
+                <Text fontSize="sm" fontWeight="700" color="gray.900">{o.label}</Text>
+                {o.price_cents && (
+                    <Badge colorScheme="gray" fontSize="10px" ml="auto">
+                        from ${(o.price_cents / 100).toFixed(2)}
+                    </Badge>
+                )}
+            </HStack>
+            <VStack align="start" spacing={0.5} pl={7}>
+                {o.option_type === 'digital' ? (
+                    <Text fontSize="xs" color="green.600" fontWeight="500">Instant download</Text>
+                ) : (
+                    <>
+                        {prodTime && (
+                            <Text fontSize="xs" color="gray.500">Production: {prodTime}</Text>
+                        )}
+                        {shipTimeUs && (
+                            <Text fontSize="xs" color="gray.500">US shipping: {shipTimeUs}</Text>
+                        )}
+                        {totalTime && (
+                            <Text fontSize="xs" color="gray.700" fontWeight="600">
+                                Est. delivery: {totalTime}
+                            </Text>
+                        )}
+                    </>
+                )}
+            </VStack>
+        </Box>
+    );
+};
 
 export default ListingPage;

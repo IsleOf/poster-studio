@@ -105,6 +105,28 @@ export async function updateTemplate(id: string, data: Record<string, unknown>) 
     return res.json();
 }
 
+export async function saveTemplateSettings(id: string, settings: Record<string, unknown>) {
+    return adminFetchJson(`/api/admin/templates/${id}/settings`, {
+        method: 'PUT',
+        body: JSON.stringify({ settings }),
+    });
+}
+
+export async function getTemplateFulfillmentOptions(id: string) {
+    return adminFetchJson(`/api/admin/templates/${id}/fulfillment-options`);
+}
+
+export async function updateTemplateFulfillmentOptions(id: string, options: object[]) {
+    return adminFetchJson(`/api/admin/templates/${id}/fulfillment-options`, {
+        method: 'PUT',
+        body: JSON.stringify({ options }),
+    });
+}
+
+export async function syncToSiblings(id: string) {
+    return adminFetchJson(`/api/admin/templates/${id}/sync-to-siblings`, { method: 'POST' });
+}
+
 export async function deleteTemplate(id: string) {
     const res = await adminFetch(`/api/admin/templates/${id}`, { method: 'DELETE' });
     return res.json();
@@ -251,6 +273,38 @@ export async function updateFulfillmentProviders(rows: object[]) {
 export async function patchFulfillmentProvider(id: number, data: object) {
     return adminFetchJson(`/api/admin/fulfillment-providers/${id}`, {
         method: 'PATCH',
+        body: JSON.stringify(data),
+    });
+}
+
+// Design Groups
+export async function getDesignGroups() {
+    return adminFetchJson('/api/admin/design-groups');
+}
+
+export async function createDesignGroup(data: object) {
+    return adminFetchJson('/api/admin/design-groups', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+}
+
+export async function deleteDesignGroup(id: string) {
+    return adminFetchJson(`/api/admin/design-groups/${id}`, { method: 'DELETE' });
+}
+
+// Listings
+export async function getListings() {
+    return adminFetchJson('/api/admin/listings');
+}
+
+export async function getListing(id: number) {
+    return adminFetchJson(`/api/admin/listings/${id}`);
+}
+
+export async function createListing(data: object) {
+    return adminFetchJson('/api/admin/listings', {
+        method: 'POST',
         body: JSON.stringify(data),
     });
 }

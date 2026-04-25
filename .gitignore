@@ -6,6 +6,13 @@ server/
 # Claude memory (may contain credentials) — keep commands
 .claude/projects/
 test-results/
+tests/report/
+
+# Debug/scratch screenshots at project root (generated during dev, not source)
+/poster-*.png
+/preview*.png
+/text-area.png
+/screenshot-*.png
 
 # Logs
 logs

@@ -11,9 +11,18 @@ import { trackEvent } from '../utils/analytics';
 import { fetchAndApplyTemplate } from '../utils/applyTemplate';
 import VectorStarMap from './VectorStarMap';
 import SidebarControls from './SidebarControls';
-import StreetMapCapture from './StreetMapCapture';
+
+// Lazy-load MapLibre-powered capture component — only needed for street/colored map modes.
+// This keeps MapLibre GL JS (~200 KB gzipped) out of the initial bundle for star map users.
+const StreetMapCapture = React.lazy(() => import('./StreetMapCapture'));
+import type { DesignGroup } from '../types/listing';
+
+const API_URL = import.meta.env.VITE_API_URL || '';
+
 const MainLayout: React.FC = () => {
-    const { templateId } = useParams<{ templateId?: string }>();
+    const { templateId, slug, designSlug } = useParams<{ templateId?: string; slug?: string; designSlug?: string }>();
+    const [designGroups, setDesignGroups] = useState<DesignGroup[]>([]);
+    const [templateLoading, setTemplateLoading] = useState(!!slug || !!templateId);
     const containerRef = useRef<HTMLDivElement>(null);
     const {
         previewZoom, setPreviewZoom,
@@ -57,7 +66,7 @@ const MainLayout: React.FC = () => {
 
     // Auto-save restore — offer to reload from localStorage on first mount (only if no template in URL)
     useEffect(() => {
-        if (templateId) return; // template URL overrides autosave
+        if (templateId || slug) return; // template/listing URL overrides autosave
         try {
             const raw = localStorage.getItem(AUTO_SAVE_KEY);
             if (!raw) return;
@@ -217,10 +226,72 @@ const MainLayout: React.FC = () => {
                 if (c.printSize) store.setPrintSize(c.printSize);
             } catch { /* ignore malformed ?d= */ }
         } else if (templateId) {
-            fetchAndApplyTemplate(templateId);
+            fetchAndApplyTemplate(templateId).finally(() => setTemplateLoading(false));
             trackEvent('template_load', { templateId });
+        } else if (slug) {
+            // Listing page — fetch design groups and auto-load the default (first 8x10) template
+            fetch(`${API_URL}/api/listings/${slug}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(listing => {
+                    if (!listing?.templates?.length) return;
+                    // Build design groups using design_group_id (templates are ordered by created_at ASC,
+                    // so group insertion order matches Design001 → Design002 → ... naturally).
+                    const groupMap = new Map<string, DesignGroup>();
+                    for (const t of listing.templates) {
+                        const groupId: string = t.design_group_id || t.id;
+                        // Group name: strip size suffix from template name (e.g. "Design001 — 8×10"" → "Design001")
+                        const nameParts = (t.name as string).split(' — ');
+                        const groupName = nameParts.length > 1 ? nameParts.slice(0, -1).join(' — ') : t.name;
+                        const sizeLabel = nameParts.length > 1 ? nameParts[nameParts.length - 1] : t.fulfillment_size || t.name;
+                        if (!groupMap.has(groupId)) {
+                            groupMap.set(groupId, { id: groupId, name: groupName, sizes: [] });
+                        }
+                        groupMap.get(groupId)!.sizes.push({
+                            id: t.id,
+                            name: sizeLabel,
+                            thumbnail_path: t.thumbnail_path,
+                            fulfillment_size: t.fulfillment_size,
+                            sell_price_cents: t.sell_price_cents,
+                        });
+                    }
+                    const groups = Array.from(groupMap.values());
+                    setDesignGroups(groups);
+
+                    // Resolve target design group from URL `designSlug`, else first group.
+                    // designSlug matches by either:
+                    //   - exact group id (e.g. "sm001-design002")
+                    //   - the trailing "designNNN" segment of the group id (e.g. "design002")
+                    //   - the kebab-cased group name (e.g. "design-002" → matches "Design 002")
+                    const allTemplates = listing.templates as Array<{id: string; fulfillment_size?: string; design_group_id?: string}>;
+                    let targetGroupId = groups[0]?.id;
+                    if (designSlug) {
+                        const ds = designSlug.toLowerCase();
+                        const match = groups.find(g =>
+                            g.id.toLowerCase() === ds
+                            || g.id.toLowerCase().endsWith('-' + ds)
+                            || g.name.toLowerCase().replace(/\s+/g, '-') === ds
+                        );
+                        if (match) targetGroupId = match.id;
+                    }
+
+                    trackEvent('design_view', { slug, designSlug: designSlug || null, designGroupId: targetGroupId });
+
+                    const preferred = allTemplates.find(t => t.design_group_id === targetGroupId && t.fulfillment_size === '8x10')
+                        || allTemplates.find(t => t.design_group_id === targetGroupId)
+                        || allTemplates.find(t => t.fulfillment_size === '8x10')
+                        || allTemplates[0];
+                    if (preferred) {
+                        const preferredGroup = groups.find(g => g.sizes.some(sz => sz.id === preferred.id));
+                        fetchAndApplyTemplate(preferred.id, {
+                            designGroupId: preferredGroup?.id ?? targetGroupId,
+                        }).finally(() => setTemplateLoading(false));
+                    } else {
+                        setTemplateLoading(false);
+                    }
+                })
+                .catch(() => setTemplateLoading(false));
         }
-    }, [templateId]);
+    }, [templateId, slug, designSlug]);
 
     // ── Street map capture ───────────────────────────────────────────────────
     const handleMapCapture = useCallback((dataUrl: string) => {
@@ -587,6 +658,17 @@ const MainLayout: React.FC = () => {
                     </Button>
                 </Box>
 
+                {/* Loading spinner for listing/template pages */}
+                {templateLoading && (
+                    <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" zIndex={200} bg="gray.50">
+                        <VStack spacing={3}>
+                            <Box as="div" w="24px" h="24px" border="2px solid" borderColor="gray.300" borderTopColor="gray.600" borderRadius="full"
+                                animation="spin 0.6s linear infinite" />
+                            <Text fontSize="xs" color="gray.400">Loading design...</Text>
+                        </VStack>
+                    </Box>
+                )}
+
                 {/* Poster Preview */}
                 <Box
                     id="poster-preview"
@@ -603,6 +685,7 @@ const MainLayout: React.FC = () => {
                         border="1px solid"
                         borderColor="gray.200"
                         pointerEvents="none"
+                        opacity={templateLoading ? 0 : 1}
                     >
                         <VectorStarMap />
                         {/* DEMO watermark overlay — matches the watermark baked into exports */}
@@ -648,7 +731,9 @@ const MainLayout: React.FC = () => {
                         pointerEvents="none"
                         aria-hidden
                     >
-                        <StreetMapCapture onCapture={handleMapCapture} />
+                        <React.Suspense fallback={null}>
+                            <StreetMapCapture onCapture={handleMapCapture} />
+                        </React.Suspense>
                     </Box>
                 )}
             </Box>
@@ -687,7 +772,7 @@ const MainLayout: React.FC = () => {
                     _hover={{ bg: 'blue.100', opacity: 0.6 }}
                     transition="background 0.15s"
                 />
-                <SidebarControls />
+                <SidebarControls designGroups={designGroups} />
             </Box>
             )}
         </Flex>

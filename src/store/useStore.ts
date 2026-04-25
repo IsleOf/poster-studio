@@ -10,14 +10,19 @@ const DESIGN_FIELDS = [
     'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity',
     'showBorder', 'posterColor', 'textColor', 'starColor', 'mapInteriorColor',
     'showFrame', 'frameInset', 'frameWidth', 'finelineWidth',
-    'circleSize', 'heartSize', 'houseSize', 'shapeOutlineWidth', 'shapeOffsetY',
-    'titleFontSize', 'subtitleFontSize', 'detailsFontSize', 'dedicationFontSize',
-    'titleOffsetX', 'titleOffsetY', 'subtitleOffsetY', 'detailsOffsetY', 'dedicationOffsetY',
-    'heartDecorOffsetY', 'dividerOffsetY', 'showDivider', 'dividerLength', 'dividerThickness',
+    'circleSize', 'heartSize', 'houseSize', 'shapeOutlineWidth', 'shapeOffsetY', 'shapeOffsetX', 'snapEnabled',
+    'showInnerRing', 'innerRingWidth', 'innerRingInset',
+    'showOuterRing', 'outerRingWidth', 'outerRingGap',
+    'showHeartDecor',
+    'titleFontSize', 'subtitleFontSize', 'detailsFontSize', 'dedicationFontSize', 'namesFontSize',
+    'titleOffsetX', 'titleOffsetY', 'subtitleOffsetY', 'detailsOffsetY', 'dedicationOffsetY', 'namesOffsetY',
+    'heartDecorOffsetY', 'dividerOffsetY', 'showDivider', 'dividerLength', 'dividerThickness', 'vertSepOffsetY', 'showVertSep', 'vertSepHeight', 'vertSepThickness',
+    'showNames',
     'showConstellations', 'showMilkyWay', 'showGrid', 'showLocation', 'showDate', 'showCoords',
     'maskShape', 'isLightMode', 'designStyle', 'borderStyle',
-    'titleFont', 'subtitleFont', 'detailsFont', 'dedicationFont',
-    'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning',
+    'titleFont', 'subtitleFont', 'detailsFont', 'dedicationFont', 'namesFont',
+    'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
+    'titleAllCaps',
     'customText', 'posterType', 'printSize', 'selectedTemplate',
     'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
     'mapBgColor', 'mapStreetColor', 'mapColorPreset', 'mapStyleUrl',
@@ -68,12 +73,22 @@ interface StoreState {
     houseSize: number;
     shapeOutlineWidth: number; // NEW: Outline width for circle/heart
     shapeOffsetY: number;
+    shapeOffsetX: number; // Horizontal shape offset — text does NOT follow
+    snapEnabled: boolean; // Snap-to-center guide lines on/off
+    showInnerRing: boolean; // White ring inside the map circle
+    innerRingWidth: number; // Stroke width of the inner ring
+    innerRingInset: number; // Distance from circle edge inward
+    showOuterRing: boolean; // Extra circle drawn outside the map circle
+    outerRingWidth: number; // Stroke width of the outer ring
+    outerRingGap: number;   // Gap (pt) between circle edge and outer ring centre
+    showHeartDecor: boolean; // Small decorative heart below text (any shape)
 
     // Font Sizes
     titleFontSize: number;
     subtitleFontSize: number;
     detailsFontSize: number;
     dedicationFontSize: number;
+    namesFontSize: number;
 
     // Text Positions
     titleOffsetX: number;
@@ -81,21 +96,30 @@ interface StoreState {
     subtitleOffsetY: number;
     detailsOffsetY: number;
     dedicationOffsetY: number;
+    namesOffsetY: number;
     heartDecorOffsetY: number;
     dividerOffsetY: number;
     showDivider: boolean;
     dividerLength: number;
     dividerThickness: number;
+    vertSepOffsetY: number;
+    showVertSep: boolean;
+    vertSepHeight: number;
+    vertSepThickness: number;
+    showNames: boolean; // Show couple/names text element (design002+)
 
     // Font and Kerning
     titleFont: string;
     subtitleFont: string;
     detailsFont: string;
     dedicationFont: string;
+    namesFont: string;
     titleKerning: number;
     subtitleKerning: number;
     detailsKerning: number;
     dedicationKerning: number;
+    namesKerning: number;
+    titleAllCaps: boolean;
 
     // Preview Zoom
     previewZoom: number;
@@ -126,6 +150,7 @@ interface StoreState {
         location: string;
         coords: string;
         dedication: string;
+        names: string;
     };
 
     // Print Size
@@ -205,20 +230,35 @@ interface StoreState {
     setHouseSize: (size: number) => void;
     setShapeOutlineWidth: (width: number) => void;
     setShapeOffsetY: (offset: number) => void;
+    setShapeOffsetX: (offset: number) => void;
+    setSnapEnabled: (enabled: boolean) => void;
+    setShowInnerRing: (show: boolean) => void;
+    setInnerRingWidth: (width: number) => void;
+    setInnerRingInset: (inset: number) => void;
+    setShowOuterRing: (show: boolean) => void;
+    setOuterRingWidth: (width: number) => void;
+    setOuterRingGap: (gap: number) => void;
+    setShowHeartDecor: (show: boolean) => void;
     setTitleFontSize: (size: number) => void;
     setSubtitleFontSize: (size: number) => void;
     setDetailsFontSize: (size: number) => void;
     setDedicationFontSize: (size: number) => void;
+    setNamesFontSize: (size: number) => void;
     setTitleOffsetX: (offset: number) => void;
     setTitleOffsetY: (offset: number) => void;
     setSubtitleOffsetY: (offset: number) => void;
     setDetailsOffsetY: (offset: number) => void;
     setDedicationOffsetY: (offset: number) => void;
+    setNamesOffsetY: (offset: number) => void;
     setHeartDecorOffsetY: (offset: number) => void;
     setDividerOffsetY: (offset: number) => void;
     setShowDivider: (show: boolean) => void;
     setDividerLength: (length: number) => void;
     setDividerThickness: (thickness: number) => void;
+    setVertSepOffsetY: (offset: number) => void;
+    setShowVertSep: (show: boolean) => void;
+    setVertSepHeight: (height: number) => void;
+    setVertSepThickness: (thickness: number) => void;
     setPreviewZoom: (zoom: number) => void;
     setPreviewPanX: (x: number) => void;
     setPreviewPanY: (y: number) => void;
@@ -232,10 +272,14 @@ interface StoreState {
     setSubtitleFont: (font: string) => void;
     setDetailsFont: (font: string) => void;
     setDedicationFont: (font: string) => void;
+    setNamesFont: (font: string) => void;
+    setShowNames: (show: boolean) => void;
     setTitleKerning: (kerning: number) => void;
     setSubtitleKerning: (kerning: number) => void;
     setDetailsKerning: (kerning: number) => void;
     setDedicationKerning: (kerning: number) => void;
+    setNamesKerning: (kerning: number) => void;
+    setTitleAllCaps: (v: boolean) => void;
 
     // Poster type setters
     setPosterType: (type: 'starmap' | 'streetmap' | 'coloredmap') => void;
@@ -254,8 +298,9 @@ interface StoreState {
     setIsDraggingMapImage: (v: boolean) => void;
 
     // Active typography field (set when user clicks a text element in the poster)
-    activeTypoField: 'title' | 'subtitle' | 'details' | 'dedication' | null;
-    setActiveTypoField: (field: 'title' | 'subtitle' | 'details' | 'dedication' | null) => void;
+    activeTypoField: 'title' | 'subtitle' | 'details' | 'dedication' | 'names' | null;
+    typoFieldVersion: number; // increments on every setActiveTypoField call so useEffect fires even for repeat clicks
+    setActiveTypoField: (field: 'title' | 'subtitle' | 'details' | 'dedication' | 'names' | null) => void;
 
     // Pending glyph to be inserted at cursor in the inline edit input
     pendingGlyphForInlineEdit: string | null;
@@ -270,6 +315,10 @@ interface StoreState {
     setLocationPinSize: (size: number) => void;
     setLocationPinOffsetX: (x: number) => void;
     setLocationPinOffsetY: (y: number) => void;
+
+    // Active design group — tracks which design group is selected in listing mode
+    activeDesignGroupId: string | null;
+    setActiveDesignGroupId: (id: string | null) => void;
 
     // Template-link ordering flow
     selectedTemplateEtsyUrl: string | null;
@@ -319,12 +368,17 @@ export const useStore = create<StoreState>((set) => ({
     houseSize: 1.0,
     shapeOutlineWidth: 1.0,
     shapeOffsetY: -60, // Move shapes higher by default
+    shapeOffsetX: 0,
+    snapEnabled: true,
 
     // Font Sizes - Default Values
     titleFontSize: 80,
     subtitleFontSize: 32,
     detailsFontSize: 24,
     dedicationFontSize: 24,
+    namesFontSize: 48,
+    namesOffsetY: 0,
+    showNames: false,
 
     // Text Positions - Default Values
     titleOffsetX: 0,
@@ -333,20 +387,34 @@ export const useStore = create<StoreState>((set) => ({
     detailsOffsetY: 0,
     dedicationOffsetY: 0,
     heartDecorOffsetY: 0,
+    showHeartDecor: false,
+    showInnerRing: false,
+    innerRingWidth: 2,
+    innerRingInset: 10,
+    showOuterRing: false,
+    outerRingWidth: 1.5,
+    outerRingGap: 15,
     dividerOffsetY: 0,
     showDivider: false, // Off by default for all templates except Modern White
     dividerLength: 90, // Total width in px
     dividerThickness: 0.5,
+    vertSepOffsetY: 0,
+    showVertSep: true,
+    vertSepHeight: 16,
+    vertSepThickness: 0.8,
 
     // Font and Kerning Defaults
     titleFont: 'Playfair Display',
     subtitleFont: 'Lato',
     detailsFont: 'Lato',
     dedicationFont: 'Playfair Display',
+    namesFont: 'Playfair Display',
     titleKerning: 0.05,
     subtitleKerning: 0.2,
     detailsKerning: 0.1,
     dedicationKerning: 0.05,
+    namesKerning: 0.15,
+    titleAllCaps: false,
 
     // Preview Zoom & Pan - Default Values
     previewZoom: 1.0,
@@ -380,7 +448,8 @@ export const useStore = create<StoreState>((set) => ({
         date: '',
         location: '',
         coords: '',
-        dedication: 'Personal Dedication' // Default placeholder text
+        dedication: 'Personal Dedication', // Default placeholder text
+        names: '',
     },
 
     // Print Size - Default 8x10
@@ -392,6 +461,7 @@ export const useStore = create<StoreState>((set) => ({
     mapImageOpacity: 1,
     isDraggingMapImage: false,
     activeTypoField: null,
+    typoFieldVersion: 0,
     pendingGlyphForInlineEdit: null,
     showLocationPin: true,
     locationPinSize: 70,
@@ -450,20 +520,36 @@ export const useStore = create<StoreState>((set) => ({
             frameInset: state.frameInset,
             frameWidth: state.frameWidth,
             shapeOutlineWidth: state.shapeOutlineWidth,
+            showInnerRing: state.showInnerRing,
+            innerRingWidth: state.innerRingWidth,
+            innerRingInset: state.innerRingInset,
+            showOuterRing: state.showOuterRing,
+            outerRingWidth: state.outerRingWidth,
+            outerRingGap: state.outerRingGap,
+            showHeartDecor: state.showHeartDecor,
             titleFont: state.titleFont,
             subtitleFont: state.subtitleFont,
             detailsFont: state.detailsFont,
             dedicationFont: state.dedicationFont,
+            namesFont: state.namesFont,
             titleFontSize: state.titleFontSize,
             subtitleFontSize: state.subtitleFontSize,
             detailsFontSize: state.detailsFontSize,
             dedicationFontSize: state.dedicationFontSize,
+            namesFontSize: state.namesFontSize,
             titleOffsetY: state.titleOffsetY,
             subtitleOffsetY: state.subtitleOffsetY,
             detailsOffsetY: state.detailsOffsetY,
             dedicationOffsetY: state.dedicationOffsetY,
+            namesOffsetY: state.namesOffsetY,
             dividerOffsetY: state.dividerOffsetY,
-            // Add other visual props as needed
+            vertSepOffsetY: state.vertSepOffsetY,
+            showVertSep: state.showVertSep,
+            vertSepHeight: state.vertSepHeight,
+            vertSepThickness: state.vertSepThickness,
+            namesKerning: state.namesKerning,
+            showNames: state.showNames,
+            titleAllCaps: state.titleAllCaps,
         };
         return {
             templateSettings: {
@@ -505,22 +591,39 @@ export const useStore = create<StoreState>((set) => ({
             frameInset: state.frameInset,
             frameWidth: state.frameWidth,
             shapeOutlineWidth: state.shapeOutlineWidth,
+            showInnerRing: state.showInnerRing,
+            innerRingWidth: state.innerRingWidth,
+            innerRingInset: state.innerRingInset,
+            showOuterRing: state.showOuterRing,
+            outerRingWidth: state.outerRingWidth,
+            outerRingGap: state.outerRingGap,
+            showHeartDecor: state.showHeartDecor,
             titleFont: state.titleFont,
             subtitleFont: state.subtitleFont,
             detailsFont: state.detailsFont,
             dedicationFont: state.dedicationFont,
+            namesFont: state.namesFont,
             titleFontSize: state.titleFontSize,
             subtitleFontSize: state.subtitleFontSize,
             detailsFontSize: state.detailsFontSize,
             dedicationFontSize: state.dedicationFontSize,
+            namesFontSize: state.namesFontSize,
             titleOffsetY: state.titleOffsetY,
             subtitleOffsetY: state.subtitleOffsetY,
             detailsOffsetY: state.detailsOffsetY,
             dedicationOffsetY: state.dedicationOffsetY,
+            namesOffsetY: state.namesOffsetY,
             dividerOffsetY: state.dividerOffsetY,
+            vertSepOffsetY: state.vertSepOffsetY,
             showDivider: state.showDivider,
             dividerLength: state.dividerLength,
             dividerThickness: state.dividerThickness,
+            showVertSep: state.showVertSep,
+            vertSepHeight: state.vertSepHeight,
+            vertSepThickness: state.vertSepThickness,
+            namesKerning: state.namesKerning,
+            showNames: state.showNames,
+            titleAllCaps: state.titleAllCaps,
         };
 
         // Save to localStorage
@@ -578,11 +681,20 @@ export const useStore = create<StoreState>((set) => ({
         // the physical size difference. 8x10 and 16x20 are the same aspect ratio and thus
         // identical SVG dimensions (1200×1500), so their designs should look identical.
         // Fonts scale purely by SVG height ratio relative to the 18x24 baseline (1600px).
+        // SVG height for each print size (width is always 1200, height = 1200 / ratio)
         const svgHeights: Record<string, number> = {
+            '5x7"':   1680,   // ratio 5:7
             '8x10"':  1500,   // ratio 4:5  → same SVG as 16x20
             '11x14"': 1527,   // ratio 11:14
-            '18x24"': 1600,   // baseline
+            '12x16"': 1600,   // ratio 3:4  → same SVG as 18x24
+            '16x20"': 1500,   // ratio 4:5  → same SVG as 8x10
+            '18x24"': 1600,   // baseline, ratio 3:4
             '24x36"': 1800,   // ratio 2:3
+            'A5':     1697,   // ratio 1:√2 (normalized to 210/297)
+            'A4':     1697,   // ratio 1:√2 (normalized to 210/297)
+            'A3':     1697,   // ratio 1:√2 (normalized to 210/297)
+            'A2':     1697,   // ratio 1:√2 (normalized to 210/297)
+            'A1':     1697,   // ratio 1:√2 (normalized to 210/297)
         };
         const baseH = svgHeights['18x24"'];
         const h     = svgHeights[printSize.label] ?? baseH;
@@ -600,6 +712,7 @@ export const useStore = create<StoreState>((set) => ({
             subtitleFontSize:   Math.round(32 * r),
             detailsFontSize:    Math.round(24 * r),
             dedicationFontSize: Math.round(24 * r),
+            namesFontSize:      Math.round(48 * r),
         };
     }),
     setCustomText: (key, value) => set((state) => ({
@@ -610,20 +723,39 @@ export const useStore = create<StoreState>((set) => ({
     setHouseSize: (houseSize) => set({ houseSize }),
     setShapeOutlineWidth: (shapeOutlineWidth) => set({ shapeOutlineWidth }),
     setShapeOffsetY: (shapeOffsetY) => set({ shapeOffsetY }),
+    setShapeOffsetX: (shapeOffsetX) => set({ shapeOffsetX }),
+    setSnapEnabled: (snapEnabled) => set({ snapEnabled }),
     setTitleFontSize: (titleFontSize) => set({ titleFontSize }),
     setSubtitleFontSize: (subtitleFontSize) => set({ subtitleFontSize }),
     setDetailsFontSize: (detailsFontSize) => set({ detailsFontSize }),
     setDedicationFontSize: (dedicationFontSize) => set({ dedicationFontSize }),
+    setNamesFontSize: (namesFontSize) => set({ namesFontSize }),
+    setNamesOffsetY: (namesOffsetY) => set({ namesOffsetY }),
+    setNamesFont: (namesFont) => set({ namesFont }),
+    setShowNames: (showNames) => set({ showNames }),
+    setNamesKerning: (namesKerning) => set({ namesKerning }),
+    setTitleAllCaps: (titleAllCaps) => set({ titleAllCaps }),
     setTitleOffsetX: (titleOffsetX) => set({ titleOffsetX }),
     setTitleOffsetY: (titleOffsetY) => set({ titleOffsetY }),
     setSubtitleOffsetY: (subtitleOffsetY) => set({ subtitleOffsetY }),
     setDetailsOffsetY: (detailsOffsetY) => set({ detailsOffsetY }),
     setDedicationOffsetY: (dedicationOffsetY) => set({ dedicationOffsetY }),
     setHeartDecorOffsetY: (heartDecorOffsetY) => set({ heartDecorOffsetY }),
+    setShowOuterRing: (showOuterRing) => set({ showOuterRing }),
+    setOuterRingWidth: (outerRingWidth) => set({ outerRingWidth }),
+    setOuterRingGap: (outerRingGap) => set({ outerRingGap }),
+    setShowHeartDecor: (showHeartDecor) => set({ showHeartDecor }),
+    setShowInnerRing: (showInnerRing) => set({ showInnerRing }),
+    setInnerRingWidth: (innerRingWidth) => set({ innerRingWidth }),
+    setInnerRingInset: (innerRingInset) => set({ innerRingInset }),
     setDividerOffsetY: (dividerOffsetY) => set({ dividerOffsetY }),
     setShowDivider: (showDivider) => set({ showDivider }),
     setDividerLength: (dividerLength) => set({ dividerLength }),
     setDividerThickness: (dividerThickness) => set({ dividerThickness }),
+    setVertSepOffsetY: (vertSepOffsetY: number) => set({ vertSepOffsetY }),
+    setShowVertSep: (showVertSep: boolean) => set({ showVertSep }),
+    setVertSepHeight: (vertSepHeight: number) => set({ vertSepHeight }),
+    setVertSepThickness: (vertSepThickness: number) => set({ vertSepThickness }),
     setPreviewZoom: (previewZoom) => set({ previewZoom }),
     setPreviewPanX: (previewPanX) => set({ previewPanX }),
     setPreviewPanY: (previewPanY) => set({ previewPanY }),
@@ -662,12 +794,16 @@ export const useStore = create<StoreState>((set) => ({
     setMapImageOffsetY: (mapImageOffsetY) => set({ mapImageOffsetY }),
     setMapImageOpacity: (mapImageOpacity) => set({ mapImageOpacity }),
     setIsDraggingMapImage: (isDraggingMapImage) => set({ isDraggingMapImage }),
-    setActiveTypoField: (activeTypoField) => set({ activeTypoField }),
+    setActiveTypoField: (activeTypoField) => set((s) => ({ activeTypoField, typoFieldVersion: s.typoFieldVersion + 1 })),
     setPendingGlyphForInlineEdit: (pendingGlyphForInlineEdit) => set({ pendingGlyphForInlineEdit }),
     setShowLocationPin: (showLocationPin) => set({ showLocationPin }),
     setLocationPinSize: (locationPinSize) => set({ locationPinSize }),
     setLocationPinOffsetX: (locationPinOffsetX) => set({ locationPinOffsetX }),
     setLocationPinOffsetY: (locationPinOffsetY) => set({ locationPinOffsetY }),
+
+    // Active design group
+    activeDesignGroupId: null,
+    setActiveDesignGroupId: (activeDesignGroupId) => set({ activeDesignGroupId }),
 
     // Template-link ordering flow
     selectedTemplateEtsyUrl: null,

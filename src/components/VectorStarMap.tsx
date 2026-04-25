@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { geoStereographic, geoPath, geoGraticule } from 'd3-geo';
 import { select } from 'd3-selection';
 import { scaleLinear } from 'd3-scale';
 import { drag } from 'd3-drag';
 import { useStore } from '../store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import { getProjectionRotation } from '../utils/astronomy';
 import { format } from 'date-fns';
 import { useDebounce } from '../hooks/useDebounce';
@@ -37,12 +38,20 @@ const VectorStarMap: React.FC = () => {
     const inlineEditInputRef = useRef<HTMLInputElement>(null);
     const [starsData, setStarsData] = useState<any>(null);
     const [constellationsData, setConstellationsData] = useState<any>(null);
+
+    // Snap guide line visibility (shown while dragging shape near vertical center)
+    const [snapGuideX, setSnapGuideX] = useState(false);
+
+    // Live bounding rect for the inline editor — updated after CSS transitions settle
+    const [liveEditRect, setLiveEditRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+
     const [inlineEdit, setInlineEdit] = useState<{
-        field: 'title' | 'subtitle' | 'date' | 'location' | 'coords' | 'dedication';
+        field: 'title' | 'subtitle' | 'date' | 'location' | 'coords' | 'dedication' | 'names';
         value: string;
         svgEl: SVGTextElement;
         editRect: { left: number; top: number; width: number; height: number };
         fontFamily: string;
+        fontSize: number;
         uppercase?: boolean;
     } | null>(null);
 
@@ -51,24 +60,87 @@ const VectorStarMap: React.FC = () => {
         posterColor, textColor, glowIntensity, gridOpacity, showBorder, showConstellations,
         showGrid, designStyle, maskShape, isLightMode, showLocation, showDate,
         showCoords, customText, printSize, circleSize, heartSize, houseSize, shapeOffsetY, titleFontSize,
-        subtitleFontSize, detailsFontSize, dedicationFontSize, titleOffsetX, titleOffsetY, subtitleOffsetY,
-        detailsOffsetY, dedicationOffsetY, heartDecorOffsetY, dividerOffsetY, shapeOutlineWidth, showFrame, frameInset, frameWidth,
-        titleFont, subtitleFont, detailsFont, dedicationFont,
-        titleKerning, subtitleKerning, detailsKerning, dedicationKerning,
+        subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize, titleOffsetX, titleOffsetY, subtitleOffsetY,
+        detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, dividerOffsetY, shapeOutlineWidth, showFrame, frameInset, frameWidth,
+        titleFont, subtitleFont, detailsFont, dedicationFont, namesFont,
+        titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
+        titleAllCaps,
+        showNames,
         mapBackgroundImage, borderStyle, selectedTemplate, starColor, mapInteriorColor,
         showDivider, dividerLength, dividerThickness,
-        setTitleOffsetX, setTitleOffsetY, setSubtitleOffsetY, setDetailsOffsetY, setDedicationOffsetY, setHeartDecorOffsetY, setDividerOffsetY,
+        vertSepOffsetY, setVertSepOffsetY,
+        showVertSep, vertSepHeight, vertSepThickness, setShowVertSep, setVertSepHeight, setVertSepThickness,
+        setTitleOffsetX, setTitleOffsetY, setSubtitleOffsetY, setDetailsOffsetY, setDedicationOffsetY, setHeartDecorOffsetY, setDividerOffsetY, setDividerLength, setDividerThickness,
         posterType, mapImageOffsetX, mapImageOffsetY, mapImageOpacity, setMapImageOffsetX, setMapImageOffsetY,
         mapStreetColor, setCustomText,
-        setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize,
+        setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setNamesFontSize,
+        setNamesOffsetY,
         setIsInlineEditing,
         setActiveTypoField,
         pendingGlyphForInlineEdit, setPendingGlyphForInlineEdit,
-        previewZoom,
+        // previewZoom intentionally excluded — all usages already use useStore.getState()
+        // inside D3 event handlers, so it doesn't need to be in the reactive selector.
         showLocationPin, locationPinSize,
         locationPinOffsetX, locationPinOffsetY,
         setLocationPinOffsetX, setLocationPinOffsetY,
-    } = useStore();
+        shapeOffsetX, setShapeOffsetX, setShapeOffsetY,
+        snapEnabled,
+        showInnerRing, innerRingWidth, innerRingInset,
+        showOuterRing, outerRingWidth, outerRingGap,
+        showHeartDecor,
+    } = useStore(useShallow(s => ({
+        title: s.title, subtitle: s.subtitle, date: s.date, time: s.time,
+        lat: s.lat, lng: s.lng, location: s.location,
+        starScale: s.starScale, lineWeight: s.lineWeight, gridWidth: s.gridWidth,
+        posterColor: s.posterColor, textColor: s.textColor, glowIntensity: s.glowIntensity,
+        gridOpacity: s.gridOpacity, showBorder: s.showBorder, showConstellations: s.showConstellations,
+        showGrid: s.showGrid, designStyle: s.designStyle, maskShape: s.maskShape,
+        isLightMode: s.isLightMode, showLocation: s.showLocation, showDate: s.showDate,
+        showCoords: s.showCoords, customText: s.customText, printSize: s.printSize,
+        circleSize: s.circleSize, heartSize: s.heartSize, houseSize: s.houseSize,
+        shapeOffsetY: s.shapeOffsetY, shapeOffsetX: s.shapeOffsetX, snapEnabled: s.snapEnabled,
+        titleFontSize: s.titleFontSize, subtitleFontSize: s.subtitleFontSize,
+        detailsFontSize: s.detailsFontSize, dedicationFontSize: s.dedicationFontSize, namesFontSize: s.namesFontSize,
+        titleOffsetX: s.titleOffsetX, titleOffsetY: s.titleOffsetY, subtitleOffsetY: s.subtitleOffsetY,
+        detailsOffsetY: s.detailsOffsetY, dedicationOffsetY: s.dedicationOffsetY,
+        namesOffsetY: s.namesOffsetY, heartDecorOffsetY: s.heartDecorOffsetY, dividerOffsetY: s.dividerOffsetY,
+        shapeOutlineWidth: s.shapeOutlineWidth, showFrame: s.showFrame,
+        frameInset: s.frameInset, frameWidth: s.frameWidth,
+        titleFont: s.titleFont, subtitleFont: s.subtitleFont, detailsFont: s.detailsFont,
+        dedicationFont: s.dedicationFont, namesFont: s.namesFont,
+        titleKerning: s.titleKerning, subtitleKerning: s.subtitleKerning,
+        detailsKerning: s.detailsKerning, dedicationKerning: s.dedicationKerning, namesKerning: s.namesKerning,
+        titleAllCaps: s.titleAllCaps, showNames: s.showNames,
+        mapBackgroundImage: s.mapBackgroundImage, borderStyle: s.borderStyle,
+        selectedTemplate: s.selectedTemplate, starColor: s.starColor, mapInteriorColor: s.mapInteriorColor,
+        showDivider: s.showDivider, dividerLength: s.dividerLength, dividerThickness: s.dividerThickness,
+        vertSepOffsetY: s.vertSepOffsetY,
+        showVertSep: s.showVertSep, vertSepHeight: s.vertSepHeight, vertSepThickness: s.vertSepThickness,
+        posterType: s.posterType, mapImageOffsetX: s.mapImageOffsetX, mapImageOffsetY: s.mapImageOffsetY,
+        mapImageOpacity: s.mapImageOpacity, mapStreetColor: s.mapStreetColor,
+        showLocationPin: s.showLocationPin, locationPinSize: s.locationPinSize,
+        locationPinOffsetX: s.locationPinOffsetX, locationPinOffsetY: s.locationPinOffsetY,
+        pendingGlyphForInlineEdit: s.pendingGlyphForInlineEdit,
+        // Setters — stable references, won't cause re-renders but included for convenience
+        setTitleOffsetX: s.setTitleOffsetX, setTitleOffsetY: s.setTitleOffsetY,
+        setSubtitleOffsetY: s.setSubtitleOffsetY, setDetailsOffsetY: s.setDetailsOffsetY,
+        setDedicationOffsetY: s.setDedicationOffsetY, setHeartDecorOffsetY: s.setHeartDecorOffsetY,
+        setDividerOffsetY: s.setDividerOffsetY, setDividerLength: s.setDividerLength, setDividerThickness: s.setDividerThickness,
+        setVertSepOffsetY: s.setVertSepOffsetY,
+        setShowVertSep: s.setShowVertSep, setVertSepHeight: s.setVertSepHeight, setVertSepThickness: s.setVertSepThickness,
+        setMapImageOffsetX: s.setMapImageOffsetX,
+        setMapImageOffsetY: s.setMapImageOffsetY, setCustomText: s.setCustomText,
+        setTitleFontSize: s.setTitleFontSize, setSubtitleFontSize: s.setSubtitleFontSize,
+        setDetailsFontSize: s.setDetailsFontSize, setDedicationFontSize: s.setDedicationFontSize,
+        setNamesFontSize: s.setNamesFontSize, setNamesOffsetY: s.setNamesOffsetY,
+        setIsInlineEditing: s.setIsInlineEditing, setActiveTypoField: s.setActiveTypoField,
+        setPendingGlyphForInlineEdit: s.setPendingGlyphForInlineEdit,
+        setLocationPinOffsetX: s.setLocationPinOffsetX, setLocationPinOffsetY: s.setLocationPinOffsetY,
+        setShapeOffsetX: s.setShapeOffsetX, setShapeOffsetY: s.setShapeOffsetY,
+        showInnerRing: s.showInnerRing, innerRingWidth: s.innerRingWidth, innerRingInset: s.innerRingInset,
+        showOuterRing: s.showOuterRing, outerRingWidth: s.outerRingWidth, outerRingGap: s.outerRingGap,
+        showHeartDecor: s.showHeartDecor,
+    })));
 
     // Keep a ref to inlineEdit so the pending-glyph effect always sees the latest value
     // without needing it in the dependency array (avoids circular re-runs)
@@ -79,6 +151,19 @@ const VectorStarMap: React.FC = () => {
     useEffect(() => {
         setIsInlineEditing(inlineEdit !== null);
     }, [inlineEdit, setIsInlineEditing]);
+
+    // Re-capture the text element's bounding rect after CSS transitions settle (250ms).
+    // This fixes position jumps when the poster was mid-transition when clicked.
+    useLayoutEffect(() => {
+        if (!inlineEdit) { setLiveEditRect(null); return; }
+        const capture = () => {
+            const fresh = inlineEdit.svgEl.getBoundingClientRect();
+            setLiveEditRect({ left: fresh.left, top: fresh.top, width: fresh.width, height: fresh.height });
+        };
+        capture(); // immediate capture for initial render
+        const t = setTimeout(capture, 260); // re-capture after transition (0.2s)
+        return () => clearTimeout(t);
+    }, [inlineEdit?.field]); // re-run only on new edit, not on value changes
 
     // Insert a pending glyph (from GlyphPicker) at the current cursor position in the inline edit input
     useEffect(() => {
@@ -107,11 +192,13 @@ const VectorStarMap: React.FC = () => {
     const debouncedHeartSize = useDebounce(heartSize, 150);
     const debouncedHouseSize = useDebounce(houseSize, 150);
     const debouncedShapeOffsetY = useDebounce(shapeOffsetY, 150);
+    const debouncedShapeOffsetX = useDebounce(shapeOffsetX, 150);
     const debouncedShapeOutlineWidth = useDebounce(shapeOutlineWidth, 150);
     const debouncedTitleKerning = useDebounce(titleKerning, 200);
     const debouncedSubtitleKerning = useDebounce(subtitleKerning, 200);
     const debouncedDetailsKerning = useDebounce(detailsKerning, 200);
     const debouncedDedicationKerning = useDebounce(dedicationKerning, 200);
+    const debouncedNamesKerning = useDebounce(namesKerning, 200);
 
     // Calculate dimensions
     const width = 1200;
@@ -210,7 +297,7 @@ const VectorStarMap: React.FC = () => {
         );
         const center = maskShape === 'rect'
             ? [width / 2, RECT_MAP_INNER_Y + RECT_MAP_INNER_H / 2]
-            : [width / 2, (height * 0.45) + debouncedShapeOffsetY];
+            : [width / 2 + debouncedShapeOffsetX, (height * 0.45) + debouncedShapeOffsetY];
 
         // Setup Clip Path
         const clipPath = defsLayer.append('clipPath').attr('id', 'map-clip');
@@ -392,8 +479,8 @@ const VectorStarMap: React.FC = () => {
                 .attr('text-anchor', 'middle').attr('fill', 'rgba(255,255,255,0.4)')
                 .attr('font-size', '20px').attr('font-family', 'sans-serif')
                 .text('Search a city to load map');
-        } else if (!isLightMode) {
-            // Dark background inside shape (using mapInteriorColor)
+        } else {
+            // Fill shape interior with mapInteriorColor (works for both dark and light mode)
             const shapeFillColor = mapInteriorColor;
             if (maskShape === 'rect') {
                 mapContent.append('rect').attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H).attr('fill', shapeFillColor);
@@ -526,15 +613,210 @@ const VectorStarMap: React.FC = () => {
                     appendShapePath(mapLayer, 1, 'none', outlineColor, (debouncedShapeOutlineWidth || 2) + 6);
                     appendShapePath(mapLayer, 1, 'none', posterColor,   (debouncedShapeOutlineWidth || 2) + 3);
                 } else {
-                    const baseWidth = debouncedShapeOutlineWidth || 1;
-                    mapLayer.append('circle').attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius + 4)
-                        .attr('fill', 'none').attr('stroke', outlineColor).attr('stroke-width', baseWidth);
-                    mapLayer.append('circle').attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius + 19)
-                        .attr('fill', 'none').attr('stroke', outlineColor).attr('stroke-width', baseWidth * 1.5);
+                    // Two clean concentric rings with white breathing room from the clip edge.
+                    // whiteGap  = clear space from star-map boundary to inner ring outer edge
+                    // ringGap   = clear white space between the two rings
+                    const w = debouncedShapeOutlineWidth || 1.5;
+                    const whiteGap = 10; // pt from clip edge to inner ring
+                    const ringGap  = 5;  // pt of white between the two rings
+                    // inner ring center
+                    mapLayer.append('circle')
+                        .attr('cx', center[0]).attr('cy', center[1])
+                        .attr('r', mapRadius + whiteGap + w / 2)
+                        .attr('fill', 'none').attr('stroke', outlineColor).attr('stroke-width', w);
+                    // outer ring center — starts where inner ring ends + ringGap
+                    mapLayer.append('circle')
+                        .attr('cx', center[0]).attr('cy', center[1])
+                        .attr('r', mapRadius + whiteGap + w + ringGap + (w * 0.7) / 2)
+                        .attr('fill', 'none').attr('stroke', outlineColor).attr('stroke-width', w * 0.7);
                 }
             } else {
                 appendShapePath(mapLayer, 1, 'none', outlineColor, debouncedShapeOutlineWidth);
             }
+        }
+
+        // Outer ring — a circle drawn outside the map circle at outerRingGap distance
+        if (showOuterRing && maskShape === 'circle') {
+            mapLayer.append('circle')
+                .attr('cx', center[0]).attr('cy', center[1])
+                .attr('r', mapRadius + outerRingGap)
+                .attr('fill', 'none')
+                .attr('stroke', outlineColor)
+                .attr('stroke-width', outerRingWidth);
+        }
+
+        // Inner ring — a white (posterColor) circle drawn inside the map circle
+        if (showInnerRing && maskShape === 'circle') {
+            mapLayer.append('circle')
+                .attr('cx', center[0]).attr('cy', center[1])
+                .attr('r', mapRadius - innerRingInset)
+                .attr('fill', 'none')
+                .attr('stroke', posterColor)
+                .attr('stroke-width', innerRingWidth);
+        }
+
+        // ── Shape Select / Move / Resize (non-rect only) — works like text tools ──
+        if (maskShape !== 'rect') {
+            const SNAP_THRESHOLD = 18;
+            const pad = 12; // padding around bounding box for selection rect
+
+            // Bounding box of the shape (used for selection rect and hit area)
+            const bbX = center[0] - mapRadius - pad;
+            const bbY = center[1] - mapRadius - pad;
+            const bbW = (mapRadius + pad) * 2;
+            const bbH = (mapRadius + pad) * 2;
+
+            // Helper: ghost transform for heart/house at arbitrary center
+            const heartTransformAt = (cx: number, cy: number) => {
+                const s = (mapRadius * 2.0) / heartOrigWidth;
+                return `translate(${cx}, ${cy}) scale(${s}) translate(-${heartOrigCX}, -${heartOrigCY})`;
+            };
+            const houseTransformAt = (cx: number, cy: number) => {
+                const s = (mapRadius * 2.0) / houseOrigHeight;
+                return `translate(${cx}, ${cy}) scale(${s}) translate(-${houseOrigCX}, -${houseOrigCY})`;
+            };
+
+            // --- Interaction layer (on top of everything) ---
+            const shapeInteract = mapLayer.append('g').style('cursor', 'move');
+
+            // Full bounding-box transparent hit area (catches all mouse events on/inside shape)
+            shapeInteract.append('rect')
+                .attr('x', bbX).attr('y', bbY).attr('width', bbW).attr('height', bbH)
+                .attr('fill', 'transparent').attr('stroke', 'none')
+                .style('pointer-events', 'all');
+
+            // Dashed selection box — visible on hover, hidden by default
+            const selBox = shapeInteract.append('rect')
+                .attr('x', bbX).attr('y', bbY).attr('width', bbW).attr('height', bbH)
+                .attr('fill', 'none')
+                .attr('stroke', 'rgba(59,130,246,0.7)').attr('stroke-width', 1.5)
+                .attr('stroke-dasharray', '8,5').attr('rx', maskShape === 'circle' ? mapRadius + pad : 6)
+                .attr('opacity', 0).style('pointer-events', 'none');
+
+            // Resize handle — bottom-right corner, drag vertically to scale
+            const resizeHitR = 20;
+            const resizeR = 6;
+            const resizeX = bbX + bbW;
+            const resizeY = bbY + bbH;
+
+            const resizeHitArea = shapeInteract.append('rect')
+                .attr('x', resizeX - resizeHitR).attr('y', resizeY - resizeHitR)
+                .attr('width', resizeHitR * 2).attr('height', resizeHitR * 2)
+                .attr('fill', 'transparent').attr('opacity', 0)
+                .style('cursor', 'nwse-resize').style('pointer-events', 'all');
+
+            const resizeDot = shapeInteract.append('circle')
+                .attr('cx', resizeX).attr('cy', resizeY).attr('r', resizeR)
+                .attr('fill', 'rgba(59,130,246,0.9)').attr('stroke', 'white').attr('stroke-width', 1.5)
+                .attr('opacity', 0).style('pointer-events', 'none');
+
+            // Show selection UI on hover
+            shapeInteract
+                .on('mouseover', () => { selBox.attr('opacity', 1); resizeDot.attr('opacity', 1); resizeHitArea.attr('opacity', 1); })
+                .on('mouseout', () => { selBox.attr('opacity', 0); resizeDot.attr('opacity', 0); resizeHitArea.attr('opacity', 0); });
+
+            // --- Resize drag (bottom-right handle, drag diagonally to scale) ---
+            let resizeStartSize = 0, resizeAccDelta = 0;
+            resizeHitArea.call(
+                drag<SVGRectElement, unknown>()
+                    .on('start', (event) => {
+                        event.sourceEvent.stopPropagation();
+                        resizeDot.attr('opacity', 1); resizeHitArea.attr('opacity', 1);
+                        resizeAccDelta = 0;
+                        const st = useStore.getState();
+                        resizeStartSize = maskShape === 'circle' ? st.circleSize : maskShape === 'heart' ? st.heartSize : st.houseSize;
+                    })
+                    .on('drag', (event) => {
+                        const zoom = useStore.getState().previewZoom;
+                        // Bottom-right handle: drag down-right = grow, up-left = shrink
+                        resizeAccDelta += (event.dx + event.dy) / zoom / 2;
+                        const newSize = Math.max(0.5, Math.min(1.5, resizeStartSize + resizeAccDelta / baseMapRadius));
+                        // Move dot to show live feedback
+                        const newR = baseMapRadius * newSize;
+                        resizeDot.attr('cx', center[0] - pad + newR + pad * 2).attr('cy', center[1] - pad + newR + pad * 2);
+                    })
+                    .on('end', () => {
+                        const newSize = Math.max(0.5, Math.min(1.5, resizeStartSize + resizeAccDelta / baseMapRadius));
+                        const rounded = Math.round(newSize * 20) / 20;
+                        const st = useStore.getState();
+                        if (maskShape === 'circle') st.setCircleSize(rounded);
+                        else if (maskShape === 'heart') st.setHeartSize(rounded);
+                        else st.setHouseSize(rounded);
+                    })
+            );
+
+            // --- Move drag (anywhere inside bounding box, except resize handle) ---
+            let ghostEl: any = null;
+            let finalDX = 0, finalDY = 0;
+
+            shapeInteract.call(
+                drag<SVGGElement, unknown>()
+                    .filter((event) => {
+                        // Don't start shape drag when clicking the resize handle area
+                        const target = event.target as SVGElement;
+                        return target !== resizeHitArea.node();
+                    })
+                    .on('start', (event) => {
+                        event.sourceEvent.stopPropagation();
+                        finalDX = 0; finalDY = 0;
+                        shapeInteract.style('cursor', 'grabbing');
+                        selBox.attr('opacity', 1);
+                        // Ghost: dashed outline of shape at current position
+                        if (maskShape === 'circle') {
+                            ghostEl = mapLayer.insert('circle', ':first-child')
+                                .attr('cx', center[0]).attr('cy', center[1]).attr('r', mapRadius);
+                        } else if (maskShape === 'heart') {
+                            ghostEl = mapLayer.insert('path', ':first-child').attr('d', userHeartPath)
+                                .attr('transform', heartTransformAt(center[0], center[1]));
+                        } else {
+                            ghostEl = mapLayer.insert('path', ':first-child').attr('d', userHousePath)
+                                .attr('transform', houseTransformAt(center[0], center[1]));
+                        }
+                        ghostEl.attr('fill', 'none')
+                            .attr('stroke', 'rgba(59,130,246,0.6)').attr('stroke-width', 2)
+                            .attr('stroke-dasharray', '10,6').style('pointer-events', 'none');
+                    })
+                    .on('drag', (event) => {
+                        event.sourceEvent.stopPropagation();
+                        const zoom = useStore.getState().previewZoom;
+                        finalDX += event.dx / zoom;
+                        finalDY += event.dy / zoom;
+
+                        let newCX = center[0] + finalDX;
+                        let newCY = center[1] + finalDY;
+
+                        if (useStore.getState().snapEnabled) {
+                            if (Math.abs(newCX - width / 2) < SNAP_THRESHOLD) {
+                                newCX = width / 2; finalDX = newCX - center[0]; setSnapGuideX(true);
+                            } else { setSnapGuideX(false); }
+                        }
+
+                        // Move ghost
+                        if (ghostEl) {
+                            if (maskShape === 'circle') {
+                                ghostEl.attr('cx', newCX).attr('cy', newCY);
+                            } else if (maskShape === 'heart') {
+                                ghostEl.attr('transform', heartTransformAt(newCX, newCY));
+                            } else {
+                                ghostEl.attr('transform', houseTransformAt(newCX, newCY));
+                            }
+                        }
+                        // Move the selection box with the ghost too
+                        selBox
+                            .attr('x', newCX - mapRadius - pad)
+                            .attr('y', newCY - mapRadius - pad);
+                    })
+                    .on('end', () => {
+                        shapeInteract.style('cursor', 'move');
+                        if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+                        setSnapGuideX(false);
+                        if (finalDX !== 0 || finalDY !== 0) {
+                            const st = useStore.getState();
+                            st.setShapeOffsetX(st.shapeOffsetX + finalDX);
+                            st.setShapeOffsetY(st.shapeOffsetY + finalDY);
+                        }
+                    })
+            );
         }
 
     }, [
@@ -542,10 +824,12 @@ const VectorStarMap: React.FC = () => {
         date, time, lat, lng, // Projection
         debouncedStarScale, debouncedLineWeight, gridWidth, glowIntensity, gridOpacity, // Style
         showBorder, showConstellations, showGrid, designStyle, maskShape, isLightMode, // Toggles
-        debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetY, debouncedShapeOutlineWidth, // Shape
+        debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetY, debouncedShapeOffsetX, debouncedShapeOutlineWidth, // Shape
         posterColor, textColor, starColor, mapInteriorColor, mapStreetColor, width, height, // Colors & Dims
-        mapBackgroundImage, mapImageOpacity, borderStyle, posterType, // New Props
+        mapBackgroundImage, mapImageOffsetX, mapImageOffsetY, mapImageOpacity, borderStyle, posterType, // New Props
         showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY, // Location pin
+        showInnerRing, innerRingWidth, innerRingInset,
+        showOuterRing, outerRingWidth, outerRingGap, // Inner ring
     ]);
 
     // Frame Rendering Effect
@@ -581,14 +865,15 @@ const VectorStarMap: React.FC = () => {
         const textLayer = svg.select('#text-layer');
         textLayer.selectAll('*').remove();
 
-        // Anchor text below the shape — for rect, anchored to fixed map height
+        // Anchor text below the shape's NATURAL bottom (using saved circleSize, ignoring shapeOffsetY).
+        // shapeOffsetY only moves the shape — text is decoupled from shape position.
+        // circleSize IS used so same-ratio sizes (same circleSize) have identical textStartY.
         const _RECT_MAP_H = height * 0.74;
         const _baseRadius = Math.min(width, height) * 0.4;
         const _shapeRadius = maskShape === 'rect' ? 0 : _baseRadius * (maskShape === 'circle' ? circleSize : maskShape === 'heart' ? heartSize : houseSize);
-        const _shapeBottomY = maskShape === 'rect' ? _RECT_MAP_H : (height * 0.45 + shapeOffsetY) + _shapeRadius;
         const textStartY = maskShape === 'rect'
-            ? _shapeBottomY + height * 0.03
-            : _shapeBottomY + height * 0.05;
+            ? _RECT_MAP_H + height * 0.03
+            : height * 0.45 + _shapeRadius + height * 0.05;
 
         // --- Independent Text Groups & Drag Logic ---
 
@@ -718,6 +1003,14 @@ const VectorStarMap: React.FC = () => {
         // --- Design Guru Layout System ---
         const RHYTHM_UNIT = 8;
         const layoutConfig = {
+            'sm001': {
+                titleBottomMargin: RHYTHM_UNIT * 1.5,
+                subtitleBottomMargin: RHYTHM_UNIT * 1.5,
+                dividerPadding: RHYTHM_UNIT * 1.5,
+                detailsLineHeight: 1.55,
+                detailsSpacing: RHYTHM_UNIT * 0.5,
+                dedicationTopMargin: RHYTHM_UNIT * 2.5,
+            },
             'modern-white': {
                 titleBottomMargin: RHYTHM_UNIT * 3,
                 subtitleBottomMargin: RHYTHM_UNIT * 3,
@@ -764,9 +1057,11 @@ const VectorStarMap: React.FC = () => {
 
         // Reference font sizes for stable flow layout — resizing one element won't push others
         const svgHeightsRef: Record<string, number> = {
-            '8x10"': 1500, '11x14"': 1527, '18x24"': 1600, '24x36"': 1800,
+            '5x7"': 1680, '8x10"': 1500, '11x14"': 1527, '12x16"': 1600,
+            '16x20"': 1500, '18x24"': 1600, '24x36"': 1800,
+            'A5': 1697, 'A4': 1697, 'A3': 1697, 'A2': 1697, 'A1': 1697,
         };
-        const refRatio = (svgHeightsRef[printSize.label] ?? 1600) / 1600;
+        const refRatio = (svgHeightsRef[printSize.label] ?? height) / 1600;
         const refTitleSize = Math.round(80 * refRatio);
         const refSubtitleSize = Math.round(32 * refRatio);
         const refDetailsSize = Math.round(24 * refRatio);
@@ -780,10 +1075,10 @@ const VectorStarMap: React.FC = () => {
             .attr('fill', textColor)
             .attr('font-family', `${titleFont}, serif`)
             .attr('font-size', `${titleFontSize}px`)
-            .attr('font-weight', (titleFont === 'Mapped Moment Script' || titleFont === 'Mapped2') ? '400' : 'bold')
+            .attr('font-weight', ['Lato', 'DM Sans', 'Poppins', 'Nunito', 'Oswald', 'Montserrat', 'Bebas Neue', 'Brandon Grotesque', 'Cinzel', 'Playfair Display', 'Orbitron'].includes(titleFont) ? 'bold' : '400')
             .attr('letter-spacing', titleFont === 'Mapped Moment Script' ? '0' : `${debouncedTitleKerning}em`)
             .style('white-space', 'pre')
-            .text((customText.title || title));
+            .text(titleAllCaps ? (customText.title || title).toUpperCase() : (customText.title || title));
 
         // Auto-fit: scale down if title is too wide for the poster
         const maxTextWidth = width - 2 * (frameInset + 20);
@@ -818,24 +1113,31 @@ const VectorStarMap: React.FC = () => {
                         totalMoved += Math.abs(event.dx) + Math.abs(event.dy);
                         dxAcc += dx;
                         dyAcc += dy;
-                        select(this).attr('transform', `translate(${width / 2 + titleOffsetX + dxAcc}, ${textStartY + titleNaturalY + titleOffsetY + dyAcc})`);
+                        const snapOn = useStore.getState().snapEnabled;
+                        let snapX = titleOffsetX + dxAcc;
+                        if (snapOn && Math.abs(snapX) < SNAP_THRESHOLD) {
+                            snapX = 0; dxAcc = -titleOffsetX;
+                            setSnapGuideX(true);
+                        } else {
+                            setSnapGuideX(false);
+                        }
+                        select(this).attr('transform', `translate(${width / 2 + snapX}, ${textStartY + titleNaturalY + titleOffsetY + dyAcc})`);
                     })
                     .on('end', function() {
+                        setSnapGuideX(false);
                         if (totalMoved < 4) {
                             const textEl = (this as SVGGElement).querySelector('text') as SVGTextElement;
                             if (!textEl) return;
                             const r = textEl.getBoundingClientRect();
                             textEl.style.visibility = 'hidden';
-                            // Set synchronously (before React re-render) so MainLayout's
-                            // isInlineEditingRef updates before the dblclick event fires.
                             useStore.getState().setIsInlineEditing(true);
                             const titleVal = customText.title || title;
-                            setInlineEdit({ field: 'title', value: titleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: titleFont });
+                            setInlineEdit({ field: 'title', value: titleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: titleFont, fontSize: titleFontSize });
                             setActiveTypoField('title');
                             return;
                         }
                         let newOffsetX = titleOffsetX + dxAcc;
-                        if (Math.abs(newOffsetX) < SNAP_THRESHOLD) newOffsetX = 0;
+                        if (useStore.getState().snapEnabled && Math.abs(newOffsetX) < SNAP_THRESHOLD) newOffsetX = 0;
                         setTitleOffsetX(newOffsetX);
                         if (dyAcc !== 0) setTitleOffsetY(titleOffsetY + dyAcc);
                     })
@@ -878,7 +1180,7 @@ const VectorStarMap: React.FC = () => {
                 const r = textEl.getBoundingClientRect();
                 textEl.style.visibility = 'hidden';
                 const subtitleVal = customText.subtitle || subtitle;
-                setInlineEdit({ field: 'subtitle', value: subtitleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: subtitleFont, uppercase: true });
+                setInlineEdit({ field: 'subtitle', value: subtitleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: subtitleFont, fontSize: subtitleFontSize, uppercase: true });
                 setActiveTypoField('subtitle');
             }));
 
@@ -913,8 +1215,68 @@ const VectorStarMap: React.FC = () => {
                 .attr('y2', 0)
                 .attr('stroke', textColor)
                 .attr('stroke-width', dividerThickness)
-                .attr('opacity', 0.6)
-                .style('pointer-events', 'none'); // Line doesn't capture events
+                .style('pointer-events', 'none');
+
+            // Resize handles at each end — drag to change dividerLength
+            const handleSize = 12;
+            let dlStartLen = 0, dlAccDx = 0;
+            const makeResizeHandle = (side: -1 | 1) => {
+                const hitArea = dividerGroup.append('rect')
+                    .attr('x', side * halfLength - handleSize / 2)
+                    .attr('y', -handleSize / 2)
+                    .attr('width', handleSize).attr('height', handleSize)
+                    .attr('fill', 'transparent')
+                    .attr('opacity', 0)
+                    .style('cursor', 'ew-resize')
+                    .style('pointer-events', 'all');
+
+                const visual = dividerGroup.append('rect')
+                    .attr('x', side * halfLength - 3).attr('y', -4)
+                    .attr('width', 6).attr('height', 8)
+                    .attr('fill', textColor).attr('rx', 1)
+                    .attr('opacity', 0)
+                    .style('pointer-events', 'none');
+
+                hitArea.call(
+                    drag<SVGRectElement, unknown>()
+                        .on('start', (event) => {
+                            event.sourceEvent.stopPropagation();
+                            dlStartLen = useStore.getState().dividerLength;
+                            dlAccDx = 0;
+                        })
+                        .on('drag', (event) => {
+                            dlAccDx += event.dx / useStore.getState().previewZoom;
+                            const newLen = Math.max(20, dlStartLen + side * dlAccDx * 2);
+                            useStore.getState().setDividerLength(Math.round(newLen));
+                        })
+                );
+
+                return { hitArea, visual };
+            };
+            const leftHandle = makeResizeHandle(-1);
+            const rightHandle = makeResizeHandle(1);
+
+            dividerGroup
+                .on('mouseover.divider', () => {
+                    leftHandle.visual.attr('opacity', 0.8);
+                    rightHandle.visual.attr('opacity', 0.8);
+                    leftHandle.hitArea.attr('opacity', 1);
+                    rightHandle.hitArea.attr('opacity', 1);
+                })
+                .on('mouseout.divider', () => {
+                    leftHandle.visual.attr('opacity', 0);
+                    rightHandle.visual.attr('opacity', 0);
+                    leftHandle.hitArea.attr('opacity', 0);
+                    rightHandle.hitArea.attr('opacity', 0);
+                });
+
+            // Thickness: double-click cycles through 3 presets (0.5 → 1 → 2 → 0.5)
+            dividerGroup.on('dblclick', (event) => {
+                event.stopPropagation();
+                const cur = useStore.getState().dividerThickness;
+                const next = cur < 0.8 ? 1 : cur < 1.5 ? 2 : 0.5;
+                setDividerThickness(next);
+            });
 
             dividerGroup.call(createDragBehavior(dividerOffsetY, setDividerOffsetY, naturalY));
 
@@ -922,6 +1284,7 @@ const VectorStarMap: React.FC = () => {
         }
 
         // 4. Details Group
+        const detailsNaturalY = naturalY; // captured before any offset applied — used for vertical sep positioning
         const detailsGroup = textLayer.append('g')
             .attr('transform', `translate(${width / 2}, ${textStartY + naturalY + detailsOffsetY})`)
             .attr('text-anchor', 'middle');
@@ -930,15 +1293,20 @@ const VectorStarMap: React.FC = () => {
         const locStr = customText.location || (location ? location.toUpperCase() : '');
         const coordsStr = customText.coords || `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
 
-        const detailsEntries = [
-            showLocation ? { field: 'location' as const, text: locStr } : null,
-            showCoords  ? { field: 'coords'   as const, text: coordsStr } : null,
-            showDate    ? { field: 'date'      as const, text: dateStr } : null,
-        ].filter(Boolean) as { field: 'location' | 'coords' | 'date'; text: string }[];
+        // When only location + date are shown (no coords), render on ONE line with vertical separator.
+        const inlineLocationDate = showLocation && showDate && !showCoords;
+
+        const detailsEntries = inlineLocationDate
+            ? [{ field: 'location' as const, text: locStr }, { field: 'date' as const, text: dateStr }]
+            : [
+                showLocation ? { field: 'location' as const, text: locStr } : null,
+                showCoords  ? { field: 'coords'   as const, text: coordsStr } : null,
+                showDate    ? { field: 'date'      as const, text: dateStr } : null,
+              ].filter(Boolean) as { field: 'location' | 'coords' | 'date'; text: string }[];
 
         if (detailsEntries.length > 0) {
             const lineH = detailsFontSize * config.detailsLineHeight + config.detailsSpacing;
-            const totalH = detailsEntries.length * lineH;
+            const totalH = inlineLocationDate ? lineH : detailsEntries.length * lineH;
 
             // Hit area for drag (behind everything)
             detailsGroup.insert('rect', ':first-child')
@@ -996,33 +1364,169 @@ const VectorStarMap: React.FC = () => {
                     })
             );
 
-            // Individual text lines — each clickable to edit
-            detailsEntries.forEach(({ field, text }, i) => {
-                detailsGroup.append('text')
-                    .attr('y', i * lineH)
-                    .attr('fill', textColor)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const detailsTextAttrs = (node: any) =>
+                node.attr('fill', textColor)
                     .attr('font-family', `${detailsFont}, sans-serif`)
                     .attr('font-size', `${detailsFontSize}px`)
                     .attr('font-weight', '400')
                     .attr('letter-spacing', selectedTemplate === 'modern-white' ? `${debouncedDetailsKerning + 0.02}em` : `${debouncedDetailsKerning}em`)
-                    .attr('opacity', 0.8)
                     .style('white-space', 'pre')
                     .style('pointer-events', 'all')
-                    .style('cursor', 'text')
-                    .text(text)
-                    .on('click', function (event) {
+                    .style('cursor', 'text');
+
+            if (inlineLocationDate) {
+                // Location and date anchored outward from centre — no bbox measurement needed.
+                // Separator line is always at x=0 (the group centre).
+                const halfGap = detailsFontSize * 1.0; // distance from centre to each text anchor
+                const sepH = detailsFontSize * 0.85;
+
+                // Location — right-aligned, flows leftward from -halfGap
+                const locNode = detailsGroup.append('text')
+                    .attr('x', -halfGap).attr('y', 0).attr('text-anchor', 'end');
+                detailsTextAttrs(locNode).text(locStr)
+                    .on('click', function (this: SVGTextElement, event: MouseEvent) {
                         event.stopPropagation();
                         const textEl = this as SVGTextElement;
                         const r = textEl.getBoundingClientRect();
                         textEl.style.visibility = 'hidden';
                         useStore.getState().setIsInlineEditing(true);
-                        setInlineEdit({ field, value: text, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont });
+                        setInlineEdit({ field: 'location', value: locStr, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
                         setActiveTypoField('details');
                     });
-            });
+
+                // Date — left-aligned, flows rightward from +halfGap
+                const dateNode = detailsGroup.append('text')
+                    .attr('x', halfGap).attr('y', 0).attr('text-anchor', 'start');
+                detailsTextAttrs(dateNode).text(dateStr)
+                    .on('click', function (this: SVGTextElement, event: MouseEvent) {
+                        event.stopPropagation();
+                        const textEl = this as SVGTextElement;
+                        const r = textEl.getBoundingClientRect();
+                        textEl.style.visibility = 'hidden';
+                        useStore.getState().setIsInlineEditing(true);
+                        setInlineEdit({ field: 'date', value: dateStr, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
+                        setActiveTypoField('details');
+                    });
+
+                // Transparent hit-rects so both halves are easily clickable
+                [-1, 1].forEach(side => {
+                    detailsGroup.append('rect')
+                        .attr('x', side === -1 ? -maxTextWidth / 2 : halfGap)
+                        .attr('y', -detailsFontSize * 0.8)
+                        .attr('width', maxTextWidth / 2 - halfGap)
+                        .attr('height', detailsFontSize * 1.4)
+                        .attr('fill', 'transparent')
+                        .style('pointer-events', 'all')
+                        .style('cursor', 'text')
+                        .on('click', function (event: MouseEvent) {
+                            event.stopPropagation();
+                            const target = side === -1 ? locNode.node() as SVGTextElement : dateNode.node() as SVGTextElement;
+                            if (!target) return;
+                            const r = target.getBoundingClientRect();
+                            target.style.visibility = 'hidden';
+                            useStore.getState().setIsInlineEditing(true);
+                            const f = side === -1 ? 'location' : 'date';
+                            const v = side === -1 ? locStr : dateStr;
+                            setInlineEdit({ field: f, value: v, svgEl: target, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
+                            setActiveTypoField('details');
+                        });
+                });
+
+                // Vertical separator is rendered as an independent group after detailsGroup (see below)
+            } else {
+                // Standard multi-line rendering
+                detailsEntries.forEach(({ field, text }, i) => {
+                    const node = detailsGroup.append('text').attr('y', i * lineH);
+                    detailsTextAttrs(node).text(text)
+                        .on('click', function (this: SVGTextElement, event: MouseEvent) {
+                            event.stopPropagation();
+                            const textEl = this as SVGTextElement;
+                            const r = textEl.getBoundingClientRect();
+                            textEl.style.visibility = 'hidden';
+                            useStore.getState().setIsInlineEditing(true);
+                            setInlineEdit({ field, value: text, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
+                            setActiveTypoField('details');
+                        });
+                });
+            }
 
 
             detailsGroup.call(createDragBehavior(detailsOffsetY, setDetailsOffsetY, naturalY));
+        }
+
+        // 4b. Vertical separator — fully independent group, does NOT use detailsOffsetY
+        if (inlineLocationDate && showVertSep) {
+            const sepH = vertSepHeight;
+            // Position uses only its own vertSepOffsetY — independent of detailsOffsetY
+            const vertSepGroup = textLayer.append('g')
+                .attr('transform', `translate(${width / 2}, ${textStartY + detailsNaturalY + vertSepOffsetY})`);
+
+            // Hit area — tall/narrow strip for easy grabbing
+            const hitPad = 10;
+            vertSepGroup.append('rect')
+                .attr('x', -hitPad).attr('y', -sepH / 2 - hitPad)
+                .attr('width', hitPad * 2).attr('height', sepH + hitPad * 2)
+                .attr('fill', 'transparent')
+                .style('cursor', 'move').style('pointer-events', 'all');
+
+            // The vertical line
+            vertSepGroup.append('line')
+                .attr('x1', 0).attr('y1', -sepH / 2)
+                .attr('x2', 0).attr('y2', sepH / 2)
+                .attr('stroke', textColor).attr('stroke-width', vertSepThickness)
+                .style('pointer-events', 'none');
+
+            // Top/bottom resize handles
+            let vsStartH = 0, vsAccDy = 0;
+            const makeVsHandle = (side: -1 | 1) => {
+                const hSize = 10, hHit = 28;
+                const hy = side * sepH / 2;
+                const hitH = vertSepGroup.append('rect')
+                    .attr('x', -hHit / 2).attr('y', hy - hHit / 2)
+                    .attr('width', hHit).attr('height', hHit)
+                    .attr('fill', 'transparent').attr('opacity', 0)
+                    .style('cursor', 'ns-resize').style('pointer-events', 'all');
+                const visH = vertSepGroup.append('rect')
+                    .attr('x', -hSize / 2).attr('y', hy - hSize / 2)
+                    .attr('width', hSize).attr('height', hSize)
+                    .attr('fill', textColor).attr('rx', 2)
+                    .attr('opacity', 0).style('pointer-events', 'none');
+                hitH.call(
+                    drag<SVGRectElement, unknown>()
+                        .on('start', (event) => { event.sourceEvent.stopPropagation(); vsStartH = useStore.getState().vertSepHeight; vsAccDy = 0; })
+                        .on('drag', (event) => {
+                            vsAccDy += event.dy / useStore.getState().previewZoom;
+                            const newH = Math.max(8, vsStartH + side * vsAccDy * 2);
+                            setVertSepHeight(Math.round(newH));
+                        })
+                );
+                return { hitH, visH };
+            };
+            const topHandle = makeVsHandle(-1);
+            const botHandle = makeVsHandle(1);
+
+            // Selection box on hover
+            const vsSelBox = vertSepGroup.append('rect')
+                .attr('x', -hitPad).attr('y', -sepH / 2 - hitPad)
+                .attr('width', hitPad * 2).attr('height', sepH + hitPad * 2)
+                .attr('fill', 'none').attr('stroke', textColor)
+                .attr('stroke-width', 1).attr('stroke-dasharray', '3,3')
+                .attr('opacity', 0).attr('rx', 2).style('pointer-events', 'none');
+
+            vertSepGroup
+                .on('mouseover', () => { vsSelBox.attr('opacity', 0.5); topHandle.visH.attr('opacity', 0.8); botHandle.visH.attr('opacity', 0.8); topHandle.hitH.attr('opacity', 1); botHandle.hitH.attr('opacity', 1); })
+                .on('mouseout', () => { vsSelBox.attr('opacity', 0); topHandle.visH.attr('opacity', 0); botHandle.visH.attr('opacity', 0); topHandle.hitH.attr('opacity', 0); botHandle.hitH.attr('opacity', 0); });
+
+            // Double-click cycles thickness
+            vertSepGroup.on('dblclick', (event: MouseEvent) => {
+                event.stopPropagation();
+                const cur = useStore.getState().vertSepThickness;
+                const next = cur < 0.8 ? 1 : cur < 1.5 ? 2 : 0.5;
+                setVertSepThickness(next);
+            });
+
+            vertSepGroup.call(createDragBehavior(vertSepOffsetY, setVertSepOffsetY, detailsNaturalY));
         }
 
         // Advance Natural Y — use reference size for stable positioning
@@ -1030,17 +1534,56 @@ const VectorStarMap: React.FC = () => {
         const refDetailsHeight = detailsEntries.length * refLineH;
         naturalY += refDetailsHeight + config.dedicationTopMargin;
 
+        // 4.5 Names Group — rendered after details (e.g. design002: "James & Lilly" below location/date)
+        if (showNames && customText.names) {
+            const namesGroup = textLayer.append('g')
+                .attr('transform', `translate(${width / 2}, ${textStartY + naturalY + namesOffsetY})`)
+                .attr('text-anchor', 'middle');
+
+            const namesNode = namesGroup.append('text')
+                .attr('fill', textColor)
+                .attr('font-family', `${namesFont}, serif`)
+                .attr('font-size', `${namesFontSize}px`)
+                .attr('font-weight', (namesFont === 'Mapped Moment Script' || namesFont === 'Mapped2' || namesFont === 'Title001' || namesFont === 'Cinzel') ? '400' : '300')
+                .attr('letter-spacing', namesFont === 'Mapped Moment Script' ? '0' : `${debouncedNamesKerning}em`)
+                .style('white-space', 'pre')
+                .text(customText.names);
+
+            const namesEl = namesNode.node();
+            if (namesEl) {
+                const bbox = (namesEl as SVGTextElement).getBBox();
+                if (bbox.width > maxTextWidth) namesNode.attr('transform', `scale(${maxTextWidth / bbox.width}, 1)`);
+            }
+
+            addTextInteraction(namesGroup, namesNode, namesFontSize, setNamesFontSize);
+            namesGroup.call(createDragBehavior(namesOffsetY, setNamesOffsetY, naturalY, (el) => {
+                const textEl = el.querySelector('text') as SVGTextElement;
+                if (!textEl) return;
+                const r = textEl.getBoundingClientRect();
+                textEl.style.visibility = 'hidden';
+                setInlineEdit({ field: 'names', value: customText.names, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: namesFont, fontSize: namesFontSize });
+                setActiveTypoField('names');
+            }));
+
+            naturalY += (namesFontSize * 0.8) + config.dedicationTopMargin;
+        }
+
         // 5. Dedication Group
         if (customText.dedication) {
             const dedicationGroup = textLayer.append('g')
                 .attr('transform', `translate(${width / 2}, ${textStartY + naturalY + dedicationOffsetY})`)
                 .attr('text-anchor', 'middle');
 
+            // Fonts that are natively cursive — registered as font-style:normal in @font-face, must NOT get synthetic italic
+            const NATIVE_SCRIPT_FONTS = new Set(['Mapped Moment Script', 'Great Vibes', 'Sacramento', 'Pinyon Script', 'Allura', 'Petit Formal Script', 'Alex Brush', 'Parisienne']);
+            // Fonts that need italic to activate their cursive form (they have a separate italic face)
+            const ITALIC_SCRIPT_FONTS = new Set(['Dancing Script']);
             const dedicationNode = dedicationGroup.append('text')
                 .attr('fill', textColor)
-                .attr('font-family', `${dedicationFont}, serif`)
+                .attr('font-family', `${dedicationFont}, cursive`)
                 .attr('font-size', `${dedicationFontSize}px`)
-                .attr('font-style', 'italic')
+                .attr('font-weight', '400')
+                .attr('font-style', ITALIC_SCRIPT_FONTS.has(dedicationFont) ? 'italic' : 'normal')
                 .attr('letter-spacing', dedicationFont === 'Mapped Moment Script' ? '0' : `${debouncedDedicationKerning}em`)
                 .text(customText.dedication);
 
@@ -1050,13 +1593,13 @@ const VectorStarMap: React.FC = () => {
                 if (!textEl) return;
                 const r = textEl.getBoundingClientRect();
                 textEl.style.visibility = 'hidden';
-                setInlineEdit({ field: 'dedication', value: customText.dedication, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: dedicationFont });
+                setInlineEdit({ field: 'dedication', value: customText.dedication, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: dedicationFont, fontSize: dedicationFontSize });
                 setActiveTypoField('dedication');
             }));
         }
 
         // Small decorative heart below dedication — draggable, matches SVG reference
-        if (maskShape === 'rect') {
+        if (showHeartDecor) {
             const heartGapY = (customText.dedication ? dedicationFontSize * 2.5 : height * 0.04);
             const heartBaseY = textStartY + naturalY + dedicationOffsetY + heartGapY;
             const heartScale = (height / 1200) * 0.5;
@@ -1096,15 +1639,18 @@ const VectorStarMap: React.FC = () => {
 
     }, [
         title, subtitle, customText, location, date, lat, lng, // Content
-        titleFont, subtitleFont, detailsFont, dedicationFont, // Fonts
-        titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, // Sizes
-        debouncedTitleKerning, debouncedSubtitleKerning, debouncedDetailsKerning, debouncedDedicationKerning, // Kerning
-        titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, heartDecorOffsetY, // Offsets
-        showDate, showLocation, showCoords, showDivider, dividerOffsetY, dividerLength, dividerThickness, // Toggles
-        circleSize, heartSize, houseSize, maskShape, shapeOffsetY, // Shape — textStartY depends on these
+        titleFont, subtitleFont, detailsFont, dedicationFont, namesFont, // Fonts
+        titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize, // Sizes
+        debouncedTitleKerning, debouncedSubtitleKerning, debouncedDetailsKerning, debouncedDedicationKerning, debouncedNamesKerning, // Kerning
+        titleAllCaps, // Title casing
+        titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, // Offsets
+        showNames, // Names toggle
+        showDate, showLocation, showCoords, showDivider, dividerOffsetY, dividerLength, dividerThickness, vertSepOffsetY, showVertSep, vertSepHeight, vertSepThickness, // Toggles
+        showHeartDecor, // Decorative heart below text
+        circleSize, heartSize, houseSize, maskShape, // Shape — textStartY depends on these (shapeOffsetY removed: text is now decoupled from shape position)
         textColor, width, height, frameInset, // Global
         selectedTemplate, // Template
-        setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setCustomText, setInlineEdit, // Stable setters
+        setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setNamesFontSize, setCustomText, setInlineEdit, // Stable setters
         inlineEdit, // Guard: effect is skipped while editing (inlineEdit !== null), re-runs when it closes
     ]);
 
@@ -1130,7 +1676,7 @@ const VectorStarMap: React.FC = () => {
             const svgW = 1200;
             const [rW, rH] = state.printSize.ratio.split('/').map(Number);
             const svgH = svgW / (rW / rH);
-            const cx = svgW / 2;
+            const cx = svgW / 2 + state.shapeOffsetX;
             const cy = svgH * 0.45 + state.shapeOffsetY;
             const baseR = Math.min(svgW, svgH) * 0.4;
             const r = baseR * (
@@ -1169,17 +1715,30 @@ const VectorStarMap: React.FC = () => {
                 style={{ backgroundColor: posterColor, pointerEvents: inlineEdit ? 'none' : 'auto' }}
                 preserveAspectRatio="xMidYMid meet"
             />
-            {inlineEdit && createPortal((() => {
-                const { editRect, fontFamily, uppercase } = inlineEdit;
+            {/* Snap guide overlay — separate SVG so D3 never touches it */}
+            {snapGuideX && (
+                <svg
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+                    viewBox={`0 0 ${width} ${height}`}
+                    preserveAspectRatio="xMidYMid meet"
+                >
+                    <line x1={width / 2} y1={0} x2={width / 2} y2={height}
+                        stroke="rgba(59,130,246,0.65)" strokeWidth={1.5} strokeDasharray="8,5" />
+                </svg>
+            )}
+            {inlineEdit && liveEditRect && createPortal((() => {
+                const { fontFamily, uppercase } = inlineEdit;
+                // Use liveEditRect — re-captured after CSS transitions settle, so position is accurate
+                const editRect = liveEditRect;
                 const displayValue = uppercase ? inlineEdit.value.toUpperCase() : inlineEdit.value;
-                // Compensate for CSS size-adjust on Mapped Moment Script (250%) to avoid double-scaling
-                const sizeAdjust = fontFamily === 'Mapped Moment Script' ? 2.5 : 1;
-                // editRect comes from getBoundingClientRect() which already returns
-                // screen-space pixels (CSS scale() is baked in). The input uses
-                // position:fixed which is also in screen-space — so we must NOT
-                // divide by previewZoom here. Dividing shrinks the font by the zoom
-                // factor, making it appear tiny at high zoom levels.
-                const fontSize = Math.max(10, (editRect.height * 0.82) / sizeAdjust);
+                // Compute CSS scale from SVG viewBox vs rendered size, then apply to stored font size.
+                // This avoids the calligraphy-font bbox inflation problem (ascenders/descenders make
+                // editRect.height much larger than the actual em-square).
+                const svgEl = inlineEdit.svgEl.closest('svg');
+                const svgScale = svgEl
+                    ? svgEl.getBoundingClientRect().width / (svgEl.viewBox.baseVal.width || 1)
+                    : 1;
+                const fontSize = Math.max(10, inlineEdit.fontSize * svgScale);
                 const commit = () => {
                     // Restore visibility before unmounting — the text effect guard
                     // kept the element alive with visibility:hidden while editing.
@@ -1209,12 +1768,13 @@ const VectorStarMap: React.FC = () => {
                         style={{
                             position: 'fixed',
                             left: editRect.left + editRect.width / 2 - Math.max(editRect.width * 1.5, 400) / 2,
-                            top: editRect.top - 4,
+                            top: editRect.top + editRect.height / 2 - (fontSize * 1.4) / 2,
                             width: Math.max(editRect.width * 1.5, 400),
-                            height: editRect.height + 16,
+                            height: fontSize * 1.4,
                             fontSize: `${fontSize}px`,
-                            fontFamily: `${fontFamily}, serif`,
-                            fontWeight: fontFamily === 'Mapped Moment Script' ? '400' : undefined,
+                            fontFamily: `${fontFamily}, cursive`,
+                            fontWeight: '400',
+                            fontStyle: new Set(['Dancing Script']).has(fontFamily) ? 'italic' : 'normal',
                             textAlign: 'center',
                             background: 'transparent',
                             border: 'none',

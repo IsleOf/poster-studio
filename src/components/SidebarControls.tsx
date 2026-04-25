@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { PRINT_SIZE_MAP, fetchAndApplyTemplate } from '../utils/applyTemplate';
+import type { DesignGroup } from '../types/listing';
 import { trackEvent } from '../utils/analytics';
 import { useStore } from '../store/useStore';
-import { format } from 'date-fns';
+import TextContentPanel from './sidebar/TextContentPanel';
+import TypographyPanel from './sidebar/TypographyPanel';
+import MapControlsPanel from './sidebar/MapControlsPanel';
+import ColorPanel from './sidebar/ColorPanel';
+import StylePanel from './sidebar/StylePanel';
+import { toggleButtonStyles } from './sidebar/sidebarStyles';
 import DownloadButton from './DownloadButton';
-import CitySearch from './CitySearch';
-import { zoomFromBbox } from '../utils/geocode';
-import GlyphPicker from './GlyphPicker';
-import { MAP_COLOR_PRESETS } from './StreetMapCapture';
-import { ChevronDown } from 'lucide-react';
 import { renderPosterToBlob } from '../utils/renderPoster';
 import { useToast } from '@chakra-ui/react';
 import {
@@ -27,188 +29,26 @@ import {
     SliderTrack,
     SliderFilledTrack,
     SliderThumb,
-    Textarea,
     Grid,
     Switch,
     FormControl,
     FormLabel,
-    InputGroup,
-    InputRightElement,
-    Spinner,
-    Select,
-    List,
-    ListItem,
 } from '@chakra-ui/react';
 
-// Smart title/subtitle suggestions — context-aware based on date + location
-function generateSmartTitleSuggestions(location: string, date: Date): string[] {
-    const suggestions: string[] = [];
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    const loc = location.toLowerCase();
 
-    // Special dates
-    if (month === 2 && day === 14) {
-        suggestions.push("Be Mine Under These Stars", "My Valentine's Night Sky", "Love Written in the Stars");
-    } else if (month === 12 && (day === 24 || day === 25)) {
-        suggestions.push("A Christmas to Remember", "The Stars on Christmas Eve", "Our Christmas Night");
-    } else if (month === 1 && day === 1) {
-        suggestions.push("A New Chapter Begins", "The Stars of a New Year", "First Night of Forever");
-    } else if (month === 12 && day === 31) {
-        suggestions.push("One Last Dance Under the Stars", "New Year's Eve Sky", "The Last Stars of the Year");
-    }
-
-    // Location patterns
-    if (/beach|bay|coast|harbour|harbor|island|sea|ocean|gulf|cove|shore/.test(loc)) {
-        suggestions.push("Sands of Time", "Waves of Love", "The Sea Beneath the Stars");
-    }
-    if (/mountain|peak|hill|alps|ridge|summit|heights|highland/.test(loc)) {
-        suggestions.push("Summit of Our Love", "Stars Above the Mountains", "On Top of the World");
-    }
-    if (/paris|france/.test(loc)) {
-        suggestions.push("L'Amour Sous Les Étoiles", "City of Lights, City of Love");
-    }
-    if (/london/.test(loc)) {
-        suggestions.push("A London Night", "London Under the Stars");
-    }
-    if (/new york|brooklyn|manhattan/.test(loc)) {
-        suggestions.push("New York State of Mind", "City Lights & Starlight");
-    }
-    if (/sydney/.test(loc)) {
-        suggestions.push("Under Southern Stars", "Harbour Lights");
-    }
-    if (/rome|roma/.test(loc)) {
-        suggestions.push("All Roads Lead to You", "Roma Sotto le Stelle");
-    }
-    if (/venice|venezia/.test(loc)) {
-        suggestions.push("Floating Under the Stars", "A Venetian Night");
-    }
-    if (/tokyo/.test(loc)) {
-        suggestions.push("Tokyo Lights & Starlight", "A Night in Tokyo");
-    }
-    if (/garden|park|forest|woods|meadow/.test(loc)) {
-        suggestions.push("Among the Trees, Under the Stars");
-    }
-
-    // Season
-    if (month >= 3 && month <= 5) {
-        suggestions.push("Spring Stars", "Blooming Under the Stars");
-    } else if (month >= 6 && month <= 8) {
-        suggestions.push("Summer Nights", "The Warmest Night");
-    } else if (month >= 9 && month <= 11) {
-        suggestions.push("Autumn Stars", "Stars of the Golden Season");
-    } else {
-        suggestions.push("Winter Stars", "Stars in the Winter Sky");
-    }
-
-    // Generic evergreen
-    const generic = [
-        "Our Night Sky", "The Night We Met", "Where It All Began", "The Day You Were Born",
-        "Our Love Story", "Written in the Stars", "The Stars Aligned", "A Moment in Time",
-        "Our Special Night", "The Beginning of Forever", "Love Under the Stars",
-    ];
-    const seen = new Set(suggestions);
-    for (const g of generic) { if (!seen.has(g)) suggestions.push(g); }
-
-    return suggestions;
+export interface EditorSibling {
+    id: string;
+    name: string;
+    fulfillment_size: string;
 }
 
-function generateSmartSubtitleSuggestions(location: string, date: Date): string[] {
-    const suggestions: string[] = [];
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    const loc = location.toLowerCase();
-
-    if (month === 2 && day === 14) {
-        suggestions.push("Happy Valentine's Day, My Love", "Forever Yours", "With All My Heart");
-    } else if (month === 12 && (day === 24 || day === 25)) {
-        suggestions.push("Merry Christmas, My Love", "A Magical Christmas Night");
-    } else if (month === 1 && day === 1) {
-        suggestions.push("Here's to New Beginnings", "A Toast to Forever");
-    }
-    if (/beach|bay|coast|sea|ocean/.test(loc)) {
-        suggestions.push("Where the Water Meets the Stars", "Salt Air and Starlight");
-    }
-
-    const generic = [
-        "A Moment to Remember", "Under These Stars", "Our Story Began", "Forever and Always",
-        "The Day Everything Changed", "When Our Hearts Met", "The Start of Something Beautiful",
-        "Our Universe", "Love Under the Stars", "A Night to Remember",
-    ];
-    const seen = new Set(suggestions);
-    for (const g of generic) { if (!seen.has(g)) suggestions.push(g); }
-
-    return suggestions;
+interface SidebarProps {
+    designGroups?: DesignGroup[];
+    editorSiblings?: EditorSibling[];
+    onSiblingSwitch?: (siblingId: string) => void;
 }
 
-// Uploaded font cache — fetched once from /api/assets/fonts
-interface UploadedFont { id: string; name: string; roles: string[] }
-let _uploadedFonts: UploadedFont[] | null = null;
-async function getUploadedFonts(): Promise<UploadedFont[]> {
-    if (_uploadedFonts) return _uploadedFonts;
-    try {
-        const res = await fetch('/api/assets/fonts');
-        if (res.ok) { _uploadedFonts = await res.json(); return _uploadedFonts!; }
-    } catch { /* ignore */ }
-    return (_uploadedFonts = []);
-}
-
-const TITLE_FONTS = [
-    // Serifs
-    { label: 'Cormorant Garamond', value: 'Cormorant Garamond' },
-    { label: 'Playfair Display', value: 'Playfair Display' },
-    { label: 'Cinzel', value: 'Cinzel' },
-    // Sans-serif
-    { label: 'Mapped2', value: 'Mapped2' },
-    { label: 'Bebas Neue', value: 'Bebas Neue' },
-    { label: 'Oswald', value: 'Oswald' },
-    { label: 'Poppins', value: 'Poppins' },
-    { label: 'Nunito', value: 'Nunito' },
-    { label: 'Orbitron', value: 'Orbitron' },
-    // Script — featured
-    { label: 'Mapped Moment Script ❤', value: 'Mapped Moment Script' },
-    { label: 'Great Vibes', value: 'Great Vibes' },
-    { label: 'Sacramento', value: 'Sacramento' },
-    { label: 'Dancing Script', value: 'Dancing Script' },
-    { label: 'Pinyon Script', value: 'Pinyon Script' },
-    { label: 'Allura', value: 'Allura' },
-    { label: 'Petit Formal Script', value: 'Petit Formal Script' },
-    { label: 'Alex Brush', value: 'Alex Brush' },
-];
-
-const SUBTITLE_FONTS = [
-    { label: 'Mapped Moment Script ❤', value: 'Mapped Moment Script' },
-    { label: 'Mapped2', value: 'Mapped2' },
-    { label: 'Raleway', value: 'Raleway' },
-    { label: 'Poppins', value: 'Poppins' },
-    { label: 'Nunito', value: 'Nunito' },
-    { label: 'Oswald', value: 'Oswald' },
-    { label: 'Space Mono', value: 'Space Mono' },
-    { label: 'Playfair Display', value: 'Playfair Display' },
-    { label: 'Cinzel', value: 'Cinzel' },
-];
-
-const DETAILS_FONTS = [
-    { label: 'Mapped2', value: 'Mapped2' },
-    { label: 'Raleway', value: 'Raleway' },
-    { label: 'Lato', value: 'Lato' },
-    { label: 'Space Mono', value: 'Space Mono' },
-];
-
-const DEDICATION_FONTS = [
-    { label: 'Mapped Moment Script ❤', value: 'Mapped Moment Script' },
-    { label: 'Great Vibes', value: 'Great Vibes' },
-    { label: 'Sacramento', value: 'Sacramento' },
-    { label: 'Dancing Script', value: 'Dancing Script' },
-    { label: 'Pinyon Script', value: 'Pinyon Script' },
-    { label: 'Allura', value: 'Allura' },
-    { label: 'Petit Formal Script', value: 'Petit Formal Script' },
-    { label: 'Alex Brush', value: 'Alex Brush' },
-    { label: 'Playfair Display', value: 'Playfair Display' },
-    { label: 'Cinzel', value: 'Cinzel' },
-];
-
-const SidebarControls: React.FC = () => {
+const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings, onSiblingSwitch }) => {
     const {
         title, setTitle,
         subtitle, setSubtitle,
@@ -237,6 +77,8 @@ const SidebarControls: React.FC = () => {
         heartSize, setHeartSize,
         houseSize, setHouseSize,
         shapeOffsetY, setShapeOffsetY,
+        shapeOffsetX, setShapeOffsetX,
+        snapEnabled, setSnapEnabled,
         titleFontSize, setTitleFontSize,
         subtitleFontSize, setSubtitleFontSize,
         detailsFontSize, setDetailsFontSize,
@@ -246,7 +88,6 @@ const SidebarControls: React.FC = () => {
         subtitleOffsetY, setSubtitleOffsetY,
         detailsOffsetY, setDetailsOffsetY,
         dedicationOffsetY, setDedicationOffsetY,
-        previewZoom, setPreviewZoom,
         shapeOutlineWidth, setShapeOutlineWidth,
         showFrame, setShowFrame,
         frameInset, setFrameInset,
@@ -254,17 +95,24 @@ const SidebarControls: React.FC = () => {
         finelineWidth, setFinelineWidth,
         titleFont, setTitleFont,
         titleKerning, setTitleKerning,
+        titleAllCaps, setTitleAllCaps,
         subtitleFont, setSubtitleFont,
         subtitleKerning, setSubtitleKerning,
         detailsFont, setDetailsFont,
         detailsKerning, setDetailsKerning,
         dedicationFont, setDedicationFont,
         dedicationKerning, setDedicationKerning,
+        showNames, setShowNames,
+        namesFont, setNamesFont,
+        namesFontSize, setNamesFontSize,
+        namesOffsetY, setNamesOffsetY,
+        namesKerning, setNamesKerning,
         showDivider, setShowDivider,
         dividerLength, setDividerLength,
         dividerThickness, setDividerThickness,
         dividerOffsetY, setDividerOffsetY,
         selectedTemplate, setSelectedTemplate,
+        activeDesignGroupId, setActiveDesignGroupId,
         mapBackgroundImage, setMapBackgroundImage,
         borderStyle, setBorderStyle,
         setPosterColor, setTextColor, setStarColor, setMapInteriorColor,
@@ -281,7 +129,7 @@ const SidebarControls: React.FC = () => {
         mapStreetColor, setMapStreetColor,
         mapColorPreset, setMapColorPreset,
         setMapStyleUrl,
-        activeTypoField, setActiveTypoField,
+        activeTypoField, setActiveTypoField, typoFieldVersion,
         showLocationPin, setShowLocationPin,
         locationPinSize, setLocationPinSize,
         locationPinOffsetX, locationPinOffsetY,
@@ -292,80 +140,19 @@ const SidebarControls: React.FC = () => {
 
     const toast = useToast();
     const navigate = useNavigate();
-    const [locationQuery, setLocationQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const { slug: listingSlug } = useParams<{ slug?: string }>();
 
-    // When zoom changes with the location pin visible and offset from centre, zoom
-    // keeping the pin as the anchor — recenter mapCenterLng/Lat on the pin's
-    // geographic location so new tiles render with the pin at the visual centre.
-    //
-    // NOTE: after the drag-delta fix, mapCenterLng/Lat already equals the geographic
-    // location at the visual centre of the shape. The mapImageOffsetX/Y is only a
-    // temporary visual shift while new tiles load — it must NOT be subtracted from
-    // mapCenterLng again (that would double-correct and cause the location jump).
-    const handleZoomChange = (newZoom: number) => {
-        if (showLocationPin && (locationPinOffsetX !== 0 || locationPinOffsetY !== 0)) {
-            // Pin offset is from the visual centre, and mapCenterLng IS the visual centre.
-            // So pin's geographic position = mapCenterLng + pinOffset * scale.
-            const [rW, rH] = printSize.ratio.split('/').map(Number);
-            const svgHeight = 1200 / (rW / rH);
-            const baseMapRadius = Math.min(1200, svgHeight) * 0.4;
-            const mapRadius = maskShape === 'rect'
-                ? (1200 * 0.875) / 2
-                : baseMapRadius * (maskShape === 'circle' ? circleSize : maskShape === 'heart' ? heartSize : houseSize);
-            const imgSize = mapRadius * 3;
-            const svgToCanvas = 1200 / imgSize;
-            const worldWidthPx = 512 * Math.pow(2, mapZoom);
-            const degPerCanvasPx = 360 / worldWidthPx;
-            const pinLng = mapCenterLng + locationPinOffsetX * svgToCanvas * degPerCanvasPx;
-            const pinLat = mapCenterLat - locationPinOffsetY * svgToCanvas * degPerCanvasPx
-                * Math.cos(mapCenterLat * Math.PI / 180);
-            setMapCenterLng(pinLng);
-            setMapCenterLat(pinLat);
-            setLocationPinOffsetX(0);
-            setLocationPinOffsetY(0);
-        }
-        // mapCenterLng/Lat is already the visual centre — just apply the new zoom.
-        // No image-offset adjustment needed; new tiles will load at the correct centre.
-        setMapZoom(newZoom);
-    };
-
-    // Recent locations — persisted to localStorage, max 4 entries
-    const RECENT_KEY = 'poster_studio_recent_locations';
-    const [recentLocations, setRecentLocations] = useState<{ name: string; lat: number; lng: number }[]>(() => {
-        try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; }
-    });
-    const saveRecentLocation = (name: string, lat: number, lng: number) => {
-        const next = [{ name, lat, lng }, ...recentLocations.filter(r => r.name !== name)].slice(0, 4);
-        setRecentLocations(next);
-        try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* quota */ }
-    };
-    const [uploadedFonts, setUploadedFonts] = useState<UploadedFont[]>([]);
-
-    // Fetch uploaded fonts once on mount — merged into font pickers by role
-    useEffect(() => {
-        getUploadedFonts().then(setUploadedFonts);
+    // Derive a short, URL-safe slug from a design_group_id. Examples:
+    //   "sm001-design002" → "design002"
+    //   "sm001-design-night-we-met" → "design-night-we-met"
+    //   "design002" → "design002"
+    const designGroupSlug = useCallback((groupId: string) => {
+        const lower = groupId.toLowerCase();
+        const m = lower.match(/(?:^|-)(design[\w-]*)$/);
+        return m ? m[1] : lower;
     }, []);
-
-    // Helpers to merge uploaded fonts into a role's list (dedup by value)
-    const fontsForRole = (base: { label: string; value: string }[], role: string) => {
-        const extra = uploadedFonts.filter(f => f.roles.includes(role)).map(f => ({ label: f.name, value: f.name }));
-        const seen = new Set(base.map(f => f.value));
-        return [...base, ...extra.filter(f => !seen.has(f.value))];
-    };
-
-    // Smart suggestions — context-aware based on location + date
-    const titleSuggestions = useMemo(() => generateSmartTitleSuggestions(location, date), [location, date]);
-    const subtitleSuggestions = useMemo(() => generateSmartSubtitleSuggestions(location, date), [location, date]);
-
-    const [isSearching, setIsSearching] = useState(false);
-    const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
-    const [showSubtitleSuggestions, setShowSubtitleSuggestions] = useState(false);
-    const [showAllTitleSuggestions, setShowAllTitleSuggestions] = useState(false);
-    const [showAllSubtitleSuggestions, setShowAllSubtitleSuggestions] = useState(false);
-
     // Typography tab — syncs when user clicks a text element in the poster
-    const [typoTab, setTypoTab] = useState<'title' | 'subtitle' | 'details' | 'dedication'>('title');
+    const [typoTab, setTypoTab] = useState<'title' | 'subtitle' | 'details' | 'dedication' | 'names'>('title');
     const typoButtonRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
@@ -379,86 +166,9 @@ const SidebarControls: React.FC = () => {
                 }
             }
         }, 50);
-    }, [activeTypoField]);
-
-    // Close suggestions when clicking outside
-    useEffect(() => {
-        const handleClickOutside = () => {
-            // This is handled by onBlur with delay, but global click listener can be a backup
-            // For now, relying on onBlur with delay
-        };
-        document.addEventListener('click', handleClickOutside);
-        return () => document.removeEventListener('click', handleClickOutside);
-    }, []);
-
-    const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newDate = new Date(e.target.value);
-        if (!isNaN(newDate.getTime())) {
-            setDate(newDate);
-        }
-    };
-
-    useEffect(() => {
-        const delayDebounceFn = setTimeout(async () => {
-            if (locationQuery.length > 2) {
-                setIsSearching(true);
-                try {
-                    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationQuery)}`);
-                    const data = await response.json();
-                    setSearchResults(data);
-                } catch (error) {
-                    console.error("Location search failed", error);
-                } finally {
-                    setIsSearching(false);
-                }
-            } else {
-                setSearchResults([]);
-            }
-        }, 500);
-
-        return () => clearTimeout(delayDebounceFn);
-    }, [locationQuery]);
-
-    const selectLocation = (result: any) => {
-        setLocation(result.display_name.split(',')[0]);
-        setLat(parseFloat(result.lat));
-        setLng(parseFloat(result.lon));
-        setSearchResults([]);
-        setLocationQuery('');
-    };
-
-    const inputStyles = {
-        bg: "white",
-        border: "1px solid",
-        borderColor: "gray.300",
-        _focus: { borderColor: "gray.900", boxShadow: "none", bg: "white" },
-        _hover: { borderColor: "gray.400" },
-        borderRadius: "md",
-        fontSize: "sm",
-        color: "gray.900"
-    };
-
-    const labelStyles = {
-        fontSize: "xs",
-        fontWeight: "600",
-        color: "gray.700",
-        mb: 2
-    };
-
-    const toggleButtonStyles = (isActive: boolean) => ({
-        size: "sm",
-        flex: 1,
-        variant: "outline",
-        borderColor: isActive ? "gray.900" : "gray.300",
-        color: isActive ? "white" : "gray.700",
-        bg: isActive ? "gray.900" : "white",
-        _hover: {
-            bg: isActive ? "gray.800" : "gray.50",
-            borderColor: isActive ? "gray.800" : "gray.400"
-        },
-        fontWeight: isActive ? "600" : "500",
-        fontSize: "sm"
-    });
+    // typoFieldVersion ensures this fires even when clicking the same element twice
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [typoFieldVersion]);
 
     return (
         <Box w="full" h="full" bg="white" display="flex" flexDirection="column">
@@ -475,8 +185,120 @@ const SidebarControls: React.FC = () => {
 
             <Box flex="1" overflowY="auto">
 
-                {/* ── Templates (always first) ─────────────────────────── */}
-                <Accordion allowToggle allowMultiple defaultIndex={[0]}>
+                {/* ── Designs (listing mode) ───────────────────────────── */}
+                {designGroups && designGroups.length > 0 && (() => {
+                    const API = import.meta.env.VITE_API_URL || '';
+                    // Use the stored active group ID — set explicitly when user clicks a design.
+                    // Falls back to first group on initial load.
+                    const activeGroupId = (activeDesignGroupId && designGroups.some(g => g.id === activeDesignGroupId))
+                        ? activeDesignGroupId
+                        : designGroups[0].id;
+                    const activeGroup = designGroups.find(g => g.id === activeGroupId) ?? designGroups[0];
+
+                    return (
+                        <Accordion allowToggle allowMultiple defaultIndex={[0, 1]}>
+                            {/* Design selector — one card per design group */}
+                            <AccordionItem border="none" borderBottom="1px" borderColor="gray.200">
+                                <h2>
+                                    <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
+                                        <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
+                                            Design
+                                        </Box>
+                                        <AccordionIcon color="gray.400" />
+                                    </AccordionButton>
+                                </h2>
+                                <AccordionPanel pb={4} px={4}>
+                                    <Box display="grid" gridTemplateColumns={`repeat(${Math.min(designGroups.length, 3)}, 1fr)`} gap={3}>
+                                        {designGroups.map((group) => {
+                                            // Always use 8x10 as the thumbnail representative — consistent 4:5 ratio across all designs
+                                            const thumbSize = group.sizes.find(sz => sz.fulfillment_size === '8x10') ?? group.sizes[0];
+                                            const isActive = group.id === activeGroupId;
+                                            return (
+                                                <Box
+                                                    key={group.id}
+                                                    cursor="pointer"
+                                                    borderRadius="lg"
+                                                    overflow="hidden"
+                                                    border="2px solid"
+                                                    borderColor={isActive ? 'gray.900' : 'gray.200'}
+                                                    _hover={{ borderColor: 'gray.500' }}
+                                                    transition="border-color 0.15s"
+                                                    onClick={() => {
+                                                        // Set active group immediately so border highlights before fetch completes
+                                                        setActiveDesignGroupId(group.id);
+                                                        // Load the matching size for this group (prefer current printSize, fallback to first)
+                                                        const matchingSize = group.sizes.find(sz => {
+                                                            const so = PRINT_SIZE_MAP[sz.fulfillment_size || ''] || PRINT_SIZE_MAP['8x10'];
+                                                            return so.label === printSize.label;
+                                                        }) ?? group.sizes[0];
+                                                        if (matchingSize) fetchAndApplyTemplate(matchingSize.id, { designGroupId: group.id });
+                                                        // Reflect the active design in the URL (replace, don't push — back button stays useful)
+                                                        if (listingSlug) {
+                                                            const ds = designGroupSlug(group.id);
+                                                            navigate(`/l/${listingSlug}/${ds}`, { replace: true });
+                                                            trackEvent('design_select', { slug: listingSlug, designGroupId: group.id });
+                                                        }
+                                                    }}
+                                                >
+                                                    <Box
+                                                        as="img"
+                                                        src={thumbSize?.thumbnail_path
+                                                            ? `${API}${thumbSize.thumbnail_path}?v=3`
+                                                            : `${API}/api/templates/${thumbSize?.id ?? group.sizes[0]?.id}/thumbnail`}
+                                                        alt={group.name}
+                                                        w="100%"
+                                                        display="block"
+                                                        style={{ aspectRatio: '4/5', objectFit: 'cover' }}
+                                                    />
+                                                    <Box px={1.5} py={1.5} bg="white">
+                                                        <Text fontSize="11px" fontWeight="600" color={isActive ? 'gray.900' : 'gray.500'} textAlign="center">
+                                                            {group.name}
+                                                        </Text>
+                                                    </Box>
+                                                </Box>
+                                            );
+                                        })}
+                                    </Box>
+                                </AccordionPanel>
+                            </AccordionItem>
+
+                            {/* Size selector — sizes for active design group */}
+                            <AccordionItem border="none" borderBottom="1px" borderColor="gray.200">
+                                <h2>
+                                    <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
+                                        <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
+                                            Size
+                                        </Box>
+                                        <AccordionIcon color="gray.400" />
+                                    </AccordionButton>
+                                </h2>
+                                <AccordionPanel pb={4} px={6}>
+                                    <Grid templateColumns="repeat(2, 1fr)" gap={3}>
+                                        {activeGroup.sizes.map((sz) => {
+                                            const sizeObj = PRINT_SIZE_MAP[sz.fulfillment_size || ''] || PRINT_SIZE_MAP['8x10'];
+                                            const isActive = printSize.label === sizeObj.label;
+                                            return (
+                                                <Button
+                                                    key={sz.id}
+                                                    onClick={() => fetchAndApplyTemplate(sz.id, { preserveText: true, designGroupId: activeGroupId })}
+                                                    {...toggleButtonStyles(isActive)}
+                                                    flexDirection="column"
+                                                    h="auto"
+                                                    py={2}
+                                                >
+                                                    <Text fontSize="sm">{sizeObj.label}</Text>
+                                                </Button>
+                                            );
+                                        })}
+                                    </Grid>
+                                </AccordionPanel>
+                            </AccordionItem>
+                        </Accordion>
+                    );
+                })()}
+
+                {/* ── Templates (hidden in listing mode) ──────────────── */}
+                {!(designGroups && designGroups.length > 0) && <Accordion allowToggle allowMultiple defaultIndex={[0]}>
                     <AccordionItem border="none" borderBottom="1px" borderColor="gray.200">
                         <h2>
                             <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
@@ -594,10 +416,10 @@ const SidebarControls: React.FC = () => {
                             </Grid>
                         </AccordionPanel>
                     </AccordionItem>
-                </Accordion>
+                </Accordion>}
 
-                {/* ── Poster Type Toggle ──────────────────────────────── */}
-                <Box px={6} py={4} borderBottom="1px" borderColor="gray.200">
+                {/* ── Poster Type Toggle — hidden in listing/customer mode ── */}
+                {!(designGroups && designGroups.length > 0) && <Box px={6} py={4} borderBottom="1px" borderColor="gray.200">
                     <HStack spacing={1}>
                         <Button size="sm" flex={1}
                             onClick={() => { setPosterType('starmap'); trackEvent('poster_type_change', { type: 'starmap' }); }}
@@ -630,575 +452,27 @@ const SidebarControls: React.FC = () => {
                             ◈ COLORED MAP
                         </Button>
                     </HStack>
-                </Box>
+                </Box>}
 
                 {/* ── Street/Colored Map Controls ──────────────────────── */}
-                {posterType !== 'starmap' && (
-                    <Box borderBottom="1px" borderColor="gray.200">
-                        <Accordion allowToggle defaultIndex={[0]} allowMultiple>
-                            <AccordionItem border="none" borderBottom="1px" borderColor="gray.100">
-                                <h2>
-                                    <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
-                                        <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
-                                            Location
-                                        </Box>
-                                        <AccordionIcon color="gray.400" />
-                                    </AccordionButton>
-                                </h2>
-                                <AccordionPanel pb={6} px={6}>
-                                    <VStack spacing={4} align="stretch">
-                                        <FormControl>
-                                            <HStack justify="space-between" mb={2}>
-                                                <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={0}>
-                                                    Location
-                                                </FormLabel>
-                                                <Button
-                                                    size="xs" variant="ghost" color="gray.500" fontSize="10px"
-                                                    px={2} h="auto" py={1}
-                                                    _hover={{ color: 'gray.900', bg: 'gray.50' }}
-                                                    title="Use my current location"
-                                                    onClick={() => {
-                                                        if (!navigator.geolocation) {
-                                                            toast({ title: 'Geolocation not supported', status: 'warning', duration: 3000, isClosable: true });
-                                                            return;
-                                                        }
-                                                        navigator.geolocation.getCurrentPosition(
-                                                            async (pos) => {
-                                                                const { latitude: lat, longitude: lng } = pos.coords;
-                                                                setMapCenterLat(lat);
-                                                                setMapCenterLng(lng);
-                                                                setLat(lat);
-                                                                setLng(lng);
-                                                                // Reverse-geocode to get city name
-                                                                try {
-                                                                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-                                                                    const data = await res.json();
-                                                                    const city = data.address?.city || data.address?.town || data.address?.village || data.address?.county || 'My Location';
-                                                                    const country = data.address?.country_code?.toUpperCase() || '';
-                                                                    setMapCity(city);
-                                                                    setLocation(`${city}${country ? `, ${country}` : ''}`);
-                                                                    trackEvent('city_search', { city, method: 'geolocation' });
-                                                                } catch {
-                                                                    setMapCity('My Location');
-                                                                }
-                                                            },
-                                                            () => toast({ title: 'Location access denied', description: 'Allow location access in your browser', status: 'error', duration: 4000, isClosable: true })
-                                                        );
-                                                    }}
-                                                >
-                                                    ◎ My location
-                                                </Button>
-                                            </HStack>
-                                            <CitySearch
-                                                value={mapCity}
-                                                onSelect={(r) => {
-                                                    setMapCity(r.name);
-                                                    setMapCenterLat(r.lat);
-                                                    setMapCenterLng(r.lng);
-                                                    // Auto-zoom based on result bounding box:
-                                                    // cities → ~11–12, neighbourhoods → ~13–14, addresses → ~15–16
-                                                    if (r.boundingbox) setMapZoom(zoomFromBbox(r.boundingbox));
-                                                    // Also set star-map location fields for text display
-                                                    setLocation(r.name + (r.state ? `, ${r.state}` : ''));
-                                                    setLat(r.lat);
-                                                    setLng(r.lng);
-                                                    saveRecentLocation(r.name, r.lat, r.lng);
-                                                    trackEvent('city_search', { city: r.name, country: r.country });
-                                                }}
-                                                onError={(msg) => toast({ title: 'Location search failed', description: msg, status: 'error', duration: 4000, isClosable: true })}
-                                            />
-                                            {/* Recent locations quick-pick */}
-                                            {recentLocations.length > 0 && (
-                                                <Box mt={2}>
-                                                    <Text fontSize="10px" color="gray.400" fontWeight="600" mb={1} textTransform="uppercase" letterSpacing="0.08em">Recent</Text>
-                                                    <HStack spacing={1} flexWrap="wrap">
-                                                        {recentLocations.map((r) => (
-                                                            <Button
-                                                                key={r.name}
-                                                                size="xs"
-                                                                variant="outline"
-                                                                borderColor="gray.300"
-                                                                bg="white"
-                                                                color="gray.600"
-                                                                fontSize="10px"
-                                                                fontWeight="500"
-                                                                borderRadius="full"
-                                                                px={2}
-                                                                _hover={{ borderColor: 'gray.600', color: 'gray.900' }}
-                                                                onClick={() => {
-                                                                    setMapCity(r.name);
-                                                                    setMapCenterLat(r.lat);
-                                                                    setMapCenterLng(r.lng);
-                                                                    setLocation(r.name);
-                                                                    setLat(r.lat);
-                                                                    setLng(r.lng);
-                                                                }}
-                                                            >
-                                                                {r.name}
-                                                            </Button>
-                                                        ))}
-                                                    </HStack>
-                                                </Box>
-                                            )}
-                                        </FormControl>
-                                        <HStack spacing={3}>
-                                            <FormControl>
-                                                <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>Lat</FormLabel>
-                                                <Input
-                                                    size="sm"
-                                                    type="number"
-                                                    step="0.0001"
-                                                    value={mapCenterLat.toFixed(4)}
-                                                    onChange={(e) => setMapCenterLat(parseFloat(e.target.value) || 0)}
-                                                    bg="white" border="1px solid" borderColor="gray.300"
-                                                    _focus={{ borderColor: 'gray.900', boxShadow: 'none' }}
-                                                    borderRadius="md" fontSize="sm"
-                                                />
-                                            </FormControl>
-                                            <FormControl>
-                                                <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>Lng</FormLabel>
-                                                <Input
-                                                    size="sm"
-                                                    type="number"
-                                                    step="0.0001"
-                                                    value={mapCenterLng.toFixed(4)}
-                                                    onChange={(e) => setMapCenterLng(parseFloat(e.target.value) || 0)}
-                                                    bg="white" border="1px solid" borderColor="gray.300"
-                                                    _focus={{ borderColor: 'gray.900', boxShadow: 'none' }}
-                                                    borderRadius="md" fontSize="sm"
-                                                />
-                                            </FormControl>
-                                        </HStack>
-                                        <FormControl>
-                                            <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>
-                                                Zoom: {mapZoom.toFixed(1)}
-                                            </FormLabel>
-                                            <Slider value={mapZoom} min={5} max={20} step={0.1} onChange={handleZoomChange} aria-label="map-zoom">
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="1px" />
-                                            </Slider>
-                                            {/* Zoom preset quick-buttons */}
-                                            <HStack spacing={1} mt={2}>
-                                                {([
-                                                    { label: 'Region', zoom: 9 },
-                                                    { label: 'City', zoom: 12 },
-                                                    { label: 'District', zoom: 14 },
-                                                    { label: 'Street', zoom: 16 },
-                                                ] as const).map(({ label, zoom }) => (
-                                                    <Button key={label} size="xs" flex={1}
-                                                        variant="outline"
-                                                        borderColor={Math.abs(mapZoom - zoom) < 0.6 ? 'gray.900' : 'gray.300'}
-                                                        bg={Math.abs(mapZoom - zoom) < 0.6 ? 'gray.900' : 'white'}
-                                                        color={Math.abs(mapZoom - zoom) < 0.6 ? 'white' : 'gray.600'}
-                                                        fontWeight="500" fontSize="10px"
-                                                        onClick={() => handleZoomChange(zoom)}
-                                                        _hover={{ borderColor: 'gray.600', bg: 'gray.50', color: 'gray.900' }}
-                                                    >
-                                                        {label}
-                                                    </Button>
-                                                ))}
-                                            </HStack>
-                                        </FormControl>
-                                        <FormControl>
-                                            <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>
-                                                Rotation: {Math.round(mapBearing)}°
-                                            </FormLabel>
-                                            <Slider value={mapBearing} min={0} max={360} step={1} onChange={setMapBearing} aria-label="map-bearing">
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="1px" />
-                                            </Slider>
-                                        </FormControl>
-                                        <HStack justify="space-between">
-                                            <Text fontSize="xs" fontWeight="600" color="gray.700">Location Pin</Text>
-                                            <Switch size="sm" isChecked={showLocationPin} onChange={(e) => setShowLocationPin(e.target.checked)}
-                                                sx={{ '.chakra-switch__track': { bg: 'gray.300' }, '.chakra-switch__track[data-checked]': { bg: 'gray.900' } }} />
-                                        </HStack>
-                                        {showLocationPin && (
-                                            <FormControl>
-                                                <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>
-                                                    Pin Size: {locationPinSize}px
-                                                </FormLabel>
-                                                <Slider value={locationPinSize} min={10} max={80} step={1} onChange={setLocationPinSize} aria-label="pin-size">
-                                                    <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                    <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="1px" />
-                                                </Slider>
-                                            </FormControl>
-                                        )}
-                                    </VStack>
-                                </AccordionPanel>
-                            </AccordionItem>
+                {posterType !== 'starmap' && <MapControlsPanel />}
 
-                            {/* 2-color presets — only shown in Street Map mode (not colored map) */}
-                            {posterType === 'streetmap' && <AccordionItem border="none">
-                                <h2>
-                                    <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
-                                        <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
-                                            Map Colors
-                                        </Box>
-                                        <AccordionIcon color="gray.400" />
-                                    </AccordionButton>
-                                </h2>
-                                <AccordionPanel pb={6} px={6}>
-                                    <VStack spacing={4} align="stretch">
-                                        {/* Color presets — one-click coordinated color themes */}
-                                        <Grid templateColumns="repeat(4, 1fr)" gap={2}>
-                                            {MAP_COLOR_PRESETS.map((preset) => (
-                                                <Box
-                                                    key={preset.id}
-                                                    as="button"
-                                                    onClick={() => {
-                                                        setMapColorPreset(preset.id);
-                                                        setMapBgColor(preset.bgColor);
-                                                        setMapStreetColor(preset.streetColor);
-                                                        // Realistic uses a prebuilt style URL; all others use 2-color custom style
-                                                        setMapStyleUrl(preset.styleUrl ?? null);
-                                                        if (!preset.styleUrl && !preset.customStyle) {
-                                                            setPosterColor(preset.bgColor);
-                                                            setTextColor(preset.id === 'classic' ? '#1a1a1a' : '#ffffff');
-                                                        } else if (preset.customStyle) {
-                                                            // Custom style (Design 2): light poster bg, dark text
-                                                            setPosterColor(preset.bgColor);
-                                                            setTextColor('#111111');
-                                                        } else {
-                                                            // Realistic: light poster bg, dark text to complement the colourful map
-                                                            setPosterColor('#ffffff');
-                                                            setTextColor('#1a1a1a');
-                                                        }
-                                                    }}
-                                                    borderRadius="md"
-                                                    border="2px solid"
-                                                    borderColor={mapColorPreset === preset.id ? 'blue.400' : 'gray.200'}
-                                                    overflow="hidden"
-                                                    h="44px"
-                                                    position="relative"
-                                                    title={preset.name}
-                                                    _hover={{ borderColor: 'gray.400' }}
-                                                    transition="all 0.15s"
-                                                >
-                                                    {preset.styleUrl ? (
-                                                        // Realistic preset — show a multicolour gradient swatch
-                                                        <Box
-                                                            h="28px"
-                                                            style={{ background: 'linear-gradient(135deg, #AECFE2 0%, #d8e8c8 30%, #f8f4f0 50%, #fea 70%, #fc8 100%)' }}
-                                                        />
-                                                    ) : (
-                                                        <Box h="28px" bg={preset.bgColor} />
-                                                    )}
-                                                    <Box h="16px" bg="white" display="flex" alignItems="center" justifyContent="center">
-                                                        <Text fontSize="7px" fontWeight="700" color="gray.600">{preset.name.toUpperCase()}</Text>
-                                                    </Box>
-                                                </Box>
-                                            ))}
-                                        </Grid>
-                                        <Text fontSize="xs" color="gray.500">Fine-tune colors in the Color section below.</Text>
-                                    </VStack>
-                                </AccordionPanel>
-                            </AccordionItem>}
-                        </Accordion>
-                    </Box>
-                )}
+
 
                 <Accordion allowToggle defaultIndex={[0]} allowMultiple>
-                    {/* Moment Section — only shown for star maps */}
+                    {/* Location and Text Section — only shown for star maps */}
                     {posterType === 'starmap' && (
                     <AccordionItem border="none" borderBottom="1px" borderColor="gray.200">
                         <h2>
                             <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
                                 <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
-                                    Moment
+                                    Location and Text
                                 </Box>
                                 <AccordionIcon color="gray.400" />
                             </AccordionButton>
                         </h2>
                         <AccordionPanel pb={6} px={6}>
-                            <VStack spacing={5} align="stretch">
-                                {/* Location Search */}
-                                <FormControl>
-                                    <FormLabel {...labelStyles}>Location</FormLabel>
-                                    <Box position="relative">
-                                        <InputGroup>
-                                            <Input
-                                                value={locationQuery}
-                                                onChange={(e) => setLocationQuery(e.target.value)}
-                                                placeholder="Search location…"
-                                                {...inputStyles}
-                                            />
-                                            {isSearching && <InputRightElement><Spinner size="sm" color="gray.600" /></InputRightElement>}
-                                        </InputGroup>
-                                        {searchResults.length > 0 && (
-                                            <Box
-                                                position="absolute"
-                                                zIndex={10}
-                                                w="full"
-                                                mt={1}
-                                                bg="white"
-                                                border="1px"
-                                                borderColor="gray.300"
-                                                borderRadius="md"
-                                                boxShadow="lg"
-                                                maxH="48"
-                                                overflowY="auto"
-                                            >
-                                                {searchResults.map((result, index) => (
-                                                    <Box
-                                                        key={index}
-                                                        as="button"
-                                                        w="full"
-                                                        textAlign="left"
-                                                        px={4}
-                                                        py={2}
-                                                        _hover={{ bg: 'gray.100' }}
-                                                        fontSize="sm"
-                                                        onClick={() => selectLocation(result)}
-                                                        transition="all 0.15s"
-                                                    >
-                                                        {result.display_name}
-                                                    </Box>
-                                                ))}
-                                            </Box>
-                                        )}
-                                    </Box>
-                                </FormControl>
-
-                                <HStack spacing={4}>
-                                    <FormControl>
-                                        <FormLabel {...labelStyles}>Date</FormLabel>
-                                        <Input
-                                            type="date"
-                                            value={format(date, 'yyyy-MM-dd')}
-                                            onChange={handleDateChange}
-                                            {...inputStyles}
-                                        />
-                                    </FormControl>
-                                    <FormControl>
-                                        <FormLabel {...labelStyles}>Time</FormLabel>
-                                        <Input
-                                            type="time"
-                                            value={time}
-                                            onChange={(e) => setTime(e.target.value)}
-                                            {...inputStyles}
-                                        />
-                                    </FormControl>
-                                </HStack>
-
-                                <FormControl>
-                                    <FormLabel {...labelStyles}>Title</FormLabel>
-                                    <Box position="relative">
-                                        <InputGroup>
-                                            <Input
-                                                value={customText.title || title}
-                                                onChange={(e) => {
-                                                    setTitle(e.target.value);
-                                                    setCustomText('title', e.target.value);
-                                                    setShowAllTitleSuggestions(false);
-                                                    setShowTitleSuggestions(true);
-                                                }}
-                                                onFocus={() => setShowTitleSuggestions(true)}
-                                                onBlur={() => setTimeout(() => setShowTitleSuggestions(false), 200)}
-                                                placeholder="Our Night Sky"
-                                                name="starmap-title-custom"
-                                                autoComplete="off"
-                                                {...inputStyles}
-                                            />
-                                            <InputRightElement>
-                                                <Box
-                                                    as="button"
-                                                    onClick={() => {
-                                                        setShowAllTitleSuggestions(true);
-                                                        setShowTitleSuggestions(!showTitleSuggestions);
-                                                    }}
-                                                    color="gray.500"
-                                                    _hover={{ color: "gray.700" }}
-                                                >
-                                                    <ChevronDown size={16} />
-                                                </Box>
-                                            </InputRightElement>
-                                        </InputGroup>
-                                        {showTitleSuggestions && (
-                                            <List
-                                                position="absolute"
-                                                zIndex={10}
-                                                w="full"
-                                                mt={1}
-                                                bg="white"
-                                                border="1px"
-                                                borderColor="gray.300"
-                                                borderRadius="md"
-                                                boxShadow="lg"
-                                                maxH="48"
-                                                overflowY="auto"
-                                            >
-                                                {(showAllTitleSuggestions ? titleSuggestions : titleSuggestions.filter(s => s.toLowerCase().includes((customText.title || title).toLowerCase()))).map((suggestion, index) => (
-                                                    <ListItem
-                                                        key={index}
-                                                        px={4}
-                                                        py={2}
-                                                        _hover={{ bg: 'gray.100', cursor: 'pointer' }}
-                                                        fontSize="sm"
-                                                        onMouseDown={() => {
-                                                            setTitle(suggestion);
-                                                            setCustomText('title', suggestion);
-                                                            setShowTitleSuggestions(false);
-                                                        }}
-                                                    >
-                                                        {suggestion}
-                                                    </ListItem>
-                                                ))}
-                                            </List>
-                                        )}
-                                    </Box>
-                                </FormControl>
-                                <FormControl>
-                                    <FormLabel {...labelStyles}>Subtitle</FormLabel>
-                                    <Box position="relative">
-                                        <InputGroup>
-                                            <Input
-                                                value={customText.subtitle || subtitle}
-                                                onChange={(e) => {
-                                                    setSubtitle(e.target.value);
-                                                    setCustomText('subtitle', e.target.value);
-                                                    setShowAllSubtitleSuggestions(false);
-                                                    setShowSubtitleSuggestions(true);
-                                                }}
-                                                onFocus={() => setShowSubtitleSuggestions(true)}
-                                                onBlur={() => setTimeout(() => setShowSubtitleSuggestions(false), 200)}
-                                                placeholder="A Moment to Remember"
-                                                name="starmap-subtitle-custom"
-                                                autoComplete="off"
-                                                {...inputStyles}
-                                            />
-                                            <InputRightElement>
-                                                <Box
-                                                    as="button"
-                                                    onClick={() => {
-                                                        setShowAllSubtitleSuggestions(true);
-                                                        setShowSubtitleSuggestions(!showSubtitleSuggestions);
-                                                    }}
-                                                    color="gray.500"
-                                                    _hover={{ color: "gray.700" }}
-                                                >
-                                                    <ChevronDown size={16} />
-                                                </Box>
-                                            </InputRightElement>
-                                        </InputGroup>
-                                        {showSubtitleSuggestions && (
-                                            <List
-                                                position="absolute"
-                                                zIndex={10}
-                                                w="full"
-                                                mt={1}
-                                                bg="white"
-                                                border="1px"
-                                                borderColor="gray.300"
-                                                borderRadius="md"
-                                                boxShadow="lg"
-                                                maxH="48"
-                                                overflowY="auto"
-                                            >
-                                                {(showAllSubtitleSuggestions ? subtitleSuggestions : subtitleSuggestions.filter(s => s.toLowerCase().includes((customText.subtitle || subtitle).toLowerCase()))).map((suggestion, index) => (
-                                                    <ListItem
-                                                        key={index}
-                                                        px={4}
-                                                        py={2}
-                                                        _hover={{ bg: 'gray.100', cursor: 'pointer' }}
-                                                        fontSize="sm"
-                                                        onMouseDown={() => {
-                                                            setSubtitle(suggestion);
-                                                            setCustomText('subtitle', suggestion);
-                                                            setShowSubtitleSuggestions(false);
-                                                        }}
-                                                    >
-                                                        {suggestion}
-                                                    </ListItem>
-                                                ))}
-                                            </List>
-                                        )}
-                                    </Box>
-                                </FormControl>
-
-                                <Box>
-                                    <FormLabel {...labelStyles}>Visibility</FormLabel>
-                                    <HStack spacing={2}>
-                                        <Button
-                                            onClick={() => setShowDate(!showDate)}
-                                            {...toggleButtonStyles(showDate)}
-                                        >
-                                            Date
-                                        </Button>
-                                        <Button
-                                            onClick={() => setShowLocation(!showLocation)}
-                                            {...toggleButtonStyles(showLocation)}
-                                        >
-                                            Location
-                                        </Button>
-                                        <Button
-                                            onClick={() => setShowCoords(!showCoords)}
-                                            {...toggleButtonStyles(showCoords)}
-                                        >
-                                            Coords
-                                        </Button>
-                                    </HStack>
-                                </Box>
-
-
-
-                                <Accordion allowToggle border="none">
-                                    <AccordionItem border="none">
-                                        <AccordionButton px={0} _hover={{ bg: 'transparent' }}>
-                                            <Box flex="1" textAlign="left" fontSize="xs" color="gray.600" fontWeight="600">
-                                                Advanced Text Options
-                                            </Box>
-                                            <AccordionIcon color="gray.500" />
-                                        </AccordionButton>
-                                        <AccordionPanel pb={4} px={0}>
-                                            <VStack spacing={4}>
-                                                <FormControl>
-                                                    <FormLabel {...labelStyles}>Custom Date Text</FormLabel>
-                                                    <Input
-                                                        value={customText.date}
-                                                        onChange={(e) => setCustomText('date', e.target.value)}
-                                                        placeholder={format(date, 'MMMM do, yyyy').toUpperCase()}
-                                                        name="custom-date-text-unique"
-                                                        autoComplete="new-password"
-                                                        {...inputStyles}
-                                                    />
-                                                </FormControl>
-                                                <FormControl>
-                                                    <FormLabel {...labelStyles}>Custom Location Text</FormLabel>
-                                                    <Input
-                                                        value={customText.location}
-                                                        onChange={(e) => setCustomText('location', e.target.value)}
-                                                        placeholder={location ? location.toUpperCase() : 'Location'}
-                                                        autoComplete="new-password"
-                                                        {...inputStyles}
-                                                    />
-                                                </FormControl>
-                                                <FormControl>
-                                                    <FormLabel {...labelStyles}>Custom Coordinates</FormLabel>
-                                                    <Input
-                                                        value={customText.coords}
-                                                        onChange={(e) => setCustomText('coords', e.target.value)}
-                                                        placeholder="0.0000° N, 0.0000° E"
-                                                        autoComplete="new-password"
-                                                        {...inputStyles}
-                                                    />
-                                                </FormControl>
-                                                <FormControl>
-                                                    <FormLabel {...labelStyles}>Personal Dedication</FormLabel>
-                                                    <Textarea
-                                                        value={customText.dedication}
-                                                        onChange={(e) => setCustomText('dedication', e.target.value)}
-                                                        placeholder="Add a special message at the bottom..."
-                                                        {...inputStyles}
-                                                        resize="none"
-                                                        rows={3}
-                                                    />
-                                                </FormControl>
-                                            </VStack>
-                                        </AccordionPanel>
-                                    </AccordionItem>
-                                </Accordion>
-                            </VStack>
+                            <TextContentPanel />
                         </AccordionPanel>
                     </AccordionItem>
                     )}
@@ -1219,250 +493,50 @@ const SidebarControls: React.FC = () => {
                             </AccordionButton>
                         </h2>
                         <AccordionPanel pb={6} px={6}>
-                            <VStack spacing={4} align="stretch">
-                                {/* Tab strip */}
-                                <HStack spacing={1}>
-                                    {(['title', 'subtitle', 'details', 'dedication'] as const).map((tab) => (
-                                        <Button
-                                            key={tab}
-                                            size="xs"
-                                            flex={1}
-                                            onClick={() => setTypoTab(tab)}
-                                            bg={typoTab === tab ? 'gray.900' : 'white'}
-                                            color={typoTab === tab ? 'white' : 'gray.600'}
-                                            border="1px solid"
-                                            borderColor={typoTab === tab ? 'gray.900' : 'gray.300'}
-                                            _hover={{ bg: typoTab === tab ? 'gray.800' : 'gray.50' }}
-                                            borderRadius="md"
-                                            textTransform="capitalize"
-                                        >
-                                            {tab}
-                                        </Button>
-                                    ))}
-                                </HStack>
-
-                                {/* Title tab */}
-                                {typoTab === 'title' && (
-                                    <VStack spacing={3}>
-                                        <FormControl>
-                                            <FormLabel {...labelStyles}>Font Family</FormLabel>
-                                            <Select size="sm" value={titleFont} onChange={(e) => setTitleFont(e.target.value)} bg="white" borderColor="gray.300" _hover={{ borderColor: 'gray.400' }}>
-                                                {fontsForRole(TITLE_FONTS, 'title').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                                            </Select>
-                                        </FormControl>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Font Size</Text>
-                                                <Text fontSize="xs" color="gray.500">{titleFontSize}px</Text>
-                                            </HStack>
-                                            <Slider value={titleFontSize} min={24} max={300} step={1} onChange={setTitleFontSize}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Kerning</Text>
-                                                <Text fontSize="xs" color="gray.500">{titleKerning.toFixed(2)}em</Text>
-                                            </HStack>
-                                            <Slider value={titleKerning} min={-0.1} max={0.5} step={0.01} onChange={setTitleKerning}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Offset</Text>
-                                                <Text fontSize="xs" color="gray.500">{titleOffsetY}px</Text>
-                                            </HStack>
-                                            <Slider value={titleOffsetY} min={-100} max={100} step={1} onChange={setTitleOffsetY}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        {titleFont === 'Mapped Moment Script' && <GlyphPicker defaultField="title" />}
-                                    </VStack>
-                                )}
-
-                                {/* Subtitle tab */}
-                                {typoTab === 'subtitle' && (
-                                    <VStack spacing={3}>
-                                        <FormControl>
-                                            <FormLabel {...labelStyles}>Font Family</FormLabel>
-                                            <Select size="sm" value={subtitleFont} onChange={(e) => setSubtitleFont(e.target.value)} bg="white" borderColor="gray.300" _hover={{ borderColor: 'gray.400' }}>
-                                                {fontsForRole(SUBTITLE_FONTS, 'subtitle').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                                            </Select>
-                                        </FormControl>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Font Size</Text>
-                                                <Text fontSize="xs" color="gray.500">{subtitleFontSize}px</Text>
-                                            </HStack>
-                                            <Slider value={subtitleFontSize} min={16} max={200} step={1} onChange={setSubtitleFontSize}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Kerning</Text>
-                                                <Text fontSize="xs" color="gray.500">{subtitleKerning.toFixed(2)}em</Text>
-                                            </HStack>
-                                            <Slider value={subtitleKerning} min={-0.1} max={0.5} step={0.01} onChange={setSubtitleKerning}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Offset</Text>
-                                                <Text fontSize="xs" color="gray.500">{subtitleOffsetY}px</Text>
-                                            </HStack>
-                                            <Slider value={subtitleOffsetY} min={-50} max={50} step={1} onChange={setSubtitleOffsetY}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        {subtitleFont === 'Mapped Moment Script' && <GlyphPicker defaultField="subtitle" />}
-                                    </VStack>
-                                )}
-
-                                {/* Details tab */}
-                                {typoTab === 'details' && (
-                                    <VStack spacing={3}>
-                                        <FormControl>
-                                            <FormLabel {...labelStyles}>Font Family</FormLabel>
-                                            <Select size="sm" value={detailsFont} onChange={(e) => setDetailsFont(e.target.value)} bg="white" borderColor="gray.300" _hover={{ borderColor: 'gray.400' }}>
-                                                {fontsForRole(DETAILS_FONTS, 'details').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                                            </Select>
-                                        </FormControl>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Font Size</Text>
-                                                <Text fontSize="xs" color="gray.500">{detailsFontSize}px</Text>
-                                            </HStack>
-                                            <Slider value={detailsFontSize} min={12} max={48} step={1} onChange={setDetailsFontSize}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Kerning</Text>
-                                                <Text fontSize="xs" color="gray.500">{detailsKerning.toFixed(2)}em</Text>
-                                            </HStack>
-                                            <Slider value={detailsKerning} min={-0.1} max={0.5} step={0.01} onChange={setDetailsKerning}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Offset</Text>
-                                                <Text fontSize="xs" color="gray.500">{detailsOffsetY}px</Text>
-                                            </HStack>
-                                            <Slider value={detailsOffsetY} min={-50} max={50} step={1} onChange={setDetailsOffsetY}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                    </VStack>
-                                )}
-
-                                {/* Dedication tab */}
-                                {typoTab === 'dedication' && (
-                                    <VStack spacing={3}>
-                                        <FormControl>
-                                            <FormLabel {...labelStyles}>Font Family</FormLabel>
-                                            <Select size="sm" value={dedicationFont} onChange={(e) => setDedicationFont(e.target.value)} bg="white" borderColor="gray.300" _hover={{ borderColor: 'gray.400' }}>
-                                                {fontsForRole(DEDICATION_FONTS, 'dedication').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                                            </Select>
-                                        </FormControl>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Font Size</Text>
-                                                <Text fontSize="xs" color="gray.500">{dedicationFontSize}px</Text>
-                                            </HStack>
-                                            <Slider value={dedicationFontSize} min={12} max={150} step={1} onChange={setDedicationFontSize}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Kerning</Text>
-                                                <Text fontSize="xs" color="gray.500">{dedicationKerning.toFixed(2)}em</Text>
-                                            </HStack>
-                                            <Slider value={dedicationKerning} min={-0.1} max={0.5} step={0.01} onChange={setDedicationKerning}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        <Box w="full">
-                                            <HStack justify="space-between" mb={1}>
-                                                <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Offset</Text>
-                                                <Text fontSize="xs" color="gray.500">{dedicationOffsetY}px</Text>
-                                            </HStack>
-                                            <Slider value={dedicationOffsetY} min={-50} max={50} step={1} onChange={setDedicationOffsetY}>
-                                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                            </Slider>
-                                        </Box>
-                                        {dedicationFont === 'Mapped Moment Script' && <GlyphPicker defaultField="dedication" />}
-                                    </VStack>
-                                )}
-
-                                {/* Divider Controls */}
-                                <Box pt={2} borderTop="1px solid" borderColor="gray.100">
-                                    <HStack justify="space-between" mb={3}>
-                                        <Text fontSize="sm" fontWeight="600" color="gray.900">Divider</Text>
-                                        <Switch
-                                            size="sm"
-                                            isChecked={showDivider}
-                                            onChange={(e) => setShowDivider(e.target.checked)}
-                                        />
-                                    </HStack>
-                                    {showDivider && (
-                                        <VStack spacing={3}>
-                                            <Box w="full">
-                                                <HStack justify="space-between" mb={1}>
-                                                    <Text fontSize="xs" color="gray.700" fontWeight="500">Length</Text>
-                                                    <Text fontSize="xs" color="gray.500">{dividerLength}px</Text>
-                                                </HStack>
-                                                <Slider value={dividerLength} min={20} max={300} step={5} onChange={setDividerLength}>
-                                                    <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                    <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                                </Slider>
-                                            </Box>
-                                            <Box w="full">
-                                                <HStack justify="space-between" mb={1}>
-                                                    <Text fontSize="xs" color="gray.700" fontWeight="500">Thickness</Text>
-                                                    <Text fontSize="xs" color="gray.500">{dividerThickness.toFixed(1)}px</Text>
-                                                </HStack>
-                                                <Slider value={dividerThickness} min={0.2} max={5} step={0.1} onChange={setDividerThickness}>
-                                                    <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                    <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                                </Slider>
-                                            </Box>
-                                            <Box w="full">
-                                                <HStack justify="space-between" mb={1}>
-                                                    <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Offset</Text>
-                                                    <Text fontSize="xs" color="gray.500">{dividerOffsetY}px</Text>
-                                                </HStack>
-                                                <Slider value={dividerOffsetY} min={-50} max={50} step={1} onChange={setDividerOffsetY}>
-                                                    <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                                    <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                                                </Slider>
-                                            </Box>
-                                        </VStack>
-                                    )}
-                                </Box>
-                            </VStack>
+                            <TypographyPanel typoTab={typoTab} setTypoTab={setTypoTab} />
                         </AccordionPanel>
                     </AccordionItem >
 
-                    {/* Size Section */}
-                    < AccordionItem border="none" borderBottom="1px" borderColor="gray.200" >
+                    {/* Size Section — design editor siblings mode */}
+                    {editorSiblings && editorSiblings.length > 0 && (
+                        <AccordionItem border="none" borderBottom="1px" borderColor="gray.200">
+                            <h2>
+                                <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
+                                    <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
+                                        Size
+                                    </Box>
+                                    <AccordionIcon color="gray.400" />
+                                </AccordionButton>
+                            </h2>
+                            <AccordionPanel pb={6} px={6}>
+                                <Grid templateColumns="repeat(3, 1fr)" gap={2}>
+                                    {editorSiblings.map((sib) => {
+                                        const sizeObj = PRINT_SIZE_MAP[sib.fulfillment_size] || PRINT_SIZE_MAP['8x10'];
+                                        const isActive = printSize.label === sizeObj.label;
+                                        return (
+                                            <Button
+                                                key={sib.id}
+                                                onClick={() => {
+                                                    if (onSiblingSwitch) {
+                                                        onSiblingSwitch(sib.id);
+                                                    } else {
+                                                        setPrintSize(sizeObj);
+                                                    }
+                                                }}
+                                                {...toggleButtonStyles(isActive)}
+                                                fontSize="xs"
+                                            >
+                                                {sizeObj.label}
+                                            </Button>
+                                        );
+                                    })}
+                                </Grid>
+                            </AccordionPanel>
+                        </AccordionItem>
+                    )}
+
+                    {/* Size Section — generic (hidden in listing mode and editor mode) */}
+                    {!(designGroups && designGroups.length > 0) && !(editorSiblings && editorSiblings.length > 0) && < AccordionItem border="none" borderBottom="1px" borderColor="gray.200" >
                         <h2>
                             <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
                                 <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
@@ -1490,7 +564,7 @@ const SidebarControls: React.FC = () => {
                                 ))}
                             </Grid>
                         </AccordionPanel>
-                    </AccordionItem >
+                    </AccordionItem >}
 
                     {/* Color Section */}
                     < AccordionItem border="none" borderBottom="1px" borderColor="gray.200" >
@@ -1503,127 +577,7 @@ const SidebarControls: React.FC = () => {
                             </AccordionButton>
                         </h2>
                         <AccordionPanel pb={6} px={6}>
-                            <VStack align="stretch" spacing={3}>
-                                {/* Color palette presets */}
-                                <Text fontSize="xs" fontWeight="600" color="gray.700">Presets</Text>
-                                <HStack flexWrap="wrap" spacing={2}>
-                                    {[
-                                        { bg: '#0a1628', text: '#c8b888', label: 'Navy Gold' },
-                                        { bg: '#1a1a2e', text: '#e0d0b0', label: 'Midnight Cream' },
-                                        { bg: '#ffffff', text: '#1a202c', label: 'Clean White' },
-                                        { bg: '#f5f5f0', text: '#2d3748', label: 'Ivory' },
-                                        { bg: '#0d1b3e', text: '#d4a574', label: 'Indigo Copper' },
-                                        { bg: '#1a0a00', text: '#f0c080', label: 'Dark Amber' },
-                                        { bg: '#0a2818', text: '#a8d8a0', label: 'Forest' },
-                                        { bg: '#1a0a2e', text: '#c8a0e8', label: 'Cosmic' },
-                                    ].map(({ bg, text, label }) => (
-                                        <Box
-                                            key={bg}
-                                            w="28px" h="28px"
-                                            borderRadius="md"
-                                            bg={bg}
-                                            border="2px solid"
-                                            borderColor={posterColor === bg ? 'blue.400' : 'gray.300'}
-                                            cursor="pointer"
-                                            title={label}
-                                            position="relative"
-                                            overflow="hidden"
-                                            onClick={() => {
-                                                setPosterColor(bg);
-                                                setTextColor(text);
-                                                setStarColor(text);
-                                                setMapInteriorColor(bg);
-                                            }}
-                                            _hover={{ borderColor: 'blue.300' }}
-                                        >
-                                            <Box
-                                                position="absolute" bottom={0} left={0} right={0}
-                                                h="35%" bg={text} opacity={0.8}
-                                            />
-                                        </Box>
-                                    ))}
-                                </HStack>
-                                <Text fontSize="xs" fontWeight="600" color="gray.700">Custom Colors</Text>
-                                <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                                    <Text fontSize="sm" color="gray.700" fontWeight="500">Background</Text>
-                                    <HStack>
-                                        <Text fontSize="xs" color="gray.500" fontFamily="mono">{useStore.getState().posterColor}</Text>
-                                        <Input
-                                            type="color"
-                                            w={8}
-                                            h={8}
-                                            p={0}
-                                            border="1px solid"
-                                            borderColor="gray.300"
-                                            borderRadius="md"
-                                            bg="transparent"
-                                            value={useStore.getState().posterColor}
-                                            onChange={(e) => useStore.getState().setPosterColor(e.target.value)}
-                                            cursor="pointer"
-                                        />
-                                    </HStack>
-                                </HStack>
-                                <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                                    <Text fontSize="sm" color="gray.700" fontWeight="500">Text & Elements</Text>
-                                    <HStack>
-                                        <Text fontSize="xs" color="gray.500" fontFamily="mono">{useStore.getState().textColor}</Text>
-                                        <Input
-                                            type="color"
-                                            w={8}
-                                            h={8}
-                                            p={0}
-                                            border="1px solid"
-                                            borderColor="gray.300"
-                                            borderRadius="md"
-                                            bg="transparent"
-                                            value={useStore.getState().textColor}
-                                            onChange={(e) => useStore.getState().setTextColor(e.target.value)}
-                                            cursor="pointer"
-                                        />
-                                    </HStack>
-                                </HStack>
-                                {posterType === 'streetmap' ? (
-                                    <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Streets</Text>
-                                        <HStack>
-                                            <Text fontSize="xs" color="gray.500" fontFamily="mono">{mapStreetColor}</Text>
-                                            <Input
-                                                type="color"
-                                                w={8}
-                                                h={8}
-                                                p={0}
-                                                border="1px solid"
-                                                borderColor="gray.300"
-                                                borderRadius="md"
-                                                bg="transparent"
-                                                value={mapStreetColor}
-                                                onChange={(e) => setMapStreetColor(e.target.value)}
-                                                cursor="pointer"
-                                            />
-                                        </HStack>
-                                    </HStack>
-                                ) : (
-                                    <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Map Background</Text>
-                                        <HStack>
-                                            <Text fontSize="xs" color="gray.500" fontFamily="mono">{useStore.getState().mapInteriorColor}</Text>
-                                            <Input
-                                                type="color"
-                                                w={8}
-                                                h={8}
-                                                p={0}
-                                                border="1px solid"
-                                                borderColor="gray.300"
-                                                borderRadius="md"
-                                                bg="transparent"
-                                                value={useStore.getState().mapInteriorColor}
-                                                onChange={(e) => useStore.getState().setMapInteriorColor(e.target.value)}
-                                                cursor="pointer"
-                                            />
-                                        </HStack>
-                                    </HStack>
-                                )}
-                            </VStack>
+                            <ColorPanel />
                         </AccordionPanel>
                     </AccordionItem >
 
@@ -1638,270 +592,7 @@ const SidebarControls: React.FC = () => {
                             </AccordionButton>
                         </h2>
                         <AccordionPanel pb={6} px={6}>
-                            <VStack spacing={6} align="stretch">
-                                <HStack justify="space-between">
-                                    <Text fontSize="sm" fontWeight="500" color="gray.700">Show Border</Text>
-                                    <Switch
-                                        isChecked={showBorder}
-                                        onChange={(e) => setShowBorder(e.target.checked)}
-                                        colorScheme="blue"
-                                    />
-                                </HStack>
-
-                                <FormControl>
-                                    <FormLabel {...labelStyles}>Design Style</FormLabel>
-                                    <HStack spacing={2}>
-                                        <Button
-                                            onClick={() => {
-                                                setDesignStyle('standard');
-                                                setShapeOutlineWidth(1.0);
-                                            }}
-                                            {...toggleButtonStyles(designStyle === 'standard')}
-                                        >
-                                            Standard
-                                        </Button>
-                                        <Button
-                                            onClick={() => {
-                                                setDesignStyle('fineline');
-                                                setShapeOutlineWidth(0.5);
-                                            }}
-                                            {...toggleButtonStyles(designStyle === 'fineline')}
-                                        >
-                                            Fineline
-                                        </Button>
-                                    </HStack>
-                                </FormControl>
-
-                                <FormControl>
-                                    <FormLabel {...labelStyles}>Mask Shape</FormLabel>
-                                    <HStack spacing={1}>
-                                        <Button
-                                            onClick={() => { setMaskShape('circle'); setShowBorder(true); if (shapeOutlineWidth === 0) setShapeOutlineWidth(2); }}
-                                            {...toggleButtonStyles(maskShape === 'circle')}
-                                            fontSize="xs"
-                                        >
-                                            ○ Circle
-                                        </Button>
-                                        <Button
-                                            onClick={() => { setMaskShape('heart'); setShowBorder(true); if (shapeOutlineWidth === 0) setShapeOutlineWidth(2); }}
-                                            {...toggleButtonStyles(maskShape === 'heart')}
-                                            fontSize="xs"
-                                        >
-                                            ♥ Heart
-                                        </Button>
-                                        <Button
-                                            onClick={() => { setMaskShape('house'); setShowBorder(true); if (shapeOutlineWidth === 0) setShapeOutlineWidth(2); }}
-                                            {...toggleButtonStyles(maskShape === 'house')}
-                                            fontSize="xs"
-                                        >
-                                            ⌂ House
-                                        </Button>
-                                        <Button
-                                            onClick={() => { setMaskShape('rect'); setShowBorder(false); setShapeOutlineWidth(0); }}
-                                            {...toggleButtonStyles(maskShape === 'rect')}
-                                            fontSize="xs"
-                                        >
-                                            ▭ Rect
-                                        </Button>
-                                    </HStack>
-                                </FormControl>
-
-                                <HStack justify="space-between">
-                                    <Text fontSize="sm" fontWeight="500" color="gray.700">Light Mode</Text>
-                                    <Switch
-                                        isChecked={isLightMode}
-                                        onChange={(e) => setIsLightMode(e.target.checked)}
-                                        colorScheme="blue"
-                                    />
-                                </HStack>
-
-                                {/* Star-map-only sliders — hidden in street/colored map mode */}
-                                {posterType === 'starmap' && (<>
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Star Size</Text>
-                                        <Text fontSize="xs" color="gray.500" fontWeight="600">{starScale.toFixed(1)}x</Text>
-                                    </HStack>
-                                    <Slider value={starScale} min={0.5} max={2.2} step={0.1} onChange={setStarScale}>
-                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                        <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                    </Slider>
-                                </Box>
-
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Line Weight</Text>
-                                        <Text fontSize="xs" color="gray.500" fontWeight="600">{lineWeight.toFixed(1)}pt</Text>
-                                    </HStack>
-                                    <Slider value={lineWeight} min={0.1} max={1.8} step={0.1} onChange={setLineWeight}>
-                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                        <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                    </Slider>
-                                </Box>
-
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Grid Width</Text>
-                                        <Text fontSize="xs" color="gray.500" fontWeight="600">{gridWidth.toFixed(1)}pt</Text>
-                                    </HStack>
-                                    <Slider value={gridWidth} min={0.1} max={1.2} step={0.1} onChange={setGridWidth}>
-                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                        <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                    </Slider>
-                                </Box>
-
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Glow Intensity</Text>
-                                        <Text fontSize="xs" color="gray.500" fontWeight="600">{glowIntensity}</Text>
-                                    </HStack>
-                                    <Slider value={glowIntensity} min={0} max={20} step={1} onChange={setGlowIntensity}>
-                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                        <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                    </Slider>
-                                </Box>
-
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Grid Opacity</Text>
-                                        <Text fontSize="xs" color="gray.500" fontWeight="600">{Math.round(gridOpacity * 100)}%</Text>
-                                    </HStack>
-                                    <Slider value={gridOpacity} min={0} max={1} step={0.05} onChange={setGridOpacity}>
-                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                        <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                    </Slider>
-                                </Box>
-                                </>)}
-
-                                {maskShape === 'circle' && (
-                                    <Box>
-                                        <HStack justify="space-between" mb={2}>
-                                            <Text fontSize="sm" color="gray.700" fontWeight="500">Circle Size</Text>
-                                            <Text fontSize="xs" color="gray.500" fontWeight="600">{circleSize.toFixed(2)}x</Text>
-                                        </HStack>
-                                        <Slider value={circleSize} min={0.5} max={1.5} step={0.05} onChange={setCircleSize}>
-                                            <SliderTrack bg="gray.200">
-                                                <SliderFilledTrack bg="gray.900" />
-                                            </SliderTrack>
-                                            <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                        </Slider>
-                                    </Box>
-                                )}
-
-                                {maskShape === 'heart' && (
-                                    <Box>
-                                        <HStack justify="space-between" mb={2}>
-                                            <Text fontSize="sm" color="gray.700" fontWeight="500">Heart Size</Text>
-                                            <Text fontSize="xs" color="gray.500" fontWeight="600">{heartSize.toFixed(2)}x</Text>
-                                        </HStack>
-                                        <Slider value={heartSize} min={0.5} max={1.5} step={0.05} onChange={setHeartSize}>
-                                            <SliderTrack bg="gray.200">
-                                                <SliderFilledTrack bg="gray.900" />
-                                            </SliderTrack>
-                                            <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                        </Slider>
-                                    </Box>
-                                )}
-
-                                {maskShape === 'house' && (
-                                    <Box>
-                                        <HStack justify="space-between" mb={2}>
-                                            <Text fontSize="sm" color="gray.700" fontWeight="500">House Size</Text>
-                                            <Text fontSize="xs" color="gray.500" fontWeight="600">{houseSize.toFixed(2)}x</Text>
-                                        </HStack>
-                                        <Slider value={houseSize} min={0.5} max={1.5} step={0.05} onChange={setHouseSize}>
-                                            <SliderTrack bg="gray.200">
-                                                <SliderFilledTrack bg="gray.900" />
-                                            </SliderTrack>
-                                            <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                        </Slider>
-                                    </Box>
-                                )}
-
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Shape Position</Text>
-                                        <Text fontSize="xs" color="gray.500" fontWeight="600">{shapeOffsetY > 0 ? '+' : ''}{shapeOffsetY}pt</Text>
-                                    </HStack>
-                                    <Slider value={shapeOffsetY} min={-200} max={200} step={5} onChange={setShapeOffsetY}>
-                                        <SliderTrack bg="gray.200">
-                                            <SliderFilledTrack bg="gray.900" />
-                                        </SliderTrack>
-                                        <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                    </Slider>
-                                </Box>
-
-                                {/* Shape Outline Width */}
-                                <Box>
-                                    <HStack justify="space-between" mb={2}>
-                                        <Text fontSize="sm" color="gray.700" fontWeight="500">Shape Outline Width</Text>
-                                        <Text fontSize="xs" color="gray.500" fontWeight="600">{shapeOutlineWidth.toFixed(1)}pt</Text>
-                                    </HStack>
-                                    <Slider value={shapeOutlineWidth} min={0.5} max={6.0} step={0.5} onChange={setShapeOutlineWidth}>
-                                        <SliderTrack bg="gray.200">
-                                            <SliderFilledTrack bg="gray.900" />
-                                        </SliderTrack>
-                                        <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                    </Slider>
-                                </Box>
-
-                                {/* Fineline Width - only show when fineline is selected */}
-                                {designStyle === 'fineline' && (
-                                    <Box>
-                                        <HStack justify="space-between" mb={2}>
-                                            <Text fontSize="sm" color="gray.700" fontWeight="500">Fineline Spacing</Text>
-                                            <Text fontSize="xs" color="gray.500" fontWeight="600">{finelineWidth.toFixed(1)}pt</Text>
-                                        </HStack>
-                                        <Slider value={finelineWidth} min={0.5} max={5} step={0.1} onChange={setFinelineWidth}>
-                                            <SliderTrack bg="gray.200">
-                                                <SliderFilledTrack bg="gray.900" />
-                                            </SliderTrack>
-                                            <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                        </Slider>
-                                    </Box>
-                                )}
-
-                                {/* Frame Controls */}
-                                <Box pt={4} borderTop="1px" borderColor="gray.100">
-                                    <HStack justify="space-between" mb={4}>
-                                        <Text fontSize="sm" fontWeight="500" color="gray.700">Show Frame</Text>
-                                        <Switch
-                                            isChecked={showFrame}
-                                            onChange={(e) => setShowFrame(e.target.checked)}
-                                            colorScheme="blue"
-                                        />
-                                    </HStack>
-
-                                    {showFrame && (
-                                        <VStack spacing={4}>
-                                            <Box w="full">
-                                                <HStack justify="space-between" mb={2}>
-                                                    <Text fontSize="sm" color="gray.700" fontWeight="500">Frame Inset</Text>
-                                                    <Text fontSize="xs" color="gray.500" fontWeight="600">{frameInset}pt</Text>
-                                                </HStack>
-                                                <Slider value={frameInset} min={10} max={100} step={5} onChange={setFrameInset}>
-                                                    <SliderTrack bg="gray.200">
-                                                        <SliderFilledTrack bg="gray.900" />
-                                                    </SliderTrack>
-                                                    <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                                </Slider>
-                                            </Box>
-                                            <Box w="full">
-                                                <HStack justify="space-between" mb={2}>
-                                                    <Text fontSize="sm" color="gray.700" fontWeight="500">Frame Width</Text>
-                                                    <Text fontSize="xs" color="gray.500" fontWeight="600">{frameWidth.toFixed(1)}pt</Text>
-                                                </HStack>
-                                                <Slider value={frameWidth} min={0.5} max={8.0} step={0.5} onChange={setFrameWidth}>
-                                                    <SliderTrack bg="gray.200">
-                                                        <SliderFilledTrack bg="gray.900" />
-                                                    </SliderTrack>
-                                                    <SliderThumb boxSize={4} borderColor="gray.300" borderWidth="2px" />
-                                                </Slider>
-                                            </Box>
-                                        </VStack>
-                                    )}
-                                </Box>
-                            </VStack>
+                            <StylePanel />
                         </AccordionPanel>
                     </AccordionItem >
                 </Accordion >
@@ -2045,6 +736,7 @@ const OrderSection: React.FC = () => {
             // Shape
             circleSize: s.circleSize, heartSize: s.heartSize, houseSize: s.houseSize,
             shapeOutlineWidth: s.shapeOutlineWidth, shapeOffsetY: s.shapeOffsetY,
+            shapeOffsetX: s.shapeOffsetX, snapEnabled: s.snapEnabled,
             // Star map
             starScale: s.starScale, lineWeight: s.lineWeight, glowIntensity: s.glowIntensity,
             // Map
@@ -2083,10 +775,6 @@ const OrderSection: React.FC = () => {
 
             {!token ? (
                 <>
-                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase"
-                        letterSpacing="0.1em" mb={3} textAlign="center">
-                        Order print-quality file
-                    </Text>
                     <VStack spacing={2}>
                         <Button
                             onClick={() => saveDesign('digital')}

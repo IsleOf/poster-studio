@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
     Box, Container, Heading, Text, VStack, Input, Button,
     Link, Alert, AlertIcon, AlertDescription, Divider, HStack, Spinner,
@@ -6,7 +6,16 @@ import {
 } from '@chakra-ui/react'
 import { trackEvent } from '../utils/analytics'
 
-type Status = 'idle' | 'loading' | 'rendering' | 'digital_ready' | 'print_processing' | 'error'
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Status =
+    | 'idle'
+    | 'loading'
+    | 'rendering'       // server Puppeteer render in progress — polling
+    | 'auto_downloading' // file fetch + client-side trigger happening now
+    | 'downloaded'      // file delivered to OS download folder
+    | 'print_processing'
+    | 'error'
 
 interface VerifyResult {
     listingType: 'digital' | 'print'
@@ -18,6 +27,38 @@ interface VerifyResult {
     revisionsExhausted?: boolean
 }
 
+// ─── Silent download helper ───────────────────────────────────────────────────
+// Fetches the file as a binary blob via the Fetch API, then triggers the browser
+// "Save file" dialog programmatically.  The <a> element is created in memory and
+// never inserted into the DOM, so the blob: URL is never visible to the user or
+// to browser extensions that scan the DOM for downloadable resources.
+// The blob: URL is revoked before this function returns.
+async function silentDownload(url: string): Promise<void> {
+    const resp = await fetch(url, { credentials: 'same-origin' })
+    if (!resp.ok) throw new Error(`Download failed: ${resp.status}`)
+    const buf = await resp.arrayBuffer()
+    // Re-wrap as octet-stream so the browser cannot infer the real content type
+    const blob = new Blob([buf], { type: 'application/octet-stream' })
+    const objectUrl = URL.createObjectURL(blob)
+    try {
+        const a = document.createElement('a')
+        a.href = objectUrl
+        // Filename shown in the OS save dialog — a random hex string with no extension
+        // so the file type is not guessable without opening the file.
+        a.download = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('')
+        // Click without ever adding the element to the live DOM
+        a.dispatchEvent(new MouseEvent('click', { bubbles: false, cancelable: false }))
+    } finally {
+        // Revoke immediately — even if the browser starts the download asynchronously,
+        // revoking here makes the URL unusable for any subsequent fetch or right-click.
+        URL.revokeObjectURL(objectUrl)
+    }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function VerifyOrder() {
     const [orderId, setOrderId] = useState('')
     const [token, setToken] = useState('')
@@ -28,7 +69,21 @@ export default function VerifyOrder() {
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    // Poll for render completion when in 'rendering' state
+    // Trigger the silent download as soon as we have a URL.
+    // Wrapped in useCallback so the useEffect dep-array is stable.
+    const triggerDownload = useCallback(async (url: string) => {
+        setStatus('auto_downloading')
+        try {
+            await silentDownload(url)
+            setStatus('downloaded')
+            trackEvent('download_complete')
+        } catch (err) {
+            setErrorMsg(err instanceof Error ? err.message : 'Download failed. Please try again.')
+            setStatus('error')
+        }
+    }, [])
+
+    // Poll for server render completion when in 'rendering' state
     useEffect(() => {
         if (status !== 'rendering') return
 
@@ -44,7 +99,8 @@ export default function VerifyOrder() {
                     clearInterval(pollRef.current!)
                     clearInterval(tickRef.current!)
                     setResult(prev => ({ ...(prev ?? { listingType: 'digital' }), downloadUrl: data.downloadUrl }))
-                    setStatus('digital_ready')
+                    // Trigger the silent download automatically — no button for the user to click
+                    triggerDownload(data.downloadUrl)
                 } else if (data.status === 'failed') {
                     clearInterval(pollRef.current!)
                     clearInterval(tickRef.current!)
@@ -60,7 +116,7 @@ export default function VerifyOrder() {
             clearInterval(pollRef.current!)
             clearInterval(tickRef.current!)
         }
-    }, [status, orderId])
+    }, [status, orderId, triggerDownload])
 
     const verify = async () => {
         if (!orderId.trim()) return
@@ -79,7 +135,6 @@ export default function VerifyOrder() {
                 setStatus('error')
                 return
             }
-            // Server returns status field when order is still rendering
             if (data.status === 'rendering' || data.status === 'pending' || data.status === 'pending_manual') {
                 setResult({ listingType: data.listingType || 'digital' })
                 setStatus('rendering')
@@ -87,12 +142,27 @@ export default function VerifyOrder() {
             }
             setResult(data)
             trackEvent('verify_success', { type: data.listingType })
-            setStatus(data.listingType === 'print' ? 'print_processing' : 'digital_ready')
+            if (data.listingType === 'print') {
+                setStatus('print_processing')
+            } else if (data.downloadUrl) {
+                // Immediately trigger silent download — no intermediate button state
+                triggerDownload(data.downloadUrl)
+            } else {
+                setStatus('error')
+                setErrorMsg('No download URL received. Please contact us via Etsy.')
+            }
         } catch {
             setErrorMsg('Could not connect to server. Please try again.')
             setStatus('error')
         }
     }
+
+    // ── Retry download if the user's OS blocked/cancelled it ──────────────────
+    const retryDownload = () => {
+        if (result?.downloadUrl) triggerDownload(result.downloadUrl)
+    }
+
+    // ─── Render ──────────────────────────────────────────────────────────────
 
     return (
         <Box minH="100vh" bg="gray.50" py={16}>
@@ -108,10 +178,12 @@ export default function VerifyOrder() {
             >
                 {status === 'loading' && 'Checking your order…'}
                 {status === 'rendering' && 'Your poster is being generated. This takes about 30 seconds.'}
-                {status === 'digital_ready' && 'Your poster is ready to download!'}
+                {status === 'auto_downloading' && 'Preparing your file for download…'}
+                {status === 'downloaded' && 'Your file has been downloaded!'}
                 {status === 'print_processing' && 'Your print order has been received.'}
                 {status === 'error' && `Error: ${errorMsg}`}
             </Box>
+
             <Container maxW="480px">
                 <VStack spacing={8} align="stretch">
                     <Box textAlign="center">
@@ -124,6 +196,7 @@ export default function VerifyOrder() {
                         </Text>
                     </Box>
 
+                    {/* ── Entry form ── */}
                     {(status === 'idle' || status === 'loading' || status === 'error') && (
                         <Box bg="white" borderRadius="xl" p={8} boxShadow="sm" border="1px solid" borderColor="gray.200">
                             <VStack spacing={4}>
@@ -155,12 +228,12 @@ export default function VerifyOrder() {
                                     </FormLabel>
                                     <Input
                                         id="verify-token"
-                                        placeholder="e.g. XK7M2P"
+                                        placeholder="e.g. XK7M2P or abcDEF_123-xyz"
                                         value={token}
-                                        onChange={e => setToken(e.target.value.toUpperCase())}
+                                        onChange={e => setToken(e.target.value.trim())}
                                         onKeyDown={e => e.key === 'Enter' && verify()}
                                         size="lg" borderRadius="md" fontFamily="monospace"
-                                        letterSpacing="0.15em" maxLength={6}
+                                        letterSpacing="0.05em" maxLength={30}
                                     />
                                 </FormControl>
 
@@ -186,6 +259,7 @@ export default function VerifyOrder() {
                         </Box>
                     )}
 
+                    {/* ── Server rendering in progress — polling ── */}
                     {status === 'rendering' && (
                         <Box bg="white" borderRadius="xl" p={8} boxShadow="sm" border="1px solid" borderColor="gray.200" textAlign="center">
                             <Spinner size="xl" color="gray.600" mb={4} />
@@ -199,27 +273,34 @@ export default function VerifyOrder() {
                         </Box>
                     )}
 
-                    {status === 'digital_ready' && result?.downloadUrl && (
+                    {/* ── File is being fetched and delivered ── */}
+                    {status === 'auto_downloading' && (
                         <Box bg="white" borderRadius="xl" p={8} boxShadow="sm" border="1px solid" borderColor="gray.200" textAlign="center">
-                            <Text fontSize="3xl" mb={4}>🎉</Text>
+                            <Spinner size="xl" color="gray.600" mb={4} />
+                            <Heading size="md" fontWeight="800" mb={2}>Preparing your file…</Heading>
+                            <Text color="gray.500" fontSize="sm">
+                                Your download will start automatically. Do not close this tab.
+                            </Text>
+                        </Box>
+                    )}
+
+                    {/* ── Download delivered ── */}
+                    {status === 'downloaded' && (
+                        <Box bg="white" borderRadius="xl" p={8} boxShadow="sm" border="1px solid" borderColor="gray.200" textAlign="center">
+                            <Text fontSize="3xl" mb={4}>✓</Text>
                             <Heading size="md" fontWeight="800" mb={2}>
-                                Your poster is ready{result.buyerName ? `, ${result.buyerName.split(' ')[0]}` : ''}!
+                                Your file has been delivered{result?.buyerName ? `, ${result.buyerName.split(' ')[0]}` : ''}!
                             </Heading>
                             <Text color="gray.500" fontSize="sm" mb={6}>
-                                Your high-resolution 300 DPI print file is ready to download.
+                                Your 300 DPI print file should now be in your Downloads folder.
+                                Open it in any image viewer or send it directly to a print service.
                             </Text>
-                            <Button
-                                as="a" href={result.downloadUrl} download
-                                size="lg" width="full"
-                                bg="gray.900" color="white" borderRadius="md" fontWeight="700"
-                                _hover={{ bg: 'gray.700' }} mb={4}
-                            >
-                                Download PNG (300 DPI)
-                            </Button>
-                            {(result.revisionsRemaining ?? 3) > 0 && (
+
+                            {(result?.revisionsRemaining ?? 3) > 0 && (
                                 <Box bg="gray.50" borderRadius="md" p={3} mb={4} border="1px solid" borderColor="gray.200">
                                     <Text fontSize="xs" color="gray.600" mb={2}>
-                                        <strong>{result.revisionsRemaining ?? 3} correction{(result.revisionsRemaining ?? 3) !== 1 ? 's' : ''} remaining.</strong> Not happy with the result?
+                                        <strong>{result?.revisionsRemaining ?? 3} correction{(result?.revisionsRemaining ?? 3) !== 1 ? 's' : ''} remaining.</strong>{' '}
+                                        Not happy with the result?
                                     </Text>
                                     <Button
                                         as="a" href="/" size="sm" width="full" variant="outline"
@@ -229,13 +310,21 @@ export default function VerifyOrder() {
                                     </Button>
                                 </Box>
                             )}
+
                             <Divider mb={4} />
-                            <Text fontSize="xs" color="gray.400">
-                                Link valid for 7 days. Includes {3 - (result.revisionsUsed ?? 0)} of 3 free corrections.
-                            </Text>
+
+                            <Button
+                                onClick={retryDownload}
+                                size="sm" variant="ghost" color="gray.500"
+                                fontSize="xs" fontWeight="500"
+                                _hover={{ color: 'gray.800' }}
+                            >
+                                Didn't receive it? Click to retry
+                            </Button>
                         </Box>
                     )}
 
+                    {/* ── Print order ── */}
                     {status === 'print_processing' && (
                         <Box bg="white" borderRadius="xl" p={8} boxShadow="sm" border="1px solid" borderColor="gray.200" textAlign="center">
                             <Text fontSize="3xl" mb={4}>🖨️</Text>

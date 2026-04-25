@@ -7,7 +7,7 @@ import {
     Tabs, TabList, TabPanels, Tab, TabPanel, Badge,
 } from '@chakra-ui/react';
 import { useStore } from '../store/useStore';
-import { renderPosterToBlob } from '../utils/renderPoster';
+import { renderPosterToBlob, renderPosterToPdf } from '../utils/renderPoster';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -20,56 +20,84 @@ const DownloadButton: React.FC = () => {
         starScale, lineWeight, gridWidth, glowIntensity, gridOpacity,
         showBorder, posterColor, textColor, starColor, mapInteriorColor,
         showFrame, frameInset, frameWidth, finelineWidth,
-        circleSize, heartSize, houseSize, shapeOutlineWidth, shapeOffsetY,
-        titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize,
-        titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY,
+        circleSize, heartSize, houseSize, shapeOutlineWidth, shapeOffsetY, shapeOffsetX, snapEnabled,
+        titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize,
+        titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, namesOffsetY,
         heartDecorOffsetY, dividerOffsetY, showDivider, dividerLength, dividerThickness,
+        showNames, titleAllCaps,
         showConstellations, showMilkyWay, showGrid, showLocation, showDate, showCoords,
         maskShape, isLightMode, designStyle, borderStyle,
-        titleFont, subtitleFont, detailsFont, dedicationFont,
-        titleKerning, subtitleKerning, detailsKerning, dedicationKerning,
+        titleFont, subtitleFont, detailsFont, dedicationFont, namesFont,
+        titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
         customText, mapCity, mapCenterLat, mapCenterLng, mapZoom, mapBearing,
         mapBgColor, mapStreetColor, mapColorPreset, mapStyleUrl,
         mapImageOffsetX, mapImageOffsetY, mapImageOpacity,
         showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY,
+        selectedTemplate,
     } = useStore();
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [progress, setProgress] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
+    const [pdfProgress, setPdfProgress] = useState<'idle' | 'rendering' | 'done' | 'error'>('idle');
     const [saveProgress, setSaveProgress] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState('');
     const [copied, setCopied] = useState(false);
 
     const isTemplateMode = !!selectedTemplateEtsyUrl;
+    const isBusy = progress === 'rendering' || pdfProgress === 'rendering';
+
+    const getSvgEl = () =>
+        document.getElementById('poster-preview')?.querySelector('svg') as SVGSVGElement | null;
+
+    /** Ensure the map background is captured at high-res before rendering */
+    const ensureHighResMap = async () => {
+        if (posterType !== 'starmap' && captureHighResFn) {
+            try {
+                const highResUrl = await captureHighResFn();
+                setMapBackgroundImage(highResUrl);
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            } catch (e) {
+                console.warn('High-res map capture failed, using preview image:', e);
+            }
+        }
+    };
 
     const handleDownload = async () => {
-        const svgEl = document.getElementById('poster-preview')?.querySelector('svg') as SVGSVGElement | null;
+        const svgEl = getSvgEl();
         if (!svgEl) return;
-
         setProgress('rendering');
         try {
-            if (posterType !== 'starmap' && captureHighResFn) {
-                try {
-                    const highResUrl = await captureHighResFn();
-                    setMapBackgroundImage(highResUrl);
-                    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-                } catch (e) {
-                    console.warn('High-res map capture failed, using preview image:', e);
-                }
-            }
-
+            await ensureHighResMap();
             const blob = await renderPosterToBlob(svgEl, printSize.width, printSize.height, 300, true);
-            const filename = `${title.replace(/\s+/g, '-').toLowerCase()}-demo-${Date.now()}.png`;
-            const url = URL.createObjectURL(blob);
+            const slug = title.replace(/\s+/g, '-').toLowerCase() || 'poster';
             const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
+            a.href = URL.createObjectURL(blob);
+            a.download = `${slug}-demo-${Date.now()}.png`;
             a.click();
-            URL.revokeObjectURL(url);
+            URL.revokeObjectURL(a.href);
             setProgress('done');
         } catch (err) {
-            console.error('Export failed:', err);
             setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
             setProgress('error');
+        }
+    };
+
+    const handleDownloadPdf = async () => {
+        const svgEl = getSvgEl();
+        if (!svgEl) return;
+        setPdfProgress('rendering');
+        try {
+            await ensureHighResMap();
+            const blob = await renderPosterToPdf(svgEl, printSize.width, printSize.height, title);
+            const slug = title.replace(/\s+/g, '-').toLowerCase() || 'poster';
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${slug}-demo-${Date.now()}.pdf`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            setPdfProgress('done');
+        } catch (err) {
+            setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
+            setPdfProgress('error');
         }
     };
 
@@ -83,19 +111,21 @@ const DownloadButton: React.FC = () => {
                 starScale, lineWeight, gridWidth, glowIntensity, gridOpacity,
                 showBorder, posterColor, textColor, starColor, mapInteriorColor,
                 showFrame, frameInset, frameWidth, finelineWidth,
-                circleSize, heartSize, houseSize, shapeOutlineWidth, shapeOffsetY,
-                titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize,
-                titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY,
+                circleSize, heartSize, houseSize, shapeOutlineWidth, shapeOffsetY, shapeOffsetX, snapEnabled,
+                titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize,
+                titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, namesOffsetY,
                 heartDecorOffsetY, dividerOffsetY, showDivider, dividerLength, dividerThickness,
+                showNames, titleAllCaps,
                 showConstellations, showMilkyWay, showGrid, showLocation, showDate, showCoords,
                 maskShape, isLightMode, designStyle, borderStyle,
-                titleFont, subtitleFont, detailsFont, dedicationFont,
-                titleKerning, subtitleKerning, detailsKerning, dedicationKerning,
+                titleFont, subtitleFont, detailsFont, dedicationFont, namesFont,
+                titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
                 customText, posterType, printSize,
                 mapCity, mapCenterLat, mapCenterLng, mapZoom, mapBearing,
                 mapBgColor, mapStreetColor, mapColorPreset, mapStyleUrl,
                 mapImageOffsetX, mapImageOffsetY, mapImageOpacity,
                 showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY,
+                selectedTemplate,
             };
             const res = await fetch(`${API_URL}/api/save-design`, {
                 method: 'POST',
@@ -124,6 +154,7 @@ const DownloadButton: React.FC = () => {
 
     const handleOpen = () => {
         setProgress('idle');
+        setPdfProgress('idle');
         setSaveProgress('idle');
         setErrorMsg('');
         onOpen();
@@ -347,7 +378,7 @@ const DownloadButton: React.FC = () => {
 
                                 {progress === 'rendering' && (
                                     <Box>
-                                        <Text fontSize="xs" color="gray.500" mb={1}>Generating your 300 DPI image…</Text>
+                                        <Text fontSize="xs" color="gray.500" mb={1}>Generating 300 DPI image…</Text>
                                         <Progress size="xs" isIndeterminate colorScheme="gray" borderRadius="full" />
                                     </Box>
                                 )}
@@ -373,7 +404,7 @@ const DownloadButton: React.FC = () => {
                             <Button
                                 onClick={handleDownload}
                                 isLoading={progress === 'rendering'}
-                                isDisabled={progress === 'rendering'}
+                                isDisabled={isBusy}
                                 loadingText="Generating…"
                                 bg="gray.900"
                                 color="white"
@@ -381,7 +412,7 @@ const DownloadButton: React.FC = () => {
                                 fontWeight="600"
                                 _hover={{ bg: 'gray.800' }}
                             >
-                                Download Preview
+                                PNG
                             </Button>
                         )}
                     </ModalFooter>

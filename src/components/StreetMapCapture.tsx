@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useStore } from '../store/useStore';
+import { MAP_COLOR_PRESET_DATA } from './mapPresets';
 
 function createMapStyle(bgColor: string, streetColor: string): maplibregl.StyleSpecification {
     return {
@@ -52,6 +53,9 @@ export type MapColorPreset = {
     /** When set, use this custom style function instead of createMapStyle(). */
     customStyle?: () => maplibregl.StyleSpecification;
 };
+
+// Re-export the base preset data under the original name for backward compatibility
+export { MAP_COLOR_PRESET_DATA as MAP_COLOR_PRESETS };
 
 /** Rectangle template: white bg, black highways, gray minor roads + land use fills */
 function createDesign2Style(): maplibregl.StyleSpecification {
@@ -116,15 +120,9 @@ function createDesign2Style(): maplibregl.StyleSpecification {
     };
 }
 
-export const MAP_COLOR_PRESETS: MapColorPreset[] = [
-    { id: 'midnight',  name: 'Midnight',   bgColor: '#1a1a2e', streetColor: '#3d5a80' },
-    { id: 'classic',   name: 'Classic',    bgColor: '#f5f0e8', streetColor: '#8b7355' },
-    { id: 'forest',    name: 'Forest',     bgColor: '#1a2e1a', streetColor: '#4a7c59' },
-    { id: 'ocean',     name: 'Ocean',      bgColor: '#0d1b2a', streetColor: '#1b4f72' },
-    { id: 'rose-gold', name: 'Rose Gold',  bgColor: '#2d1b1b', streetColor: '#c9956a' },
-    { id: 'blueprint', name: 'Blueprint',  bgColor: '#0a192f', streetColor: '#64ffda' },
-    { id: 'sepia',     name: 'Sepia',      bgColor: '#2c1810', streetColor: '#d4a96a' },
-    { id: 'neon',      name: 'Neon',       bgColor: '#0d0d0d', streetColor: '#ff00ff' },
+// Full presets with style factory functions — used internally by StreetMapCapture
+const MAP_COLOR_PRESETS_FULL: MapColorPreset[] = [
+    ...MAP_COLOR_PRESET_DATA.filter(p => p.id !== 'design2' && p.id !== 'realistic'),
     // ── Rectangle: white bg, black highways, gray minor roads + land use fills ─
     { id: 'design2', name: 'Rectangle (B&W)', bgColor: '#ffffff', streetColor: '#111111', customStyle: createDesign2Style },
     // ── Realistic multicolor (uses OpenFreeMap's pre-built bright style) ──────
@@ -255,7 +253,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     const stitchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const { mapCenterLat, mapCenterLng, mapZoom, mapBearing, mapStreetColor, posterColor, mapStyleUrl, mapColorPreset, setCaptureHighResFn } = useStore();
-    const activePreset = MAP_COLOR_PRESETS.find(p => p.id === mapColorPreset);
+    const activePreset = MAP_COLOR_PRESETS_FULL.find(p => p.id === mapColorPreset);
     const getActiveStyle = () => activePreset?.customStyle ? activePreset.customStyle() : createMapStyle(posterColor, mapStreetColor);
 
     // Always-current snapshot of the map position — read inside async captureStitched
@@ -407,7 +405,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
         const initialStyleUrl = useStore.getState().mapStyleUrl;
         const initialPresetId = useStore.getState().mapColorPreset;
-        const initialPreset = MAP_COLOR_PRESETS.find(p => p.id === initialPresetId);
+        const initialPreset = MAP_COLOR_PRESETS_FULL.find(p => p.id === initialPresetId);
         const initialStyle = initialStyleUrl ?? (initialPreset?.customStyle ? initialPreset.customStyle() : createMapStyle(posterColor, mapStreetColor));
 
         const map = new maplibregl.Map({
