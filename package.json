@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start": "node server/index.js & vite",
     "server": "node server/save-server.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "npx playwright test",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
     "test:update": "npx playwright test --update-snapshots",
     "test:ui": "npx playwright test --ui",
     "test:report": "npx playwright show-report tests/report"
@@ -25,6 +28,7 @@
     "@fontsource/poppins": "^5.2.7",
     "@types/d3": "^7.4.3",
     "@types/d3-drag": "^3.0.7",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",
     "d3-drag": "^3.0.0",
@@ -38,14 +42,17 @@
     "framer-motion": "^12.23.24",
     "helmet": "^8.1.0",
     "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.554.0",
     "maplibre-gl": "^5.6.1",
+    "morgan": "^1.10.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.3",
     "puppeteer": "^24.40.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
+    "zod": "^4.3.6",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
@@ -58,6 +65,7 @@
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/ui": "^4.1.4",
     "autoprefixer": "^10.4.22",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -68,6 +76,7 @@
     "tailwindcss": "^4.1.17",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vitest": "^4.1.4"
   }
 }

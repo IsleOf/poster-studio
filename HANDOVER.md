@@ -1,9 +1,9 @@
 # HANDOVER — The Mapped Moment (Poster Studio)
 
 > For AI coding agents (Claude Code, Cursor, Copilot Workspace, Devin, etc.)
-> Last updated: 2026-04-01
+> Last updated: 2026-04-11
 
-This document gives you everything you need to understand, modify, and deploy this project. Read CLAUDE.md first for quick-reference, then this file for deeper context.
+Read this file before touching anything. The bugs in here have already cost hours — read the "Known Failure Modes" section before you make assumptions.
 
 ---
 
@@ -16,9 +16,9 @@ This document gives you everything you need to understand, modify, and deploy th
 - Customer visits themappedmoment.com/verify → enters Etsy order number
 - System verifies purchase via Etsy API → renders poster → delivers download link or sends to print fulfillment
 - For digital: customer gets 300 DPI PNG download (link valid 7 days, 3 free revisions)
-- For prints: system uploads to Printify/Scalable Press → ships to customer
+- For prints: system uploads to Printify → ships to customer
 
-**Revenue so far:** $0 — shop is connected but no listings published yet. This is the immediate priority.
+**Revenue so far:** $0 — shop is connected, first listings exist but are not yet live on Etsy.
 
 ---
 
@@ -32,51 +32,54 @@ This document gives you everything you need to understand, modify, and deploy th
 │    /              → MainLayout (poster designer)         │
 │    /t/:id         → Designer pre-loaded with template    │
 │    /l/:slug       → Listing collection page              │
+│    /:slug         → Redirects to /l/:slug (bare slugs)   │
 │    /verify        → Order verification + download        │
 │    /gallery       → Template gallery (public)            │
 │                                                          │
 │  Admin Routes (/admin/*):                                │
 │    /admin/login      → JWT auth                          │
-│    /admin/dashboard  → Overview stats                    │
-│    /admin/orders     → Order management                  │
-│    /admin/queue      → Render queue status                │
-│    /admin/templates  → Template CRUD + editor             │
-│    /admin/listings   → Collection management              │
-│    /admin/etsy       → Etsy shop sync + listing perf     │
+│    /admin/dashboard  → Overview stats + revenue panel    │
+│    /admin/orders     → Order management + bulk actions   │
+│    /admin/queue      → Render queue status               │
+│    /admin/templates  → Template CRUD + editor            │
+│    /admin/listings   → Collection management             │
+│    /admin/design-editor/:id → Design editor              │
+│    /admin/etsy       → Etsy shop sync                    │
 │    /admin/analytics  → Event log                         │
-│    /admin/assets     → Image uploads                     │
-│    /admin/settings   → Config (admin password, etc)      │
+│    /admin/assets     → Image uploads + font management   │
+│    /admin/settings   → Config                            │
 │                                                          │
 ├─────────────────────────────────────────────────────────┤
 │                    BACKEND (Express 5 + SQLite)           │
 │                                                          │
 │  server/index.js          → Main entry, route mounting   │
 │  server/db.js             → Schema, migrations, seeds    │
-│  server/middleware/auth.js → JWT auth middleware          │
+│  server/middleware/auth.js → JWT auth middleware         │
 │                                                          │
 │  Routes:                                                 │
 │    /api/designs           → Save/load poster designs     │
 │    /api/verify-order      → Etsy order verification      │
+│    /api/order-status      → Poll render status           │
 │    /api/download-file/:id → Signed file download         │
 │    /api/templates         → Template CRUD                │
 │    /api/listings          → Public listing collections   │
-│    /api/admin-orders      → Order management (authed)    │
-│    /api/admin-settings    → Settings CRUD (authed)       │
-│    /api/admin-assets      → File upload (authed)         │
-│    /api/admin-etsy        → Etsy API proxy (authed)      │
+│    /api/admin/orders      → Order management (authed)    │
+│    /api/admin/settings    → Settings CRUD (authed)       │
+│    /api/admin/assets      → File upload (authed)         │
+│    /api/admin/etsy        → Etsy API proxy (authed)      │
 │    /api/webhooks          → Printify/Etsy webhooks       │
 │    /api/analytics         → Event ingestion              │
 │    /auth/etsy             → OAuth 2.0 PKCE flow          │
 │                                                          │
 │  Services:                                               │
-│    server/services/etsy.js      → Etsy API client        │
-│    server/services/render.js    → Puppeteer renderer     │
-│    server/services/renderQueue.js → Async job queue      │
+│    server/services/etsy.js      → Etsy API client       │
+│    server/services/render.js    → Render dispatch        │
+│    server/services/renderQueue.js → Async job queue     │
 │    server/services/printify.js  → Print fulfillment      │
-│    server/services/email.js     → Nodemailer (digest)    │
+│    server/services/email.js     → Nodemailer             │
 │                                                          │
 │  Background Jobs:                                        │
-│    - Render queue worker (continuous)                     │
+│    - Render queue worker (continuous)                    │
 │    - Etsy order polling (every 2 min)                    │
 │    - Daily seller digest email (8 AM cron)               │
 │                                                          │
@@ -90,86 +93,340 @@ This document gives you everything you need to understand, modify, and deploy th
 │  Systemd: poster-studio-api.service                      │
 │  SQLite DB: /home/ubuntu/poster-studio/server/data/      │
 │  Renders:   /home/ubuntu/poster-studio/server/data/renders/ │
+│  Thumbnails: /var/www/poster-studio/designs/             │
 │  Frontend:  /var/www/poster-studio/ (static, nginx)      │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Key Technical Decisions & Gotchas
+## 3. Known Failure Modes (Read This First)
 
-### Etsy API v3 — Header Format (CRITICAL)
-The `x-api-key` header MUST be `keystring:shared_secret` (colon-separated). The OAuth `client_id` uses keystring only. This is non-obvious and caused hours of debugging. See `etsyHeaders()` in both `server/services/etsy.js` and `server/routes/verify.js`.
+These bugs have already been hit. Do not repeat them.
 
-### Etsy OAuth Scopes
-Only `transactions_r shops_r email_r` are valid for our use case. `conversations_w` does NOT exist in Etsy API v3 (will cause `invalid_scope` error).
+### A. Font rendering in PNG downloads
 
-### Three Map Modes
-The `posterType` field controls which mode is active:
-- `starmap` — SVG star chart, no map background image
-- `streetmap` — 2-color monochrome street map, `mapStyleUrl = null`
-- `coloredmap` — Full-color OpenFreeMap bright style, `mapStyleUrl` is set automatically
+**Symptom:** Downloaded PNG shows wrong fonts (e.g. generic sans-serif instead of Title001).
 
-All three share the same SVG poster template in `VectorStarMap.tsx`. Street/colored maps render offscreen via `StreetMapCapture.tsx` → capture as data URL → inject as `<image>` in SVG.
+**Root cause:** `src/utils/renderPoster.ts` → `collectUsedFontFamilies()` reads `font-family` attributes from the SVG. The SVG sets these as stacks like `"Title001, serif"`. The old code treated the whole string as a lookup key against `FONT_REGISTRY` — found nothing — skipped font embedding — browser fell back to system fonts.
 
-### Render Pipeline
-1. Customer buys on Etsy → Etsy poll detects paid receipt
-2. Design token extracted from order personalization note
-3. Render job enqueued in `render_queue` table
-4. Worker spawns Puppeteer → loads designer at `/t/{templateId}?token={token}` → screenshots SVG at 300 DPI
-5. PNG saved to `server/data/renders/`
-6. For digital: download link generated (HMAC-signed, 7-day expiry)
-7. For print: PNG uploaded to Printify → order created → sent to production
+**Fix applied:** Split on comma first:
+```ts
+for (const part of ff.split(',')) {
+    const name = part.trim().replace(/^['"]|['"]$/g, '');
+    if (name) families.add(name);
+}
+```
 
-### State Management
-`useStore.ts` is a massive Zustand store with 100+ fields. `DESIGN_FIELDS` array lists all fields that define a poster design (vs UI-only fields like `previewZoom`). Templates save/restore only `DESIGN_FIELDS`.
+**How to verify:** After any change to rendering, run the font test:
+```bash
+node scripts/test-font-render.cjs
+# Output: /tmp/font-verify-render.png — check visually that fonts match preview
+# Also check file size: with embedded fonts ~400KB, without ~150KB
+```
 
-### Font System
-Fonts are bundled via Fontsource packages (not Google Fonts CDN). Custom font `Mapped2` is in `src/assets/fonts/`. Font CSS is loaded in `src/assets/fonts/fonts.css`. Available fonts are listed in `TITLE_FONTS`, `SUBTITLE_FONTS`, `DETAILS_FONTS` arrays in `SidebarControls.tsx`.
+### B. Design thumbnails showing gray circle (no stars)
+
+**Symptom:** Thumbnail in the sidebar design card shows a gray circle instead of stars.
+
+**Root cause:** D3-celestial data fetches async from GitHub CDN. Taking a screenshot immediately captures the placeholder state. You must wait for `svg.querySelectorAll('circle').length > 100` before screenshotting.
+
+**Fix:** Always use `scripts/capture-thumbnails.cjs` which waits for >100 SVG circles before capturing. Never screenshot immediately after navigation.
+
+**Local vs production mismatch:** `public/designs/` (served locally by Vite) and `/var/www/poster-studio/designs/` (served by nginx on prod) are separate directories. Updating one does not update the other. Always:
+1. Capture thumbnail → save to `public/designs/SM001/DesignXXX/8x10.png`
+2. Also `scp` to production `/var/www/poster-studio/designs/SM001/DesignXXX/8x10.png`
+3. The `?v=N` cache-bust param in the img src must be incremented when thumbnails change
+
+### C. DB state drift between local and production
+
+**Symptom:** Something works locally but not on production (or vice versa), even after deploying code.
+
+**Root cause:** Template `settings_json` fields (`printSize`, `titleAllCaps`), `thumbnail_path`, and `listing_templates` rows are in the DB — not in code. Making DB changes locally doesn't affect production, and vice versa.
+
+**Fix:** Always use the sync script as the single source of truth:
+```bash
+# After any DB state change:
+node scripts/sync-listing-state.cjs                         # verify local
+node scripts/sync-listing-state.cjs --db /home/ubuntu/poster-studio/server/data/db.sqlite  # not possible remotely
+
+# Instead, run on prod:
+scp scripts/sync-listing-state.cjs ubuntu@13.210.227.152:/home/ubuntu/poster-studio/scripts/
+ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
+  --db /home/ubuntu/poster-studio/server/data/db.sqlite"
+```
+
+**What drifted in the past:**
+- `printSize` in `settings_json` must equal `fulfillment_size` — they drifted when templates were edited without syncing
+- `titleAllCaps` was `true` on all Design001 templates on production (wrong — it's false for Design001)
+- `thumbnail_path` was `null` for all Design002 templates in DB
+- A1/A2/A5 rows were missing from `listing_templates` for both designs
+
+### D. rsync wiping the designs/ thumbnail directory
+
+**Symptom:** Thumbnails disappear from production after a frontend deploy.
+
+**Root cause:** `rsync --delete` removes files on the destination that don't exist in the source. The `dist/` build output doesn't include `public/designs/` (those are user-managed files, not build artifacts).
+
+**Fix applied:** Always use `--exclude='designs/'` in rsync:
+```bash
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+```
+This is already in CLAUDE.md deploy commands. Do not remove it.
+
+### E. printSize field corruption
+
+**Symptom:** A template opens at the wrong print size in the designer.
+
+**Root cause:** `printSize` in `settings_json` must match the template's `fulfillment_size` column. When admin saves a template, if the `printSize` is not set correctly it persists the wrong value. Past corruption: 8x10 had `printSize=16x20`, 5x7 had `printSize=8x10`, a1 had `printSize=18x24`.
+
+**Fix:** `sync-listing-state.cjs` enforces `printSize === fulfillment_size` and will fix any corruption. Run it after any admin template editing session.
+
+### F. Design card thumbnail aspect ratio inconsistency
+
+**Symptom:** Design cards in the sidebar show different aspect ratios depending on which design is displayed.
+
+**Root cause:** The old code used `group.sizes[0]` to determine which thumbnail to show and what aspect ratio to render the card at. `sizes[0]` might be 5x7 (5:7 ratio) for one design and 8x10 (4:5 ratio) for another.
+
+**Fix applied:** Always use the 8x10 thumbnail for design cards with a hardcoded `aspectRatio: '4/5'`:
+```tsx
+const thumbSize = group.sizes.find(sz => sz.fulfillment_size === '8x10') ?? group.sizes[0];
+// ...
+style={{ aspectRatio: '4/5', objectFit: 'cover' }}
+```
 
 ---
 
 ## 4. Database Schema (SQLite)
 
 ```sql
--- Core tables (see server/db.js for full DDL)
+-- Key tables (see server/db.js for full DDL)
 
-designs       (token TEXT PK, state_json TEXT, render_path TEXT, created_at INTEGER)
+designs       (token TEXT PK, state_json TEXT, render_path TEXT, created_at)
 orders        (id INTEGER PK, etsy_receipt_id TEXT, token TEXT, listing_type TEXT,
-               print_size TEXT, status TEXT DEFAULT 'pending', render_path TEXT,
-               printify_order_id TEXT, etsy_buyer_name TEXT, etsy_buyer_email TEXT,
-               ship_address_json TEXT, revisions_used INTEGER DEFAULT 0,
-               notes TEXT, fulfilled_at INTEGER, created_at INTEGER)
-templates     (id INTEGER PK, name TEXT, settings_json TEXT, thumbnail_url TEXT,
-               etsy_listing_id TEXT, etsy_listing_data TEXT, is_active BOOLEAN DEFAULT 1,
-               created_at INTEGER, updated_at INTEGER)
+               print_size TEXT, status TEXT DEFAULT 'pending', price_cents INTEGER,
+               render_path TEXT, printify_order_id TEXT, etsy_buyer_name TEXT,
+               etsy_buyer_email TEXT, ship_address_json TEXT, seller_notes TEXT,
+               revisions_used INTEGER DEFAULT 0, fulfilled_at INTEGER, created_at)
+templates     (id TEXT PK,  -- e.g. 'sm001-design001-8x10'
+               name TEXT, description TEXT, fulfillment_size TEXT, sell_price_cents INTEGER,
+               design_group_id TEXT, settings_json TEXT, thumbnail_path TEXT,
+               is_active BOOLEAN DEFAULT 1, created_at, updated_at)
 render_queue  (id INTEGER PK, order_id INTEGER, token TEXT, status TEXT DEFAULT 'pending',
-               attempts INTEGER DEFAULT 0, error TEXT, created_at INTEGER, updated_at INTEGER)
+               attempts INTEGER DEFAULT 0, error TEXT, created_at, processed_at)
 settings      (key TEXT PK, value TEXT)
-assets        (id INTEGER PK, type TEXT, filename TEXT, file_path TEXT, metadata TEXT,
-               created_at INTEGER)
+assets        (id INTEGER PK, type TEXT, filename TEXT, file_path TEXT, metadata TEXT, created_at)
 listings      (id INTEGER PK, slug TEXT UNIQUE, name TEXT, description TEXT,
-               is_active BOOLEAN DEFAULT 1, created_at INTEGER, updated_at INTEGER)
-listing_templates (listing_id INTEGER, template_id INTEGER, sort_order INTEGER,
+               banner_image TEXT, is_active BOOLEAN DEFAULT 1, fulfillment_type TEXT,
+               base_price_cents INTEGER, etsy_listing_id TEXT, created_at, updated_at)
+listing_templates (listing_id INTEGER, template_id TEXT, position INTEGER,
                    PRIMARY KEY(listing_id, template_id))
-events        (id INTEGER PK, name TEXT, props TEXT, session_id TEXT, created_at INTEGER)
-order_events  (id INTEGER PK, order_id INTEGER, type TEXT, label TEXT, detail TEXT,
-               actor TEXT DEFAULT 'system', created_at INTEGER)
+events        (id INTEGER PK, name TEXT, props TEXT, session_id TEXT, created_at)
+order_events  (id INTEGER PK, order_id INTEGER, type TEXT, label TEXT, detail TEXT, created_at)
 ```
 
-**Order statuses:** `pending` → `rendering` → `sent` (digital) or `fulfilled` (print). Also: `pending_manual`, `failed`.
+**Template ID convention:** `{collection}-{designGroup}-{size}` — e.g. `sm001-design001-8x10`.
+The collection prefix (`sm001`), design group (`design001`), and size suffix (`8x10`) are used by the frontend to group templates into design cards and size selectors.
+
+**Order statuses:** `pending` → `rendering` → `sent` (digital) or `fulfilled` (print). Also: `pending_manual` (no renderer configured), `failed` (3 retry attempts exhausted).
+
+**price_cents:** Populated from `receipt.grandtotal.amount` when the order is first created in `server/routes/verify.js`. Used by the admin dashboard revenue panel.
 
 ---
 
-## 5. Environment Variables
+## 5. The Design/Listing Creation Workflow
 
-All in `server/.env` (see `.env.example` for template):
+This is the process for creating new designs and making them available on the listing page. Follow it exactly to avoid the failures described in Section 3.
+
+### Step 1: Create templates in the admin panel OR via script
+
+**Via admin UI** (`/admin/templates` → New Template): automatically populates `templates` AND `listing_templates`. Preferred for one-off designs.
+
+**Via script** (for bulk multi-size creation): you must insert into **three** tables or the listing page won't show the design and sync-to-siblings silently fails:
+
+```js
+// 1. design_groups — links the group to a listing
+db.prepare(`INSERT INTO design_groups (id, listing_id, name, ...) VALUES (...)`).run(...);
+
+// 2. templates — one row per size
+db.prepare(`INSERT INTO templates (id, design_group_id, fulfillment_size, ...) VALUES (...)`).run(...);
+
+// 3. listing_templates — REQUIRED JOIN TABLE, commonly missed when scripting
+//    Without this: listing page omits the design, sync-to-siblings fails silently
+const ins = db.prepare(`INSERT OR IGNORE INTO listing_templates (listing_id, template_id, position) VALUES (?, ?, 0)`);
+for (const tid of templateIds) { ins.run(listingId, tid); }
+```
+
+ID convention: `{collection}-{design}-{size}` (e.g. `sm001-design003-8x10`)  
+`fulfillment_size` must exactly match the size suffix in the template ID.
+
+### Step 2: Sync printSize (critical)
+
+After saving templates, run the sync script to enforce `printSize === fulfillment_size`:
+```bash
+node scripts/sync-listing-state.cjs
+```
+Add the new design group to `DESIGNS` array in `scripts/sync-listing-state.cjs` first.
+
+### Step 3: Capture thumbnails
+
+```bash
+# Update capture-thumbnails.cjs with the new templateId and expectedTitle
+node capture-thumbnails.cjs
+# Visually inspect output images before deploying
+```
+
+**Required checks before accepting a thumbnail:**
+- Does it show real stars (not gray circle)?
+- Is the title text correct and in the right case?
+- Is it 4:5 aspect ratio (592×740 or equivalent)?
+- Does it match the live preview at `localhost:5173/t/{templateId}`?
+
+### Step 4: Place thumbnails in both locations
+
+```bash
+# Local (for Vite dev server)
+cp /tmp/thumb-newdesign.png public/designs/SM001/Design003/8x10.png
+
+# Production
+scp /tmp/thumb-newdesign.png ubuntu@13.210.227.152:/var/www/poster-studio/designs/SM001/Design003/8x10.png
+```
+
+### Step 5: Update DB thumbnail_path and listing_templates
+
+Edit `scripts/sync-listing-state.cjs` — add the new design group to `DESIGNS` and add its group prefix to the relevant listing in `LISTINGS`. Then:
+
+```bash
+# Apply locally
+node scripts/sync-listing-state.cjs
+
+# Apply on production
+scp scripts/sync-listing-state.cjs ubuntu@13.210.227.152:/home/ubuntu/poster-studio/scripts/
+ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
+  --db /home/ubuntu/poster-studio/server/data/db.sqlite"
+```
+
+### Step 6: Increment thumbnail cache-bust version
+
+In `src/components/SidebarControls.tsx` and `src/components/ListingPage.tsx`, find `?v=N` on thumbnail img src and increment N:
+```tsx
+src={`${API}${thumbSize.thumbnail_path}?v=3`}  // was ?v=2
+```
+
+### Step 7: Build and deploy
+
+```bash
+npm run build
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+```
+
+### Step 8: Visual verification (mandatory)
+
+Use the Playwright-based visual check:
+```bash
+node scripts/verify-listing.cjs
+# Saves /tmp/verify-local.png and /tmp/verify-prod.png
+# Check that both show correct thumbnails with stars
+```
+
+---
+
+## 6. Font System
+
+### How fonts work in the browser (preview)
+Fonts are declared in `src/assets/fonts/fonts.css` via `@font-face`. Vite bundles the woff2 files. The browser loads them normally. Custom fonts: `Title001`, `Details001`, `Mapped2`, `MappedMomentScript`, and ~25 others.
+
+### How fonts work in PNG downloads (critical)
+When the user clicks "Download Preview", `src/utils/renderPoster.ts` serializes the SVG to a blob URL and draws it on a Canvas. **Blob-URL SVGs cannot resolve relative `@font-face` src URLs** — the browser's security model blocks it.
+
+**Solution:** `src/utils/fontRegistry.ts` uses Vite `?url` imports to get hashed absolute paths for every font file at build time. `renderPoster.ts` fetches each used font as a base64 data URI and injects inline `@font-face` rules into the SVG before serialization.
+
+**The gotcha:** SVG `font-family` attributes are stacks like `"Title001, serif"`. Must split on comma before looking up in `FONT_REGISTRY`. The fix is in `collectUsedFontFamilies()` in `renderPoster.ts`.
+
+### Adding a new custom font to the render pipeline
+1. Add the `.woff2` file to `src/assets/fonts/`
+2. Add `@font-face` to `src/assets/fonts/fonts.css`
+3. Add a Vite `?url` import and registry entry to `src/utils/fontRegistry.ts`
+4. Add the font name to the relevant array in `SidebarControls.tsx` (`TITLE_FONTS`, etc.)
+
+If you skip step 3, the font will show in the browser preview but render as a fallback system font in downloads.
+
+---
+
+## 7. Render Pipeline
+
+### Customer-triggered (verify flow)
+1. Customer POSTs to `/api/verify-order` with their Etsy order number
+2. Server fetches receipt from Etsy API, validates purchase
+3. Design token extracted from receipt personalization note
+4. **If digital + design has pre-rendered PNG:** copy PNG, set status='sent', return download URL
+5. **If digital + no pre-rendered PNG:** enqueue render job, return `status: 'rendering'`
+6. Frontend polls `/api/order-status?etsyOrderId=X` every 5s
+7. When render queue worker finishes, it sets `status='sent'` for digital orders
+8. Next poll returns download URL
+
+### Server-side render worker
+`server/services/renderQueue.js` runs continuously, processes one job at a time.
+- Priority chain: Lambda URL → local Puppeteer → pending_manual fallback
+- 3 attempts max, exponential-ish retry
+- On success for digital orders: promotes to `status='sent'`, sends email
+- On exhaustion: sets `status='failed'`
+
+---
+
+## 8. Deployment
+
+### Frontend
+```bash
+npm run build
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+```
+
+`--exclude='designs/'` is critical — do not remove it. The `/designs/` directory contains thumbnails that are NOT build artifacts; rsync `--delete` would wipe them.
+
+### Server
+```bash
+rsync -avz --exclude node_modules --exclude data --exclude .env \
+  server/ ubuntu@13.210.227.152:/home/ubuntu/poster-studio/server/
+ssh ubuntu@13.210.227.152 "cd /home/ubuntu/poster-studio/server && \
+  npm install --production && sudo systemctl restart poster-studio-api && \
+  sleep 2 && sudo systemctl is-active poster-studio-api"
+```
+
+### DB state
+DB state is **not** deployed via rsync. It lives in `/home/ubuntu/poster-studio/server/data/db.sqlite` on the VPS. Use `sync-listing-state.cjs` after any template/listing changes.
+
+### Nginx thumbnail caching
+The nginx config has a dedicated `location ^~ /designs/` block with `Cache-Control: no-cache, must-revalidate`. This means thumbnails are re-validated on every request — important for updates to take effect without a full cache purge.
+
+The `?v=N` query param in thumbnail img src is an additional client-side cache buster for browser caches that ignore Cache-Control on images.
+
+---
+
+## 9. Scripts Reference
+
+All scripts are in `scripts/` and run from the project root.
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `scripts/sync-listing-state.cjs` | **Single source of truth for DB state.** Enforces printSize, titleAllCaps, thumbnail_path, listing_templates. | `node scripts/sync-listing-state.cjs` |
+| `capture-thumbnails.cjs` | Playwright-based poster screenshot for thumbnails. Waits for D3 stars before capturing. | `node capture-thumbnails.cjs` |
+| `scripts/test-font-render.cjs` | Renders a poster to PNG via renderPosterToBlob and saves it. Use to verify fonts are embedded. | `node scripts/test-font-render.cjs` |
+| `scripts/verify-listing.cjs` | Playwright screenshot of listing page on local + prod. Use to visually confirm thumbnails. | `node scripts/verify-listing.cjs` |
+
+---
+
+## 10. Environment Variables
+
+All in `server/.env` (see `server/.env.example` for template):
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `PORT` | Yes | Express port (3001) |
 | `APP_URL` | Yes | `https://themappedmoment.com` |
 | `DOWNLOAD_SECRET` | Yes | HMAC secret for signed download URLs |
+| `JWT_SECRET` | Yes | Secret for admin JWT tokens |
+| `ADMIN_PASSWORD_HASH` | Yes | bcrypt hash of admin password |
 | `DB_PATH` | Yes | Path to SQLite file |
 | `RENDERS_DIR` | Yes | Path for rendered PNGs |
 | `CORS_ORIGIN` | Yes | Allowed CORS origin |
@@ -179,268 +436,182 @@ All in `server/.env` (see `.env.example` for template):
 | `ETSY_REFRESH_TOKEN` | Auto | Set by OAuth flow |
 | `ETSY_SHOP_ID` | Auto | Set by OAuth flow (12648302) |
 | `ETSY_REDIRECT_URI` | Yes | OAuth callback URL |
-| `ETSY_DIGITAL_LISTING_IDS` | Later | Comma-separated Etsy listing IDs for digital products |
-| `ETSY_PRINT_LISTING_IDS` | Later | Comma-separated Etsy listing IDs for physical prints |
-| `PRINTIFY_API_TOKEN` | Later | Printify API key |
-| `PRINTIFY_SHOP_ID` | Later | Printify shop ID |
-| `RENDER_LAMBDA_URL` | Optional | AWS Lambda for offloading renders |
-| `ADMIN_PASSWORD_HASH` | Yes | bcrypt hash of admin password |
-| `JWT_SECRET` | Yes | Secret for admin JWT tokens |
+| `ENABLE_LOCAL_RENDER` | Optional | Set `true` to enable Puppeteer rendering |
+| `RENDER_LAMBDA_URL` | Optional | AWS Lambda URL for offloading renders |
+| `FRONTEND_URL` | Optional | Used by Puppeteer renderer to load the page |
 
 ---
 
-## 6. Development
+## 11. Key Technical Gotchas
+
+### Etsy API v3 — Header Format
+The `x-api-key` header MUST be `keystring:shared_secret` (colon-separated). OAuth `client_id` uses keystring only. See `etsyHeaders()` in `server/services/etsy.js`.
+
+### Three Map Modes
+`posterType` controls mode: `starmap` | `streetmap` | `coloredmap`. All share `VectorStarMap.tsx`. Street/colored maps render offscreen via `StreetMapCapture.tsx` → captured as data URL → injected as `<image>` in SVG.
+
+### Template ID Convention
+Template IDs follow the pattern `{collection}-{design}-{size}` (e.g. `sm001-design001-8x10`). The frontend splits on the last dash to extract the size code for grouping into design cards and size selectors. Do not deviate from this convention.
+
+### Three DB fields required for templates to display correctly on the listing page
+The listing page (`/l/:slug`) shows all templates in `listing_templates`. A template card shows correctly only when ALL THREE of these are set:
+1. **`listing_templates` row** — without it the template is invisible (see gotcha below)
+2. **`thumbnail_path`** — without it the card shows the template name as fallback text instead of the poster image. Set it to the shared 8x10 thumbnail: `/designs/SM001/Design00N/8x10.png`
+3. **`templates.name`** — shown as the card label. Use consistent format `Design00N — {size}` (e.g. `Design004 — 8×10"`). If you create templates via script, double-check the name format matches existing designs. Renaming a `design_group.name` does NOT update template names — those must be updated separately.
+
+### listing_templates is mandatory — scripts commonly miss it
+When creating templates via script you touch `design_groups` and `templates`, but the listing page and sync-to-siblings both depend on a third table: `listing_templates (listing_id, template_id, position)`. If this table is missing rows for a design, the design silently disappears from the listing page and sync-to-all-sizes does nothing. Always insert one row per template:
+```js
+db.prepare('INSERT OR IGNORE INTO listing_templates (listing_id, template_id, position) VALUES (?, ?, 0)')
+  .run(listingId, templateId);
+```
+The admin UI does this automatically; scripts must do it explicitly.
+
+### State Management
+`useStore.ts` is a Zustand store with 100+ fields. `DESIGN_FIELDS` lists what's saved to templates. `CUSTOM_TEXT_KEYS` lists what's saved to `customText`. Both arrays must be updated when adding new text elements — see the "New Text Element Checklist" in CLAUDE.md.
+
+### applyTemplate and customText carry-over
+`applyTemplate.ts` explicitly resets `customText.title`, `customText.subtitle`, `customText.names`, and `customText.dedication` when switching designs. If you add a new text field, add it to this reset block and to `CUSTOM_TEXT_KEYS`.
+
+### Inline font-family stacks in SVG
+SVG text elements get `font-family="Title001, serif"` (with fallback). Any code that reads `font-family` and uses it as a lookup key MUST split on comma first. This applies to `renderPoster.ts` and any future server-side render code.
+
+---
+
+## 12. File-by-File Guide
+
+### Frontend — Core Components
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/components/VectorStarMap.tsx` | ~1500 | SVG poster renderer. 3 big useEffects: background layer, star/map layer, text layer. Inline editing, drag-to-reposition, resize handles. |
+| `src/components/SidebarControls.tsx` | ~2200 | All sidebar controls in accordion sections. Design card grid with thumbnail display. |
+| `src/components/StreetMapCapture.tsx` | ~600 | Offscreen MapLibre GL renderer. Capture strategies: captureStitched (quality) + captureQuick (speed). |
+| `src/components/MainLayout.tsx` | ~400 | Split-pane layout. Orchestrates StreetMapCapture ↔ VectorStarMap. |
+| `src/components/ListingPage.tsx` | ~200 | Public listing collection page. Shows design thumbnails. |
+| `src/components/VerifyOrder.tsx` | ~250 | Order verification + status polling. |
+
+### Frontend — Utilities
+
+| File | Purpose |
+|------|---------|
+| `src/store/useStore.ts` | Zustand store — all poster state + setters + undo/redo |
+| `src/utils/applyTemplate.ts` | Apply template settings_json to store state |
+| `src/utils/renderPoster.ts` | SVG → PNG blob with embedded fonts for download |
+| `src/utils/fontRegistry.ts` | Vite `?url` imports for every woff2 file. Required for font embedding in renders. |
+| `src/utils/astronomy.ts` | D3 projection rotation from lat/lng/date/time |
+| `src/utils/geocode.ts` | Nominatim API wrapper |
+
+### Backend — Routes
+
+| File | Auth | Key Endpoints |
+|------|------|---------------|
+| `server/routes/verify.js` | No | `POST /api/verify-order`, `GET /api/order-status`, `GET /api/download-file/:id` |
+| `server/routes/templates.js` | Mixed | `GET /api/templates/:id` (public), CRUD (authed), style sync |
+| `server/routes/listings.js` | Mixed | `GET /api/listings/:slug` (public list with thumbnails), CRUD + listing_templates (authed) |
+| `server/routes/admin-orders.js` | Yes | Orders, status, bulk, CSV, notes, fulfill |
+| `server/routes/admin-etsy.js` | Yes | Etsy proxy, listing sync |
+| `server/routes/admin-settings.js` | Yes | Settings CRUD |
+| `server/routes/admin-assets.js` | Yes | File upload/delete |
+
+### Backend — Services
+
+| File | Purpose |
+|------|---------|
+| `server/services/etsy.js` | `etsyFetch()` with auto token refresh, order polling |
+| `server/services/render.js` | Dispatch to Lambda / local Puppeteer / pending_manual fallback |
+| `server/services/renderQueue.js` | Async render job queue. On success: promotes digital orders to 'sent'. |
+| `server/services/printify.js` | Upload image, create order, send to production |
+| `server/services/email.js` | Poster ready email, daily digest |
+
+---
+
+## 13. Testing
 
 ```bash
-cd /home/dev/poster-studio
-
-# Frontend dev server (hot reload)
-npm run dev          # → http://localhost:5173
-
-# Backend server (run separately in another terminal)
-cd server && node index.js   # → http://localhost:3001
-
-# Build frontend for production
-npm run build        # → dist/
-
-# Run tests
-npm run build && npx playwright test
-
-# Deploy frontend to VPS
-rsync -avz --delete dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
-
-# Deploy server to VPS
-rsync -avz --exclude node_modules --exclude data --exclude .env \
-  server/ ubuntu@13.210.227.152:/home/ubuntu/poster-studio/server/
-ssh ubuntu@13.210.227.152 "cd /home/ubuntu/poster-studio/server && npm install --production && sudo systemctl restart poster-studio-api"
-
-# Quick frontend redeploy
-npm run build && rsync -avz --delete dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+npm run build && npx playwright test           # all tests (~93 currently passing)
+npx playwright test tests/features.test.ts    # specific file
+npx playwright test --headed                  # visible browser
+npx playwright test --grep "font"             # by title pattern
 ```
 
+**Important test rules:**
+- MapLibre tests need `test.setTimeout(30000)` — tiles are slow
+- Never use `waitForLoadState('networkidle')` with MapLibre — tiles never fully settle
+- Use `page.waitForSelector('svg', { timeout: 10000 })` for designer tests instead
+- All tests use `setupMockApi(page)` from `tests/fixtures/mockApi.ts`
+
 ---
 
-## 7. Server Management (VPS)
+## 14. Deployment Checklist
+
+Before every deploy:
+- [ ] `npm run build` succeeds with no TypeScript errors
+- [ ] `npx playwright test` passes (no new failures)
+- [ ] Visual check: `node scripts/verify-listing.cjs` — thumbnails look correct
+- [ ] DB state: `node scripts/sync-listing-state.cjs` — all consistent
+- [ ] Frontend deploy: `rsync -avz --delete --exclude='designs/' dist/ ubuntu@...`
+- [ ] Server deploy (if changed): rsync + npm install + systemctl restart
+- [ ] DB sync on prod (if listing/template changes): run sync script via ssh
+- [ ] Verify at https://themappedmoment.com/l/star-map-night-we-met
+
+After thumbnail changes only:
+- [ ] Increment `?v=N` in `SidebarControls.tsx` and `ListingPage.tsx`
+- [ ] Copy new thumbnails to `public/designs/` (local) and `/var/www/poster-studio/designs/` (prod)
+- [ ] Rebuild and deploy
+
+---
+
+## 15. Server Management
 
 ```bash
-# SSH into VPS
 ssh ubuntu@13.210.227.152
 
-# Service management
+# Service
 sudo systemctl status poster-studio-api
 sudo systemctl restart poster-studio-api
 sudo journalctl -u poster-studio-api -f   # live logs
 
-# Database
+# DB
 sqlite3 /home/ubuntu/poster-studio/server/data/db.sqlite
 
 # Nginx
 sudo nginx -t && sudo systemctl reload nginx
 # Config: /etc/nginx/sites-enabled/poster-studio
 
-# SSL cert (auto-renews, but to force)
-sudo certbot renew
+# Thumbnails directory
+ls /var/www/poster-studio/designs/
 ```
 
 ---
 
-## 8. File-by-File Guide
+## 16. Next Steps (Priority Order)
 
-### Frontend — Core Components
-
-| File | Lines | Purpose | Complexity |
-|------|-------|---------|------------|
-| `src/components/VectorStarMap.tsx` | ~1200 | Main SVG poster renderer. 3 big useEffects: background layer, star/map layer, text layer. Also handles inline text editing and drag-to-reposition. | Very High |
-| `src/components/SidebarControls.tsx` | ~2166 | All sidebar controls in accordion sections. Font pickers, color pickers, text inputs, sliders, template buttons, design presets. | Very High (needs decomposition) |
-| `src/components/StreetMapCapture.tsx` | ~600 | Offscreen MapLibre GL renderer. Creates custom 2-color or bright style, captures canvas on idle, returns data URL. Handles tile prefetch and service worker cache. | High |
-| `src/components/MainLayout.tsx` | ~400 | Split-pane layout. Left=sidebar, right=poster preview with zoom/pan. Orchestrates StreetMapCapture ↔ VectorStarMap data flow. | Medium |
-| `src/components/CitySearch.tsx` | ~150 | Nominatim autocomplete for city/location search. | Low |
-| `src/components/GlyphPicker.tsx` | ~200 | Visual browser for Mapped2 font glyphs (hearts, stars, decorative chars). | Low |
-| `src/components/DownloadButton.tsx` | ~100 | SVG → Canvas → PNG export at 300 DPI. | Low |
-| `src/components/VerifyOrder.tsx` | ~250 | Public order verification page with polling. | Medium |
-| `src/components/ErrorBoundary.tsx` | ~50 | React error boundary wrapper. | Low |
-| `src/components/TemplateSelector.tsx` | varies | Template picker UI. | Low |
-| `src/components/GalleryPage.tsx` | varies | Public template gallery. | Low |
-| `src/components/ListingPage.tsx` | varies | Public listing collection page. | Low |
-| `src/components/PosterRenderPage.tsx` | varies | Server-side render target page. | Medium |
-| `src/components/WelcomeModal.tsx` | varies | First-visit welcome/onboarding modal. | Low |
-
-### Frontend — State & Utilities
-
-| File | Purpose |
-|------|---------|
-| `src/store/useStore.ts` | Zustand store with 100+ fields. All poster state + setters. Template save/restore. Undo/redo history. |
-| `src/utils/astronomy.ts` | D3 projection rotation from lat/lng/date/time for star map rendering. |
-| `src/utils/geocode.ts` | Nominatim API wrapper for city search. |
-| `src/utils/applyTemplate.ts` | Apply template settings_json to store state. |
-| `src/utils/analytics.ts` | Event tracking (POST to /api/analytics). |
-
-### Frontend — Admin Pages
-
-| File | Purpose |
-|------|---------|
-| `src/admin/AdminLayout.tsx` | Admin shell: sidebar nav, auth guard, route outlet |
-| `src/admin/DashboardPage.tsx` | Overview: order count, revenue, recent orders |
-| `src/admin/OrdersPage.tsx` | Order list with filters, bulk actions, CSV export |
-| `src/admin/OrderDetailPage.tsx` | Single order detail, status updates, notes, timeline |
-| `src/admin/QueuePage.tsx` | Render queue status and retry controls |
-| `src/admin/TemplatesPage.tsx` | Template list + CRUD |
-| `src/admin/ListingsPage.tsx` | Listing collection management |
-| `src/admin/EtsyPage.tsx` | Etsy shop connection, listing sync, performance table |
-| `src/admin/AnalyticsPage.tsx` | Event log viewer |
-| `src/admin/AssetsPage.tsx` | Image upload and management |
-| `src/admin/SettingsPage.tsx` | Admin settings, password change, credentials |
-| `src/admin/adminApi.ts` | Shared fetch wrapper with JWT auth for all admin API calls |
-
-### Backend — Routes
-
-| File | Auth | Key Endpoints |
-|------|------|---------------|
-| `server/routes/designs.js` | No | `POST /api/designs` (save), `GET /api/designs/:token` (load) |
-| `server/routes/verify.js` | No | `POST /api/verify-order`, `GET /api/download-file/:id`, `GET /api/order-status` |
-| `server/routes/templates.js` | Mixed | `GET /api/templates` (public), CRUD (authed) |
-| `server/routes/listings.js` | Mixed | `GET /api/listings/:slug` (public), CRUD (authed) |
-| `server/routes/admin-orders.js` | Yes | Order list, detail, status update, bulk actions, CSV export, notes |
-| `server/routes/admin-etsy.js` | Yes | Proxy to Etsy API, listing sync, order import trigger |
-| `server/routes/admin-settings.js` | Yes | Settings CRUD, credential management |
-| `server/routes/admin-assets.js` | Yes | File upload/delete for listing images |
-| `server/routes/auth.js` | No | `GET /auth/etsy` (start OAuth), `GET /auth/etsy/callback` |
-| `server/routes/webhooks.js` | Varies | Printify order status webhooks |
-| `server/routes/analytics.js` | No | `POST /api/analytics` (event ingestion) |
-
-### Backend — Services
-
-| File | Purpose |
-|------|---------|
-| `server/services/etsy.js` | `etsyFetch()` with auto token refresh, `fetchNewOrders()`, `pollAndFulfill()`, `sendDownloadLink()` |
-| `server/services/render.js` | Puppeteer-based server-side poster rendering |
-| `server/services/renderQueue.js` | Async render job queue with worker, retry logic |
-| `server/services/printify.js` | `uploadImage()`, `createOrder()`, `sendToProduction()` |
-| `server/services/email.js` | `sendPosterReadyEmail()`, `sendDailyDigest()` via Nodemailer |
+1. **Publish Etsy listings** — Create listing images, publish via admin Etsy page, set `ETSY_DIGITAL_LISTING_IDS` in .env
+2. **Enable server-side rendering** — Set `ENABLE_LOCAL_RENDER=true` and `FRONTEND_URL` in production .env, add 2GB swap
+3. **End-to-end order test** — Place test order on Etsy, verify render → download works
+4. **Prodigi print integration** — `server/services/prodigi.js`, wire into verify flow
+5. **Harden production secrets** — Rotate `ADMIN_PASSWORD`, `JWT_SECRET`, `DOWNLOAD_SECRET` to 24+ char random values
 
 ---
 
-## 9. Known Bugs (from plan file)
-
-These bugs are documented in detail in `.claude/plans/nested-crunching-wreath.md`:
-
-1. **Title jumps on drag start** — `naturalY` closure captures accumulated value instead of title's own offset. Fix: capture `const titleNaturalY = naturalY` before the drag block.
-
-2. **Text jumps on inline edit** — Text useEffect re-runs and destroys/recreates SVG elements while editing. Fix: add `if (inlineEdit !== null) return;` guard at top of text effect.
-
-3. **Street map jumps after drag** — `setIsDraggingMapImage(false)` called before coordinate setters, allowing stale captures through. Fix: reorder so coords are set before clearing the flag. Also: extend subscribe watcher to include `mapStyleUrl`, `posterType`, `mapBgColor`, `mapStreetColor`, `mapColorPreset`.
-
-4. **Details font resize ignores zoom** — `event.dy` not divided by `previewZoom`. Fix: `dAccDy += event.dy / useStore.getState().previewZoom`.
-
----
-
-## 10. Testing
-
-Tests use Playwright with mock API fixtures:
-
-```bash
-npm run build && npx playwright test           # all tests
-npx playwright test tests/poster-modes.test.ts # specific file
-npx playwright test --headed                   # visible browser
-npx playwright test --grep "revenue"           # by title
-```
-
-All tests use `setupMockApi(page)` from `tests/fixtures/mockApi.ts` which intercepts `/api/**` routes with canned responses.
-
-**Test files:**
-
-| File | Count | What It Tests |
-|------|-------|---------------|
-| `tests/admin.test.ts` | ~55 | Admin auth, dashboard, orders, templates, Etsy, settings, assets |
-| `tests/designer.test.ts` | ~20 | Designer page load, template URLs, SVG structure, inline editing, share |
-| `tests/features.test.ts` | ~30 | Revenue panel, retry, bulk actions, notes, CSV, fonts, share, verify |
-| `tests/visual.test.ts` | ~30 | Visual snapshots of all major pages |
-| `tests/poster-modes.test.ts` | ~50 | Star/Street/Colored map modes, shapes, search, date/time, zoom, colors |
-| `tests/designer-controls.test.ts` | ~60 | All sidebar accordion sections, template buttons, fonts, text, colors |
-| `tests/user-journeys.test.ts` | ~40 | E2E: customer flow, templates, share, verify, admin, bulk, CSV |
-| `tests/error-states.test.ts` | ~35 | Invalid params, 404, Nominatim failures, auth errors, network failures |
-| `tests/visual-extended.test.ts` | ~45 | Extended visual snapshots |
-| `tests/admin-advanced.test.ts` | ~45 | Revenue, badges, notes CRUD, retry, bulk, CSV, fonts |
-
-**Important:** MapLibre tests need `test.setTimeout(30000)`. Never use `waitForLoadState('networkidle')` with MapLibre — tiles never fully settle.
-
----
-
-## 11. Immediate Next Steps (for whoever picks this up)
-
-See `PLAN.md` for the full roadmap. The critical path is:
-
-1. **Publish first Etsy listings** — Create templates in admin, generate listing images, publish via admin Etsy page
-2. **A/B test listing content** — Duplicate listings with different images/titles, track views/favorites
-3. **Verify end-to-end order flow** — Place test order, confirm render → download works
-4. **Add watermark to free exports** — Prevent free downloads from cannibalizing sales
-5. **Mobile responsive layout** — 60%+ of Etsy traffic is mobile
-
----
-
-## 12. Credentials & Secrets
+## 17. Credentials & Secrets
 
 **DO NOT commit secrets to git.** All secrets live in `server/.env` on the VPS.
 
-- Etsy API credentials are documented in the Claude Code memory system (not in this file)
+- Etsy API credentials: see Claude Code memory `memory/etsy_credentials.md`
 - Etsy shop: TheMappedMoment, Shop ID: 12648302
-- Admin password hash is in the server .env
-- JWT secret is in the server .env
-- Download HMAC secret is in the server .env
-
-To re-authenticate Etsy: visit `https://themappedmoment.com/auth/etsy` in a browser while logged into the TheMappedMoment Etsy account.
+- To re-authenticate Etsy: visit `https://themappedmoment.com/auth/etsy`
 
 ---
 
-## 13. Deployment Checklist
-
-Before deploying changes:
-
-- [ ] `npm run build` succeeds locally
-- [ ] `npx playwright test` passes (or at least no regressions in changed areas)
-- [ ] No secrets in committed code
-- [ ] Frontend: `rsync -avz --delete dist/ ubuntu@13.210.227.152:/var/www/poster-studio/`
-- [ ] Server: rsync server/, ssh in, `npm install --production`, restart systemd service
-- [ ] Verify site loads at https://themappedmoment.com
-- [ ] Check admin panel at /admin (if admin changes)
-- [ ] Check server logs: `sudo journalctl -u poster-studio-api -f`
-
----
-
-## 14. Print Fulfillment Cost Reference
-
-For detailed per-size pricing, see the Claude Code memory file `memory/printing_costs_research.md`. Summary:
+## 18. Print Fulfillment Cost Reference
 
 **Cheapest single-unit options:**
-- **US small (≤18x24):** ShortRunPosters ($2-5 print, no API)
-- **US large (24x36):** Scalable Press ($7.20 print, has API)
-- **International:** Prodigi Budget or Gelato (local printing in 32+ countries)
+- US small (≤18x24): ShortRunPosters ($2-5 print, no API)
+- US large (24x36): Scalable Press ($7.20, has API)
+- International: Prodigi or Gelato (local printing in 32+ countries)
 
-**Etsy target pricing:**
+**Target Etsy pricing:**
 - Digital download: $12.99-19.99 (89% margin)
-- Physical 18x24: $39.99 (64% margin)
-- Physical 24x36: $44.99 (65% margin)
-
----
-
-## 15. A/B Testing Strategy
-
-**Goal:** Find the listing content (images, videos, titles, tags) that converts best on Etsy.
-
-**Method:**
-1. For each template concept, create 2-3 Etsy listings with ONE variable changed
-2. Track views, favorites, conversion rate via admin Etsy page (performance table)
-3. After 2-4 weeks, deactivate underperformers
-4. Clone winners and test the next variable
-
-**Variables to test (priority order):**
-1. Listing images — lifestyle mockup vs clean product shot vs video thumbnail
-2. Titles — gift-focused vs product-focused vs occasion-focused
-3. Price points — test $2-3 increments
-4. Tags — different long-tail keyword combinations
-
-**Rules:**
-- One variable per test pair
-- Minimum 2 weeks per test (Etsy algorithm needs indexing time)
-- Keep 3+ control listings unchanged as baseline
-- Don't change prices mid-test
+- Physical 18x24: $39.99 (64% margin at Prodigi rates)

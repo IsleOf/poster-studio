@@ -79,6 +79,23 @@ Edit `src/components/StreetMapCapture.tsx`, `MAP_COLOR_PRESETS` array:
 ### Adding a Font
 Edit `src/components/SidebarControls.tsx`, the `TITLE_FONTS` / `SUBTITLE_FONTS` arrays.
 
+## Listing URLs
+
+Customer-facing listing pages support two URL patterns:
+
+| Pattern | Behavior |
+|---------|----------|
+| `/l/:slug` | Loads listing, shows first design group as the primary (Design001) |
+| `/l/:slug/:designSlug` | Loads listing, shows the specified design group as the primary |
+
+`designSlug` matches a design group via (in order): exact `design_group_id`, the trailing `designNNN` segment of the id, or kebab-cased group name. Example URLs for the `star-map-night-we-met` listing:
+
+- `https://themappedmoment.com/l/star-map-night-we-met` — Design001 (default)
+- `https://themappedmoment.com/l/star-map-night-we-met/design002` — Design002 primary
+- `https://themappedmoment.com/l/star-map-night-we-met/design005` — Design005 primary
+
+Use this for **A/B testing** — link different Etsy listings (or paid ads) to different `designSlug` URLs and compare conversion via the `design_view` analytics event. The bare `/l/:slug` continues to work as a stable fallback. When the user clicks a different design card, the URL updates via `replace` (no history entry created).
+
 ## Development
 
 ```bash
@@ -86,6 +103,9 @@ Edit `src/components/SidebarControls.tsx`, the `TITLE_FONTS` / `SUBTITLE_FONTS` 
 npm run dev        # Dev server on http://localhost:5173
 npm run build      # Production build → dist/
 npm run preview    # Preview production build
+
+# Run backend
+cd server && node index.js   # → http://localhost:3001
 ```
 
 ## Deployment (AWS EC2 VPS)
@@ -96,18 +116,27 @@ npm run preview    # Preview production build
 **Domain:** `https://themappedmoment.com` (Let's Encrypt SSL, auto-renews)
 **Served on:** Port 443 HTTPS + 80 → redirect, via nginx
 
-### Deploy Steps
+### Deploy frontend
 ```bash
-# 1. Build locally
 npm run build
-
-# 2. Copy to VPS
-rsync -avz --delete dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
 ```
 
-### Quick redeploy after changes
+⚠️ The `--exclude='designs/'` flag is CRITICAL. Never remove it. The `/designs/` directory
+contains thumbnails that are NOT build artifacts — `--delete` would wipe them on every deploy.
+
+### Deploy server
 ```bash
-cd /home/dev/poster-studio && npm run build && rsync -avz --delete dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --exclude node_modules --exclude data --exclude .env \
+  server/ ubuntu@13.210.227.152:/home/ubuntu/poster-studio/server/
+ssh ubuntu@13.210.227.152 "cd /home/ubuntu/poster-studio/server && \
+  npm install --production && sudo systemctl restart poster-studio-api && \
+  sleep 2 && sudo systemctl is-active poster-studio-api"
+```
+
+### Quick frontend redeploy
+```bash
+cd /home/dev/poster-studio && npm run build && rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
 ```
 
 ## Key Files for Common Tasks
@@ -121,8 +150,145 @@ cd /home/dev/poster-studio && npm run build && rsync -avz --delete dist/ ubuntu@
 | Add new store state | `useStore.ts` → add interface field + default + setter |
 | Change geocoding | `utils/geocode.ts` |
 | Change city search UI | `CitySearch.tsx` |
+| Add a new custom font | See "Adding a Custom Font" section below |
+| Create a new design/listing | See "Design & Listing Creation Workflow" section below |
+| Fix DB inconsistencies | `node scripts/sync-listing-state.cjs` |
+| Verify thumbnails look correct | `node scripts/verify-listing.cjs` |
+| Test font rendering in downloads | `node scripts/test-font-render.cjs` |
+
+## Adding a Custom Font
+
+To add a new font so it works in both the browser preview AND PNG downloads:
+
+1. Copy `.woff2` file to `src/assets/fonts/`
+2. Add `@font-face` declaration to `src/assets/fonts/fonts.css`
+3. Add Vite `?url` import + registry entry to `src/utils/fontRegistry.ts`:
+   ```ts
+   import MyFont400 from '../assets/fonts/MyFont-400-normal.woff2?url';
+   // In FONT_REGISTRY:
+   'My Font': [{ weight: '400', url: MyFont400 }],
+   ```
+4. Add font name to the relevant array in `SidebarControls.tsx` (`TITLE_FONTS`, `SUBTITLE_FONTS`, or `DETAILS_FONTS`)
+
+**Step 3 is mandatory for downloads.** Without it, the font shows in the browser but renders as a system fallback in PNG exports. The reason: blob-URL SVGs cannot resolve relative @font-face URLs, so fonts must be embedded as base64 data URIs — `fontRegistry.ts` provides the Vite-resolved URLs that make this possible.
+
+---
+
+## Design & Listing Creation Workflow
+
+When creating a new design variant and making it available on a listing page, follow ALL steps — skipping any step causes the inconsistencies that have caused repeated issues.
+
+### 1. Create templates in admin OR via script
+
+**Via admin UI** (`/admin/templates`): creates `templates` + `listing_templates` rows automatically.
+
+**Via script** (used for bulk creation): you MUST insert into BOTH tables or save/sync will silently fail:
+```js
+// 1. design_groups row (with listing_id)
+db.prepare('INSERT INTO design_groups (id, listing_id, name, ...) VALUES (...)').run(...);
+
+// 2. templates rows (one per size)
+db.prepare('INSERT INTO templates (id, design_group_id, ...) VALUES (...)').run(...);
+
+// 3. listing_templates rows — REQUIRED, commonly missed
+//    Without these the listing page won't show the design and sync-to-siblings fails silently.
+const ins = db.prepare('INSERT OR IGNORE INTO listing_templates (listing_id, template_id, position) VALUES (?, ?, 0)');
+for (const templateId of templateIds) { ins.run(listingId, templateId); }
+```
+
+Use ID convention: `{collection}-{design}-{size}` (e.g. `sm001-design003-8x10`)  
+`fulfillment_size` must exactly match the size suffix in the ID.
+
+**Set `listing_templates.position` to control design card order.** When inserting via script, `position = 0` for all rows means order falls back to `created_at`, which won't match the logical Design001→002→003 sequence if templates were created out of order. Always set position to match the intended display order:
+```js
+// Design001 = position 0, Design002 = position 1, etc.
+const GROUP_ORDER = ['sm001-design001', 'sm001-design002', 'sm001-design003', 'sm001-design004', 'sm001-design005'];
+// After inserting listing_templates, update positions:
+const update = db.prepare('UPDATE listing_templates SET position = ? WHERE template_id = ?');
+for (const t of templates) {
+    const pos = GROUP_ORDER.indexOf(t.design_group_id);
+    if (pos !== -1) update.run(pos, t.id);
+}
+```
+Run this on BOTH local and production after any new design is added.
+
+### 2. Add design to sync script
+Edit `scripts/sync-listing-state.cjs` — add the new design to the `DESIGNS` array and its prefix to the relevant `LISTINGS` entry.
+
+### 3. Run sync script locally
+```bash
+node scripts/sync-listing-state.cjs
+# Must output: "✓ All state is consistent"
+```
+
+### 4. Capture thumbnail
+```bash
+# Add new entry to capture-thumbnails.cjs DESIGNS array, then:
+node capture-thumbnails.cjs
+```
+Visually verify the output image: real stars visible, correct title text, 4:5 aspect ratio.
+
+### 5. Place thumbnail in both locations
+```bash
+cp /tmp/thumb-newdesign.png public/designs/SM001/Design003/8x10.png
+scp /tmp/thumb-newdesign.png ubuntu@13.210.227.152:/var/www/poster-studio/designs/SM001/Design003/8x10.png
+```
+
+### 6. Increment thumbnail cache-bust version
+In `src/components/SidebarControls.tsx` and `src/components/ListingPage.tsx`:
+```tsx
+src={`${API}${thumbSize.thumbnail_path}?v=3`}  // increment the number
+```
+
+### 7. Build, deploy, and sync prod DB
+```bash
+npm run build
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+
+# Sync DB state to production
+scp scripts/sync-listing-state.cjs ubuntu@13.210.227.152:/home/ubuntu/poster-studio/scripts/
+ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
+  --db /home/ubuntu/poster-studio/server/data/db.sqlite"
+```
+
+### 8. Visual verification (mandatory)
+```bash
+node scripts/verify-listing.cjs
+# Check /tmp/verify-local.png and /tmp/verify-prod.png — both must show stars
+```
+
+---
 
 ## Troubleshooting
+
+### Thumbnails show gray circle (no stars)
+D3-celestial data loads async. Screenshot taken before stars rendered. Use `capture-thumbnails.cjs` which waits for >100 SVG circles. Never screenshot immediately after page navigation.
+
+### Downloaded PNG has wrong fonts
+The `font-family` attribute in SVG is a stack like `"Title001, serif"`. If any code does a lookup using the whole string, it won't find anything in `FONT_REGISTRY`. Always split on comma first. See `collectUsedFontFamilies()` in `src/utils/renderPoster.ts`.
+
+To verify font embedding is working, file size of a 150dpi 8x10 render should be >300KB (fonts add ~200KB). Without embedded fonts it's ~150KB.
+
+### Thumbnails disappear after deploy
+`rsync --delete` wiped the `/designs/` directory. Always use `--exclude='designs/'`. It's in all deploy commands in this file — don't remove it.
+
+### Design card shows wrong aspect ratio
+The thumbnail card must use `aspectRatio: '4/5'` (hardcoded) and always look up the 8x10 size for the thumbnail image. See `SidebarControls.tsx` design card rendering.
+
+### Design cards appear in wrong order in the listing sidebar
+`listing_templates.position` controls sort order. All-zero positions fall back to `created_at`, which may not match logical design order if templates were inserted out of sequence. Fix: set `position` to the design group's intended rank (0=Design001, 1=Design002, …) on both local and production DBs. See the position-fix pattern in the "Create templates" section above.
+
+### Listing API deduplication broke the size picker
+**Never deduplicate templates in the `/api/listings/:slug` server response.** `MainLayout.tsx` fetches all templates and groups them by `design_group_id` client-side to build the Design+Size pickers. If the server returns only one template per group (e.g. the 8x10 representative), the Size picker shows only one option. The server must return all templates; deduplication for display happens in `MainLayout.tsx` using `t.design_group_id` directly.
+
+### Poster type toggle (Star Map / Street Map / Colored Map) shown in customer view
+The toggle is hidden automatically when `designGroups.length > 0` (listing/customer mode). Do not remove this condition — customers on a star-map listing should not be able to switch to street map mode. If you add new listing types that need type switching, pass an explicit prop instead of relying on the designGroups check.
+
+### Demo download offered PDF (full quality for free)
+The "Download Preview" modal must only offer PNG. PDF export preserves full vector quality with no degradation, making it a free substitute for the paid product. The PDF button is intentionally removed from the customer-facing download modal (`DownloadButton.tsx`). Do not re-add it to the `!isTemplateMode` branch.
+
+### DB state inconsistent between local and production
+Run `scripts/sync-listing-state.cjs` on both environments. It will report and fix: wrong `printSize`, wrong `titleAllCaps`, null `thumbnail_path`, missing `listing_templates` rows.
 
 ### Street map shows blank
 - The offscreen MapLibre div needs `canvasContextAttributes: { preserveDrawingBuffer: true }` (already set)
@@ -327,3 +493,42 @@ ssh ubuntu@13.210.227.152 "cd /home/ubuntu/poster-studio/server && npm install -
 
 ### Database
 SQLite with WAL mode at `server/data/db.sqlite`. Schema in `server/db.js`. Key tables: `designs`, `orders`, `templates`, `render_queue`, `settings`, `listings`, `events`.
+
+---
+
+## New Text Element Checklist
+
+When adding a new text element (like "names" was added), **all** of the following must be completed to ensure the field survives the full lifecycle: edit → save → load → sync → render.
+
+### 1. Store (`src/store/useStore.ts`)
+- [ ] Add to `StoreState` interface: `{el}Font`, `{el}FontSize`, `{el}OffsetY`, `{el}Kerning`, `show{El}`
+- [ ] Add all 5 fields to `DESIGN_FIELDS` array
+- [ ] Add to `customText` interface + default (if element has user-editable text)
+- [ ] Add defaults for all new fields
+- [ ] Add setters: `set{El}Font`, `set{El}FontSize`, `set{El}OffsetY`, `set{El}Kerning`, `setShow{El}`
+- [ ] Add `'{el}'` to `activeTypoField` union type
+- [ ] Add all 5 fields to `saveTemplateSettings` snapshot object
+- [ ] Add all 5 fields to `saveTemplateDefaults` snapshot object
+- [ ] Add `{el}FontSize` scaling in `setPrintSize()` return object
+
+### 2. Template System (`src/utils/applyTemplate.ts`)
+- [ ] Add all 5 fields to `TEMPLATE_FIELDS` array
+- [ ] Add to `CUSTOM_TEXT_KEYS` array (if element has customText)
+- [ ] Add to `captureCurrentSettings()` explicit captures (e.g. `if (ct?.{el}) out.{el} = ct.{el}`)
+
+### 3. Renderer (`src/components/VectorStarMap.tsx`)
+- [ ] Destructure all new fields + setters from store
+- [ ] Add `const debounced{El}Kerning = useDebounce({el}Kerning, 200)` hook
+- [ ] Add rendering group in correct text flow position (naturalY accumulator)
+- [ ] Add all fields to the text-rendering `useEffect` dependency array
+- [ ] Add `'{el}'` to `inlineEdit.field` type union
+
+### 4. Sidebar (`src/components/SidebarControls.tsx`)
+- [ ] Destructure all new fields + setters from store
+- [ ] Add toggle in Visibility section (`show{El}`)
+- [ ] Add text input in Content section (conditional on `show{El}`)
+- [ ] Add typography tab + controls: Font Family, Font Size, Kerning, Vertical Offset
+
+### 5. Server Sync (`server/routes/templates.js`)
+- [ ] Add **style** fields to `STYLE_SYNC_FIELDS`: `{el}Font`, `{el}Kerning`, `show{El}`
+- [ ] Do **NOT** add position/layout fields: `{el}OffsetY`, `{el}FontSize` — these stay independent per aspect ratio

@@ -1,218 +1,280 @@
 # The Mapped Moment — Master Plan
 
-> Last updated: 2026-04-01
+> Last updated: 2026-04-25
 > Live site: https://themappedmoment.com
 > Etsy shop: TheMappedMoment (Shop ID: 12648302)
 
 ---
 
-## Current State
+## System Architecture (High Level)
 
-### What's Live & Working
-- **Public designer** at themappedmoment.com — star map, street map, colored map modes
-- **Admin panel** at /admin — dashboard, orders, templates, listings, Etsy sync, queue, analytics, assets, settings
-- **Etsy API connected** — OAuth PKCE flow, order polling every 2 min, token auto-refresh
-- **Server-side render queue** — Puppeteer-based, async with retry
-- **Order verification flow** — customer enters Etsy order # → gets download link
-- **Email notifications** — daily seller digest, poster-ready email
-- **Printify integration** — upload → create order → send to production (not yet configured with real credentials)
-- **Template system** — create/edit templates, link to Etsy listings, public URLs (/t/{id})
-- **Listing collections** — group templates into public collections (/l/{slug})
+```
+ETSY SHOP (public storefront)
+  └─ Listing (one Etsy product URL)
+       └─ Design Group (one visual identity — Design001..006+)
+            ├─ Has its own customer URL: /l/:slug/:designSlug
+            └─ Template per size (8x10, 16x20, A1..A5, etc.)
+                 ├─ Same-ratio sizes → IDENTICAL layout (auto-synced on save)
+                 └─ Different-ratio sizes → Style synced, layout independent
 
-### What's NOT Live Yet
-- **0 active Etsy listings** — shop exists but no products published
-- **No real orders processed** — pipeline is built but untested end-to-end with real money
-- **Printify not configured** — API token, shop ID, blueprint/variant IDs all empty
-- **No mobile layout** — desktop-only sidebar, unusable on phones
-- **No watermark on free exports** — anyone can download full-res for free
+CUSTOMER JOURNEY
+  Etsy listing → /l/:slug/:designSlug (campaign-specific) → designer
+  → Etsy checkout → poll picks up order → render queue → PNG @ 300 DPI
+  → download link
 
----
+ADMIN JOURNEY
+  /admin/listings → design groups → /admin/design-editor/:id
+  Save → auto-cascade same-ratio siblings
+  "Sync to all sizes" → push style to all ratios
+```
 
-## Phase 0 — Launch First Listings (THIS WEEK)
+### What's Sound (don't change)
+- Listing → Design Group → Template hierarchy in SQLite
+- Zustand store + DESIGN_FIELDS + TEMPLATE_FIELDS pattern
+- Aspect-ratio sync rules (A1-A5 identical, 8x10=16x20, etc.)
+- Server-side render queue (Puppeteer, async with retry)
+- Per-design URLs for A/B testing campaigns
+- Mobile responsive layout (poster top, controls below)
+- Rate limiting: public endpoints only (verify/download), not admin
 
-**Goal:** Get revenue flowing. Everything else is secondary.
-
-### 0a. Create & Publish Digital Download Listings
-1. Create 3-5 template presets in admin (star map dark, star map light, colored map, street map, heart shape)
-2. For each template, manually create compelling listing images + a video showing the designer
-3. Publish to Etsy via admin panel "Publish to Etsy" flow
-4. Set `ETSY_DIGITAL_LISTING_IDS` in server .env with the new listing IDs
-5. Price: $12.99-$19.99 for digital downloads (pure margin)
-
-### 0b. A/B Test Listing Content
-**Strategy:** Duplicate listings with different images/videos/titles to find what converts.
-
-For each template concept, create 2-3 listing variants:
-- **Variant A:** Lifestyle mockup images (poster in frame on wall)
-- **Variant B:** Clean flat-lay / close-up detail shots
-- **Variant C:** Video walkthrough of the designer customization process
-
-Track per-listing:
-- Views, favorites, conversion rate (Etsy provides these)
-- Use admin Etsy page to monitor listing performance (views, favorites columns already built)
-- After 2-4 weeks, deactivate underperformers, double down on winners
-- Gradually increase price on high-performers to find ceiling
-
-**Naming convention:** Use descriptive titles that differ per variant:
-- "Custom Star Map Print - Night Sky Poster - Personalized Gift"
-- "Star Map of Our First Date - Custom Night Sky - Anniversary Gift"
-- "Where We Met Star Map - Personalized Constellation Poster"
-
-### 0c. Verify End-to-End Flow
-1. Place a test order on Etsy (buy own listing with a coupon)
-2. Confirm: Etsy poll picks it up → design token extracted → render queued → PNG generated → download link works
-3. Fix any issues in the real flow
+### Known Architectural Debt (fix when it causes pain)
+- `SidebarControls.tsx` is 2200+ lines — split into accordion panel components
+- `VectorStarMap.tsx` has 1400+ lines — extract star/text/border as hooks
+- `listing_templates` join table is redundant (design_groups already links templates)
+- No CI/CD — manual rsync deploy; add GitHub Actions when team grows
+- No DB backups — daily sqlite WAL backup to S3 (add before real orders flow)
 
 ---
 
-## Phase 1 — Protect Revenue & Reduce Friction (Weeks 2-4)
+## Current State (April 25, 2026)
 
-### 1a. Watermark on Free Exports — ALREADY DONE
-- Diagonal "DEMO" watermark already baked into free PNG exports (`drawDemoWatermark` in `src/utils/renderPoster.ts`)
-- Server-side renders for paid orders pass `watermark: false`
-- DownloadButton shows "This is a watermarked preview" disclosure with Etsy link
-- WelcomeModal explains the watermark model to new visitors
+### Working ✓
+- Public designer — star map, street map, colored map
+- **Mobile responsive layout** — poster preview top, accordion controls below, touch zoom, 44px tap targets
+- Admin panel — listings, design editor, orders, queue, Etsy, assets
+- 6 designs in production (Design001..006) — all 5+ sizes each, same-ratio auto-sync
+- Etsy OAuth + polling (every 2 min), token auto-refresh
+- Render queue (Puppeteer, PNG at 300 DPI, retry logic)
+- Template sync — same-ratio auto-cascade, cross-ratio style push
+- Order verification → download link flow (silent download, file-extension-masked)
+- Email: daily seller digest, poster-ready notification
+- Watermark on free exports
+- **Per-design landing URLs** — `/l/:slug/:designSlug` for A/B testing campaigns
+- PDF export (admin/template mode only — never customer view)
+- Visual test suite (22/22 passing)
 
-### 1b. Mobile-Responsive Layout
-- Stacked layout on mobile: poster preview top (~40vh), controls scroll below
-- Touch-friendly controls (44px min targets, pinch-to-zoom preview)
-- Desktop layout unchanged
-- **Why first:** Etsy traffic is 60%+ mobile. If they can't use the designer, they can't buy.
-
-### 1c. Polish the Verify/Download Page
-- Better UX: progress steps, clear messaging, branded design
-- "Print at Walmart Photo" suggestion for digital buyers (with size/price guide)
-- Revision flow: show remaining revisions, easy re-submit with new token
-
----
-
-## Phase 2 — Scale Fulfillment (Weeks 4-8)
-
-### 2a. Physical Print Fulfillment
-**Decision tree by size/destination:**
-
-| Destination | Provider | Why |
-|-------------|----------|-----|
-| US 24x36 | Scalable Press API | $7.20 + ~$4 ship = ~$11 total |
-| US ≤18x24 | ShortRunPosters (manual/automation) | Cheapest per-unit |
-| International | Prodigi or Gelato API | Local printing, fast delivery |
-
-**Implementation:**
-1. Start with Scalable Press API for US orders (they have REST API)
-2. Add Prodigi for international
-3. ShortRunPosters via web automation (Puppeteer) for US small sizes if volume justifies
-
-### 2b. Print Listing Variants on Etsy
-- Create physical print listings at each size point
-- Etsy variations: 8x10 ($24.99), 11x14 ($29.99), 18x24 ($39.99), 24x36 ($44.99)
-- Set `ETSY_PRINT_LISTING_IDS` in server .env
-- A/B test: "Digital + Print" combo listing vs separate listings
-
-### 2c. Pricing Strategy
-Based on cost research (see memory/printing_costs_research.md):
-
-| Product | Price | COGS | Etsy Fees | Net Margin |
-|---------|-------|------|-----------|------------|
-| Digital download | $14.99 | $0 | ~$1.70 | $13.29 (89%) |
-| 18x24 print (US) | $39.99 | ~$10 | ~$4.25 | $25.74 (64%) |
-| 24x36 print (US) | $44.99 | ~$11 | ~$4.75 | $29.24 (65%) |
-| 8x10 print (US) | $24.99 | ~$7.55 | ~$2.75 | $14.69 (59%) |
+### NOT Working / Not Done ✗
+- **0 Etsy listings published** — shop exists but no live products
+- **No real orders processed** — end-to-end untested with real money
+- **Printify not configured** — credentials empty, print fulfillment not wired
+- **No DB backups** — single SQLite file, no redundancy
+- **Server-side render not enabled in prod** — `ENABLE_LOCAL_RENDER` is unset; orders would fall through to `pending_manual`
+- **3,600 lines uncommitted** — recent design fields, fonts, PDF, silent download all in working tree only
 
 ---
 
-## Phase 3 — Growth & Optimization (Months 2-3)
+## Phase 0 — Lock In + First Revenue (this week)
 
-### 3a. SEO & Etsy Algorithm
-- Optimize all 13 tags per listing (long-tail keywords)
-- Use Etsy Ads on top-performing listings ($1-5/day budget to start)
-- Seasonal pushes: Valentine's Day, Mother's Day, Father's Day, weddings (June), Christmas
-- Create event-specific templates (wedding, baby birth, anniversary, memorial)
+**Goal:** Existing code is committed, production tested end-to-end, first paid order processed.
 
-### 3b. Expand Product Line
-- **Canvas prints** — Best margin at high AOV. COGS ~$30-47, sell at $79-120. No glass = cheaper to ship, less breakage.
-- **Framed prints** — PrintOps cheapest confirmed: 18x24 = $37+$5 ship = $42 COGS, sell at $79-90. Printful easier integration: ~$33-38 COGS.
-- **Framed + mat** — Premium tier. Printful from $35.70+ship. Sell at $109-150. Etsy competitors charge $90-208.
-- **Bundled sets** — "His & Hers" star maps, family constellation set
-- **New poster types** — topographic/elevation maps, zodiac charts
+### 0a. Lock in the uncommitted work (today)
+1. Review `git status` and the diffs in groups: design fields → docs → tests → deps
+2. Commit in 3-4 logical commits (do NOT amend, prefer new commits)
+3. Push to remote
+4. Tag `v1.0-pre-launch` so we have a rollback point
 
-See `memory/framing_canvas_costs.md` for full provider comparison and margin analysis.
+### 0b. Set up DB backup (today, before any real orders)
+```bash
+# On VPS:
+0 3 * * * sqlite3 /home/ubuntu/poster-studio/server/data/db.sqlite \
+  ".backup '/home/ubuntu/backups/db-$(date +\\%Y\\%m\\%d).sqlite'"
+# + 30-day retention cleanup
+0 4 * * * find /home/ubuntu/backups -name 'db-*.sqlite' -mtime +30 -delete
+```
+A lost SQLite = lost all orders. Non-negotiable before going live.
 
-### 3c. Template Gallery & Landing Pages
-- Public `/gallery` page showing all templates as a portfolio
-- Each template gets a landing page with preview images
-- Share links from designer pre-populate a template (`/t/{id}?city=Paris&date=2024-02-14`)
-- These become SEO landing pages for long-tail searches
+### 0c. Enable server-side rendering on prod
+1. Add 2GB swap on VPS (t3.micro has 1GB RAM, Puppeteer needs more)
+2. Set `ENABLE_LOCAL_RENDER=true` and `FRONTEND_URL=https://themappedmoment.com` in `server/.env`
+3. Restart `poster-studio-api`
+4. Test: trigger a render via admin queue page, confirm PNG appears in `data/renders/`
 
-### 3d. Email Marketing
-- Collect emails from digital download buyers (they provide email in Etsy order)
-- Follow-up sequence: "How did your print turn out?" → upsell framed version
-- Abandoned design recovery: if token exists but no order, send reminder (requires opt-in)
+### 0d. Publish Etsy listings (this week)
+1. Pick the 3 strongest designs (Design002, Design004, Design005 are the most polished)
+2. Write 3 Etsy listing titles + descriptions with long-tail keywords
+3. Create listing images: 5 photos per listing (lifestyle mockup, designer screenshot, all 6 designs montage, sizing chart, "make it yours" personalization shot)
+4. Publish via admin → Etsy → set `ETSY_DIGITAL_LISTING_IDS` in server `.env`
+5. Price: $14.99–$17.99 digital (89% margin, no COGS)
+
+**Start with 3 listings, not 10.** Speed > breadth.
+
+### 0e. End-to-end test before marketing
+1. Buy own listing via Etsy test purchase (use coupon code)
+2. Confirm pipeline: Etsy poll picks up → token extracted → render queued → PNG generated → email sent → download works → file extension masked
+3. Fix any real-world breakage
+4. Only market after this passes
 
 ---
 
-## Phase 4 — Technical Excellence (Ongoing)
+## Phase 1 — A/B Testing & Listing Optimization (Weeks 1–4)
+
+This is where the new per-design URLs become the core strategy.
+
+### 1a. Run design-as-thumbnail A/B tests
+**Hypothesis:** Different first-impression designs convert different audiences. Currently every Etsy listing pushes Design001 by default.
+
+**Test setup:**
+- Same Etsy listing, but rotate the listing's main thumbnail every 7 days across Design001/002/004/005/006
+- For each rotation, set the Etsy listing's URL to `themappedmoment.com/l/star-map-night-we-met/design00X` so the customer lands on the matching design
+- Measure: click-through rate (CTR) from Etsy → listing page (Etsy stats), then conversion to checkout (our `design_view` → Etsy purchase rate)
+
+**Tooling needed (build this week):**
+- `/admin/analytics` page already has event log. Add a per-design conversion query: count `design_view` events grouped by `designGroupId`, joined to orders by referrer or session
+- Simple spreadsheet export: "design view → order" rates per `designSlug`
+
+### 1b. Headline & price A/B
+- Listing 1: $14.99, "Custom Star Map Print — The Night We Met"
+- Listing 2 (duplicate): $19.99, "Custom Star Map — Anniversary Gift, Wedding Date, Newborn Star Map"
+- Run for 2 weeks. Cheaper isn't always better — premium framing wins on average order value.
+
+### 1c. Listing image A/B (quick wins)
+For each Etsy listing, test ONE variable:
+- Lifestyle frame mockup vs clean product shot vs animated GIF (poster zoom)
+- Carousel order: photo 1 = mockup vs photo 1 = product-only
+
+Etsy weights early views heavily — first 14 days determines long-term ranking.
+
+### 1d. Verify/Download page polish (do once Phase 0 ships)
+- Current page works but is plain. Add: step indicator (1.Submit → 2.Processing → 3.Ready), brand logo, success state with download CTA + "print at Walmart/CVS" guide for digital buyers
+- Reduces refund risk by setting print expectations
+- Show remaining revisions count
+
+---
+
+## Phase 2 — Print Fulfillment (Weeks 4–8)
+
+### 2a. Connect Prodigi (international, replaces Printify)
+Per existing memory: use **Prodigi** for prints, not Printify.
+
+| Destination | Provider | COGS | Sell | Margin |
+|-------------|----------|------|------|--------|
+| US digital | — | $0 | $14.99 | 89% |
+| US 18x24 print | Prodigi | ~$10 | $39.99 | 64% |
+| US 24x36 print | Prodigi | ~$11 | $44.99 | 65% |
+| EU/UK/AU digital | — | $0 | $14.99 | 89% |
+| EU/UK/AU 18x24 print | Prodigi (local) | ~$12 | $44.99 | 65% |
+
+Steps:
+1. Get Prodigi API key (sandbox first), configure in `server/.env`
+2. Replace `server/services/printify.js` with `server/services/prodigi.js` (different API surface)
+3. Add Etsy physical listing variants (size as Etsy variation)
+4. Test in sandbox: render → upload → order → track → delivered
+5. Order ONE physical sample for QA before going live
+
+### 2b. Framed prints (Phase 2b)
+Highest AOV. PrintOps cheapest at $42 COGS for 18x24 framed → sell $89–$99.
+Hold until digital + unframed prints are running smoothly.
+
+---
+
+## Phase 3 — Growth & Catalog Expansion (Months 2–3)
+
+### 3a. More designs (low-effort, high-leverage)
+The per-design URL system makes new designs trivially testable. Add 4-6 more design groups:
+- Wedding-specific (heart shape default, names prominent)
+- Anniversary (with year prominently displayed)
+- Baby birth (gentle pastels, time-of-birth emphasis)
+- Memorial (subdued palette, In Memory of header)
+- Pet memorial (paw prints, no human-centric copy)
+- Travel commemoration (city + coordinates emphasis)
+
+Each new design = one `/l/:slug/:designSlug` URL = one Etsy listing variation.
+
+### 3b. New listing types (separate slugs)
+- `/l/street-map-anniversary` — street map flagship
+- `/l/colored-map-travel` — colored map flagship
+- `/l/his-and-hers-stars` — paired set listings (new SKU concept, 2 posters bundled)
+
+### 3c. Seasonal pushes (calendar-driven)
+- Valentine's Day: 2 weeks of Etsy Ads at $5/day on the Anniversary design
+- Mother's Day: highlight the Family/Birth designs
+- June (wedding season): heavy promotion of wedding-specific designs
+- Christmas: gift-card UX flow (deliver instantly via email)
+
+### 3d. Etsy SEO hygiene
+- 13 long-tail tags per listing ("first dance song star map", "wedding anniversary gift wife custom poster")
+- Listing renewal monthly (Etsy weights freshness)
+- Reply to messages within 4 hours (Etsy's algorithm rewards this)
+
+---
+
+## Phase 4 — Hardening (Ongoing, do as needed)
 
 ### 4a. Performance
-- Code-split admin routes (lazy load)
-- Manual chunks: maplibre-gl, d3, admin
-- Memoize VectorStarMap with React.memo
-- Use Zustand useShallow selectors in SidebarControls
-- Target: initial load <600KB (currently ~1.9MB)
+- Code-split admin routes (lazy-load — MapLibre alone is 450KB, currently loads even on starmap-only sessions)
+- `React.memo` on VectorStarMap to prevent unnecessary re-renders
+- `useShallow` Zustand selectors elsewhere in SidebarControls (subscribes to too many fields right now — VectorStarMap already migrated)
+- Target: initial JS < 600KB (currently 1.9MB)
 
-### 4b. Component Decomposition
-- Split SidebarControls.tsx (2166 lines) into 6 focused panels
-- Extract inline editing from VectorStarMap into custom hook
-- Extract star/constellation rendering into utility functions
+### 4b. Component refactor
+- Split `SidebarControls.tsx` (2200 lines) into: LocationPanel, TypographyPanel, StylePanel, ShapePanel, VisibilityPanel, TemplatesPanel
+- Extract inline edit + drag behavior from `VectorStarMap.tsx` into custom hooks
+- Adding new text elements: follow New Text Element Checklist in CLAUDE.md
 
-### 4c. Testing
-- Playwright tests already scaffolded (10 test files, ~370 tests defined)
-- Run and fix: `npm run build && npx playwright test`
-- Add visual regression snapshots for all poster modes
-- CI pipeline: GitHub Actions → build → test → deploy
+### 4c. Reliability
+- Dead letter queue for renders that fail 3+ times (alert admin via Etsy message or email)
+- Webhook signature verification for Etsy callbacks
+- Uptime monitor: simple healthcheck ping (UptimeRobot free tier)
+- GitHub Actions CI: build + type-check on every push (no deploy automation yet)
 
-### 4d. Reliability
-- Webhook signature verification for Etsy/Printify callbacks
-- Graceful error handling in render queue (dead letter queue for repeated failures)
-- Database backups (daily sqlite dump to S3)
-- Uptime monitoring (simple health check ping)
+### 4d. Multi-admin / team (future, only if hiring)
+- Currently single-admin JWT. Add role-based access (admin, viewer, fulfillment-only)
+- Audit log for template edits (who changed what, when)
 
 ---
 
-## Key Metrics to Track
+## Key Rules (enforce always)
 
-| Metric | Target (Month 1) | Target (Month 3) |
-|--------|-------------------|-------------------|
-| Active Etsy listings | 10-15 | 30+ |
-| Daily views | 50+ | 500+ |
-| Conversion rate | 1-2% | 3-5% |
-| Monthly revenue | $200+ | $1,000+ |
-| Avg order value | $15-20 | $25-35 |
-| Failed renders | <5% | <1% |
-| Mobile bounce rate | Track baseline | -30% from baseline |
+### Template / Size Rules
+- Same aspect ratio → IDENTICAL layout (auto-cascades on every save — no manual step)
+- Different aspect ratio → style only (fonts, colors, kerning, toggles); layout independent
+- `printSize` in settings_json MUST always equal `fulfillment_size` column — server pins this on every save
+
+### URL Rules
+- Customer-facing canonical URL is `/l/:slug` (Design001 default) or `/l/:slug/:designSlug` (specific design)
+- Admin URLs are under `/admin/*`
+- Designer-direct URL is `/t/:templateId` (no listing context)
+- Never strip the `:designSlug` from canonical URLs in any redirect — A/B campaigns depend on it
+
+### Adding a New Design
+1. Create design group in admin → auto-generates all size templates
+2. Edit A4 (or 18x24 baseline) → save cascades to all same-ratio sizes
+3. Open a different-ratio size (5x7, 11x14) → adjust layout offsets → save
+4. Click "Sync to all sizes" once when style is finalised → pushes style to all ratios
+5. Capture thumbnails locally and on prod
+6. Run `sync-listing-state.cjs` on local + prod
+7. Set `listing_templates.position` to control sidebar order
+8. Verify with `verify-listing.cjs` (visual diff local vs prod)
+9. Never manually edit DB for layout values — always go through the editor
+
+### Adding a New Text Element
+Follow the New Text Element Checklist in CLAUDE.md (5 steps across 5 files). Do not skip any step.
 
 ---
 
-## A/B Testing Framework
+## Key Metrics
 
-### What to Test (in priority order)
-1. **Listing images** — lifestyle mockup vs clean product shot vs video thumbnail
-2. **Titles** — gift-focused ("Perfect Anniversary Gift") vs product-focused ("Custom Star Map Print")
-3. **Price points** — $12.99 vs $14.99 vs $17.99 for digital
-4. **Listing descriptions** — short/punchy vs detailed/emotional
-5. **Tags** — track which tag combinations drive more impressions
+| Metric | Now (Apr 25) | Target Month 1 | Target Month 3 |
+|--------|--------------|----------------|----------------|
+| Active Etsy listings | 0 | 5–10 | 20+ |
+| Daily Etsy views | 0 | 50+ | 500+ |
+| Conversion rate (view → order) | — | 1–2% | 3–5% |
+| Monthly revenue | $0 | $300+ | $1,500+ |
+| Avg order value | — | $15 | $28 |
+| Failed renders | — | <5% | <1% |
+| **Best/worst design conversion delta** | — | identify | exploit |
 
-### How to Test
-- Create duplicate listings with ONE variable changed
-- Run for 2-4 weeks minimum (Etsy algorithm needs time to index)
-- Use admin Etsy page performance table (views, favorites) to compare
-- Deactivate losers, clone winners with next variable change
-- Document findings in admin settings or a shared doc
-
-### Rules
-- Never A/B test more than one variable at a time per listing pair
-- Keep at least 3 "control" listings unchanged as baseline
-- Don't change prices on existing listings mid-test (creates confounding)
-- Create fresh duplicates for each new test
+That last metric is the new KPI from Phase 1 — once we know which design converts best, we make it the default thumbnail and channel ad spend toward it.
 
 ---
 
@@ -220,9 +282,21 @@ See `memory/framing_canvas_costs.md` for full provider comparison and margin ana
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Etsy account suspension | Critical | Follow all TOS, no keyword stuffing, respond to messages within 24h |
-| Render failures at scale | High | Queue with retry, dead letter, admin alerts, manual fallback |
-| Print quality issues | High | Order samples from each provider before listing, QA checklist |
-| Token refresh failure | Medium | Auto-refresh on 401, alert on repeated failures, manual re-auth flow |
-| Competitor undercutting | Medium | Focus on UX/customization depth, not price. Add features competitors lack |
-| MapLibre tile CDN down | Low | Service worker tile cache provides offline fallback |
+| SQLite data loss | Critical | **Daily backup cron — Phase 0b (do this week)** |
+| Etsy account suspension | Critical | Follow TOS, no keyword stuffing, 4h reply SLA |
+| Render failures at scale | High | Dead letter queue + admin alerts (Phase 4c) |
+| Print quality on delivery | High | Order physical sample before listing prints |
+| Token refresh failure | Medium | Auto-refresh on 401, alert on repeated failure |
+| printSize corruption | Medium | Server pins printSize = fulfillment_size on every save |
+| MapLibre tile CDN down | Low | Service worker tile cache is the fallback |
+| Unauthorized free renders | Low | Silent download masks file extension; watermark on free PNG |
+
+---
+
+## Related Files
+- `SESSION_HANDOVER.md` — current state for next agent (read before this file)
+- `CLAUDE.md` — dev rules, new text element checklist, listing URL patterns, design workflow
+- `HANDOVER.md` — full handover: schema, deployment, credentials, gotchas
+- `memory/printing_costs_research.md` — print provider cost comparison
+- `memory/framing_canvas_costs.md` — framed poster & canvas provider comparison
+- `memory/feedback_focus_priorities.md` — Prodigi (not Printify), focus on template system
