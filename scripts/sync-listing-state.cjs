@@ -74,6 +74,50 @@ const DESIGNS = [
     thumbnailPerSize: null,
     sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
   },
+  {
+    groupPrefix: 'sm001-design004',
+    thumbnail: '/designs/SM001/Design004/8x10.png',
+    titleAllCaps: false,
+    thumbnailPerSize: null,
+    sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
+  },
+  {
+    groupPrefix: 'sm001-design005',
+    thumbnail: '/designs/SM001/Design005/8x10.png',
+    titleAllCaps: false,
+    thumbnailPerSize: null,
+    sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
+  },
+  {
+    groupPrefix: 'sm001-design006',
+    thumbnail: '/designs/SM001/Design006/8x10.png',
+    titleAllCaps: false,
+    thumbnailPerSize: null,
+    sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
+  },
+  // ── Colored map listings ───────────────────────────────────
+  {
+    groupPrefix: 'cmhs001-design001',
+    thumbnail: '/designs/CMHS001/Design001/8x10.png',
+    titleAllCaps: false,
+    thumbnailPerSize: null,
+    sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
+  },
+  {
+    groupPrefix: 'cmhh001-design001',
+    thumbnail: '/designs/CMHH001/Design001/8x10.png',
+    titleAllCaps: false,
+    thumbnailPerSize: null,
+    sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
+  },
+  // ── Monochrome street map listing ─────────────────────────
+  {
+    groupPrefix: 'smbw001-design001',
+    thumbnail: '/designs/SMBW001/Design001/8x10.png',
+    titleAllCaps: false,
+    thumbnailPerSize: null,
+    sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -85,7 +129,22 @@ const LISTINGS = [
   {
     listing_id: 1,
     slug: 'star-map-night-we-met',
-    designs: ['sm001-design001', 'sm001-design002', 'sm001-design003'],
+    designs: ['sm001-design001', 'sm001-design002', 'sm001-design003', 'sm001-design004', 'sm001-design005', 'sm001-design006'],
+  },
+  {
+    listing_id: 2,
+    slug: 'colored-map-home-street',
+    designs: ['cmhs001-design001'],
+  },
+  {
+    listing_id: 3,
+    slug: 'colored-map-heart',
+    designs: ['cmhh001-design001'],
+  },
+  {
+    listing_id: 4,
+    slug: 'street-map-monochrome',
+    designs: ['smbw001-design001'],
   },
 ];
 

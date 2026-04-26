@@ -191,13 +191,29 @@ const MainLayout: React.FC = () => {
                 if (typeof c.showConstellations === 'boolean') store.setShowConstellations(c.showConstellations);
                 if (typeof c.showMilkyWay === 'boolean') store.setShowMilkyWay(c.showMilkyWay);
                 if (typeof c.showGrid === 'boolean') store.setShowGrid(c.showGrid);
+                if (c.gridWidth != null) store.setGridWidth(c.gridWidth);
+                if (c.gridOpacity != null) store.setGridOpacity(c.gridOpacity);
+                // Rings & decorations
+                if (typeof c.showInnerRing === 'boolean') store.setShowInnerRing(c.showInnerRing);
+                if (c.innerRingWidth != null) store.setInnerRingWidth(c.innerRingWidth);
+                if (c.innerRingInset != null) store.setInnerRingInset(c.innerRingInset);
+                if (typeof c.showOuterRing === 'boolean') store.setShowOuterRing(c.showOuterRing);
+                if (c.outerRingWidth != null) store.setOuterRingWidth(c.outerRingWidth);
+                if (c.outerRingGap != null) store.setOuterRingGap(c.outerRingGap);
+                if (typeof c.showHeartDecor === 'boolean') store.setShowHeartDecor(c.showHeartDecor);
+                // Vertical separator
+                if (typeof c.showVertSep === 'boolean') store.setShowVertSep(c.showVertSep);
+                if (c.vertSepHeight != null) store.setVertSepHeight(c.vertSepHeight);
+                if (c.vertSepThickness != null) store.setVertSepThickness(c.vertSepThickness);
+                if (c.vertSepOffsetY != null) store.setVertSepOffsetY(c.vertSepOffsetY);
                 // Text content
-                if (c.title) store.setCustomText('title', c.title);
-                if (c.subtitle) store.setCustomText('subtitle', c.subtitle);
+                if (c.title != null) store.setCustomText('title', c.title);
+                if (c.subtitle != null) store.setCustomText('subtitle', c.subtitle);
                 if (c.customDate != null) store.setCustomText('date', c.customDate);
                 if (c.customLocation != null) store.setCustomText('location', c.customLocation);
                 if (c.customCoords != null) store.setCustomText('coords', c.customCoords);
                 if (c.customDedication != null) store.setCustomText('dedication', c.customDedication);
+                if (c.customNames != null) store.setCustomText('names', c.customNames);
                 // Star map location & time
                 if (c.location) store.setLocation(c.location);
                 if (c.lat) store.setLat(c.lat);
@@ -209,39 +225,50 @@ const MainLayout: React.FC = () => {
                 if (c.subtitleFont) store.setSubtitleFont(c.subtitleFont);
                 if (c.detailsFont) store.setDetailsFont(c.detailsFont);
                 if (c.dedicationFont) store.setDedicationFont(c.dedicationFont);
+                if (c.namesFont) store.setNamesFont(c.namesFont);
                 // Font sizes
                 if (c.titleFontSize) store.setTitleFontSize(c.titleFontSize);
                 if (c.subtitleFontSize) store.setSubtitleFontSize(c.subtitleFontSize);
                 if (c.detailsFontSize) store.setDetailsFontSize(c.detailsFontSize);
                 if (c.dedicationFontSize) store.setDedicationFontSize(c.dedicationFontSize);
+                if (c.namesFontSize) store.setNamesFontSize(c.namesFontSize);
                 // Kerning
                 if (c.titleKerning != null) store.setTitleKerning(c.titleKerning);
                 if (c.subtitleKerning != null) store.setSubtitleKerning(c.subtitleKerning);
                 if (c.detailsKerning != null) store.setDetailsKerning(c.detailsKerning);
                 if (c.dedicationKerning != null) store.setDedicationKerning(c.dedicationKerning);
+                if (c.namesKerning != null) store.setNamesKerning(c.namesKerning);
                 // Text position offsets
+                if (c.titleOffsetX != null) store.setTitleOffsetX(c.titleOffsetX);
                 if (c.titleOffsetY != null) store.setTitleOffsetY(c.titleOffsetY);
                 if (c.subtitleOffsetY != null) store.setSubtitleOffsetY(c.subtitleOffsetY);
                 if (c.detailsOffsetY != null) store.setDetailsOffsetY(c.detailsOffsetY);
                 if (c.dedicationOffsetY != null) store.setDedicationOffsetY(c.dedicationOffsetY);
+                if (c.namesOffsetY != null) store.setNamesOffsetY(c.namesOffsetY);
                 if (c.heartDecorOffsetY != null) store.setHeartDecorOffsetY(c.heartDecorOffsetY);
                 if (c.dividerOffsetY != null) store.setDividerOffsetY(c.dividerOffsetY);
+                // Names & text flags
+                if (typeof c.showNames === 'boolean') store.setShowNames(c.showNames);
+                if (typeof c.titleAllCaps === 'boolean') store.setTitleAllCaps(c.titleAllCaps);
                 // Shape
                 if (c.circleSize != null) store.setCircleSize(c.circleSize);
                 if (c.heartSize != null) store.setHeartSize(c.heartSize);
                 if (c.houseSize != null) store.setHouseSize(c.houseSize);
                 if (c.shapeOutlineWidth != null) store.setShapeOutlineWidth(c.shapeOutlineWidth);
                 if (c.shapeOffsetY != null) store.setShapeOffsetY(c.shapeOffsetY);
+                if (c.shapeOffsetX != null) store.setShapeOffsetX(c.shapeOffsetX);
                 // Star map
                 if (c.starScale != null) store.setStarScale(c.starScale);
                 if (c.lineWeight != null) store.setLineWeight(c.lineWeight);
                 if (c.glowIntensity != null) store.setGlowIntensity(c.glowIntensity);
+                if (c.finelineWidth != null) store.setFinelineWidth(c.finelineWidth);
                 // Map
                 if (c.mapCity) store.setMapCity(c.mapCity);
                 if (c.mapCenterLat) store.setMapCenterLat(c.mapCenterLat);
                 if (c.mapCenterLng) store.setMapCenterLng(c.mapCenterLng);
                 if (c.mapZoom) store.setMapZoom(c.mapZoom);
                 if (c.mapBearing != null) store.setMapBearing(c.mapBearing);
+                if (c.mapStyleUrl !== undefined) store.setMapStyleUrl(c.mapStyleUrl);
                 if (c.mapBgColor) store.setMapBgColor(c.mapBgColor);
                 if (c.mapStreetColor) store.setMapStreetColor(c.mapStreetColor);
                 if (c.mapColorPreset) store.setMapColorPreset(c.mapColorPreset);
@@ -253,11 +280,21 @@ const MainLayout: React.FC = () => {
                 // Print size
                 if (c.printSize) store.setPrintSize(c.printSize);
             } catch { /* ignore malformed ?d= */ }
-        } else if (templateId) {
+            // Fall through to listing/template load if on a listing or template URL —
+            // ?d= state is applied as an override on top of the template base settings.
+            if (!templateId && !slug) {
+                setTemplateLoading(false);
+                return;
+            }
+        }
+        if (!encoded && templateId) {
             fetchAndApplyTemplate(templateId).finally(() => setTemplateLoading(false));
             trackEvent('template_load', { templateId });
-        } else if (slug) {
-            // Listing page — fetch design groups and auto-load the default (first 8x10) template
+        }
+        if (slug) {
+            // Listing page — fetch design groups and auto-load the default (first 8x10) template.
+            // When ?d= is present, still load the listing groups for the sidebar design picker,
+            // but skip fetchAndApplyTemplate so the ?d= state isn't overwritten.
             fetch(`${API_URL}/api/listings/${slug}`)
                 .then(r => r.ok ? r.json() : null)
                 .then(listing => {
@@ -303,6 +340,12 @@ const MainLayout: React.FC = () => {
                     }
 
                     trackEvent('design_view', { slug, designSlug: designSlug || null, designGroupId: targetGroupId });
+
+                    // Skip template apply if ?d= state is present — the shared state takes precedence
+                    if (encoded) {
+                        setTemplateLoading(false);
+                        return;
+                    }
 
                     const preferred = allTemplates.find(t => t.design_group_id === targetGroupId && t.fulfillment_size === '8x10')
                         || allTemplates.find(t => t.design_group_id === targetGroupId)

@@ -12,26 +12,52 @@ const DESIGNS = [
     templateId: 'sm001-design001-8x10',
     outFile: '/tmp/thumb-design001.png',
     expectedTitle: 'THE NIGHT WE MET',
+    mapMode: false,
   },
   {
     templateId: 'sm001-design002-8x10',
     outFile: '/tmp/thumb-design002.png',
     expectedTitle: 'THE NIGHT OUR STARS ALIGNED',
+    mapMode: false,
   },
   {
     templateId: 'sm001-design004-8x10',
     outFile: '/tmp/thumb-design004.png',
     expectedTitle: 'THE NIGHT WE MET',
+    mapMode: false,
   },
   {
     templateId: 'sm001-design005-8x10',
     outFile: '/tmp/thumb-design005.png',
     expectedTitle: 'THE NIGHT WE MET',
+    mapMode: false,
   },
   {
     templateId: 'sm001-design006-8x10',
     outFile: '/tmp/thumb-design006.png',
     expectedTitle: 'NAME',
+    mapMode: false,
+  },
+  // Colored map — house shape
+  {
+    templateId: 'cmhs001-design001-8x10',
+    outFile: '/tmp/thumb-cmhs001-design001.png',
+    expectedTitle: null,
+    mapMode: true,
+  },
+  // Colored map — heart shape
+  {
+    templateId: 'cmhh001-design001-8x10',
+    outFile: '/tmp/thumb-cmhh001-design001.png',
+    expectedTitle: null,
+    mapMode: true,
+  },
+  // Monochrome street map
+  {
+    templateId: 'smbw001-design001-8x10',
+    outFile: '/tmp/thumb-smbw001-design001.png',
+    expectedTitle: 'YOUR CITY',
+    mapMode: true,
   },
 ];
 
@@ -41,7 +67,7 @@ const DESIGNS = [
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
 
-  for (const { templateId, outFile, expectedTitle } of DESIGNS) {
+  for (const { templateId, outFile, expectedTitle, mapMode } of DESIGNS) {
     console.log(`Rendering ${templateId}...`);
     const page = await browser.newPage();
     // Set viewport to match exact poster aspect ratio with some padding for UI chrome
@@ -49,30 +75,45 @@ const DESIGNS = [
 
     await page.goto(`http://localhost:5173/t/${templateId}`, { waitUntil: 'domcontentloaded' });
 
-    // Wait for D3 to render stars (200+ circle elements)
-    try {
-      await page.waitForFunction(() => {
-        const svg = document.querySelector('#poster-preview svg');
-        if (!svg) return false;
-        return svg.querySelectorAll('circle').length > 100;
-      }, { timeout: 25000 });
-    } catch (e) {
-      console.log('  Warning: timed out waiting for stars');
+    if (mapMode) {
+      // Wait for MapLibre to render and the map snapshot to appear as <image> in the SVG
+      try {
+        await page.waitForFunction(() => {
+          const svg = document.querySelector('#poster-preview svg');
+          if (!svg) return false;
+          return svg.querySelectorAll('image').length > 0;
+        }, { timeout: 35000 });
+      } catch (e) {
+        console.log('  Warning: timed out waiting for map image, capturing anyway');
+      }
+      // Extra settle time for tiles + fonts
+      await page.waitForTimeout(4000);
+    } else {
+      // Wait for D3 to render stars (200+ circle elements)
+      try {
+        await page.waitForFunction(() => {
+          const svg = document.querySelector('#poster-preview svg');
+          if (!svg) return false;
+          return svg.querySelectorAll('circle').length > 100;
+        }, { timeout: 25000 });
+      } catch (e) {
+        console.log('  Warning: timed out waiting for stars');
+      }
+      // Extra settle time for fonts
+      await page.waitForTimeout(2500);
     }
 
-    // Wait for the correct title to appear (not the default "My Star Map")
-    try {
-      const titleToWait = expectedTitle;
-      await page.waitForFunction((title) => {
-        const texts = Array.from(document.querySelectorAll('#poster-preview svg text'));
-        return texts.some(t => t.textContent?.toUpperCase().includes(title.split(' ')[0]));
-      }, expectedTitle, { timeout: 10000 });
-    } catch (e) {
-      console.log('  Warning: timed out waiting for title, capturing anyway');
+    // Wait for the correct title to appear
+    if (expectedTitle) {
+      try {
+        await page.waitForFunction((title) => {
+          const texts = Array.from(document.querySelectorAll('#poster-preview svg text'));
+          return texts.some(t => t.textContent?.toUpperCase().includes(title.split(' ')[0]));
+        }, expectedTitle, { timeout: 10000 });
+      } catch (e) {
+        console.log('  Warning: timed out waiting for title, capturing anyway');
+      }
     }
-
-    // Extra settle time for fonts
-    await page.waitForTimeout(2500);
 
     // Get the poster preview element bounding box and capture it at exact size
     const preview = await page.$('#poster-preview');

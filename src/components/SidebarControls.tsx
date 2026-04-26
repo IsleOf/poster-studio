@@ -680,6 +680,14 @@ const OrderSection: React.FC = () => {
             showLocation: s.showLocation, showDate: s.showDate, showCoords: s.showCoords,
             showDivider: s.showDivider, dividerLength: s.dividerLength, dividerThickness: s.dividerThickness,
             showConstellations: s.showConstellations, showMilkyWay: s.showMilkyWay, showGrid: s.showGrid,
+            gridWidth: s.gridWidth, gridOpacity: s.gridOpacity,
+            // Rings & decorations
+            showInnerRing: s.showInnerRing, innerRingWidth: s.innerRingWidth, innerRingInset: s.innerRingInset,
+            showOuterRing: s.showOuterRing, outerRingWidth: s.outerRingWidth, outerRingGap: s.outerRingGap,
+            showHeartDecor: s.showHeartDecor,
+            // Vertical separator
+            showVertSep: s.showVertSep, vertSepHeight: s.vertSepHeight, vertSepThickness: s.vertSepThickness,
+            vertSepOffsetY: s.vertSepOffsetY,
             // Text content (prefer customText overrides, fall back to computed)
             title: s.customText?.title ?? s.title,
             subtitle: s.customText?.subtitle ?? s.subtitle,
@@ -687,32 +695,40 @@ const OrderSection: React.FC = () => {
             customLocation: s.customText?.location,
             customCoords: s.customText?.coords,
             customDedication: s.customText?.dedication,
+            customNames: s.customText?.names,
             // Star map location & time
             location: s.location, lat: s.lat, lng: s.lng,
             date: s.date instanceof Date ? s.date.toISOString() : s.date,
             time: s.time,
             // Fonts
             titleFont: s.titleFont, subtitleFont: s.subtitleFont,
-            detailsFont: s.detailsFont, dedicationFont: s.dedicationFont,
+            detailsFont: s.detailsFont, dedicationFont: s.dedicationFont, namesFont: s.namesFont,
             // Font sizes
             titleFontSize: s.titleFontSize, subtitleFontSize: s.subtitleFontSize,
             detailsFontSize: s.detailsFontSize, dedicationFontSize: s.dedicationFontSize,
+            namesFontSize: s.namesFontSize,
             // Kerning
             titleKerning: s.titleKerning, subtitleKerning: s.subtitleKerning,
             detailsKerning: s.detailsKerning, dedicationKerning: s.dedicationKerning,
+            namesKerning: s.namesKerning,
             // Text position offsets
+            titleOffsetX: s.titleOffsetX,
             titleOffsetY: s.titleOffsetY, subtitleOffsetY: s.subtitleOffsetY,
             detailsOffsetY: s.detailsOffsetY, dedicationOffsetY: s.dedicationOffsetY,
+            namesOffsetY: s.namesOffsetY,
             heartDecorOffsetY: s.heartDecorOffsetY, dividerOffsetY: s.dividerOffsetY,
+            // Names
+            showNames: s.showNames, titleAllCaps: s.titleAllCaps,
             // Shape
             circleSize: s.circleSize, heartSize: s.heartSize, houseSize: s.houseSize,
             shapeOutlineWidth: s.shapeOutlineWidth, shapeOffsetY: s.shapeOffsetY,
             shapeOffsetX: s.shapeOffsetX, snapEnabled: s.snapEnabled,
             // Star map
             starScale: s.starScale, lineWeight: s.lineWeight, glowIntensity: s.glowIntensity,
+            finelineWidth: s.finelineWidth,
             // Map
             mapCity: s.mapCity, mapCenterLat: s.mapCenterLat, mapCenterLng: s.mapCenterLng,
-            mapZoom: s.mapZoom, mapBearing: s.mapBearing,
+            mapZoom: s.mapZoom, mapBearing: s.mapBearing, mapStyleUrl: s.mapStyleUrl,
             mapBgColor: s.mapBgColor, mapStreetColor: s.mapStreetColor, mapColorPreset: s.mapColorPreset,
             // Location pin
             showLocationPin: s.showLocationPin, locationPinSize: s.locationPinSize,
@@ -721,7 +737,9 @@ const OrderSection: React.FC = () => {
             printSize: s.printSize,
         };
         const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(compact))));
-        const url = `${window.location.origin}/?d=${encoded}`;
+        // Preserve current path so listing pages stay in listing context
+        const basePath = window.location.pathname;
+        const url = `${window.location.origin}${basePath}?d=${encoded}`;
         navigator.clipboard.writeText(url).then(() => {
             trackEvent('share_click');
             toast({ title: 'Link copied!', description: 'Share this URL to load your current design.', status: 'success', duration: 3000, isClosable: true });
