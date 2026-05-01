@@ -3,7 +3,7 @@
  *
  * Single source of truth for listing/design/template DB state.
  * Run locally: node scripts/sync-listing-state.cjs
- * Run on prod:  ssh ubuntu@13.210.227.152 "cd /home/ubuntu/poster-studio/server && node ../scripts/sync-listing-state.cjs --db data/db.sqlite"
+ * Run on prod:  ssh ubuntu@3.107.34.169 "cd /home/ubuntu/poster-studio/server && node ../scripts/sync-listing-state.cjs --db data/db.sqlite"
  *
  * What it enforces:
  *  1. listing_templates — which template IDs belong to which listing
@@ -122,31 +122,34 @@ const DESIGNS = [
 
 // ═══════════════════════════════════════════════════════════
 // LISTING DEFINITIONS
-// listing_id: must already exist in the listings table
-// designs: array of groupPrefixes above
+// listing_id is resolved at runtime by slug so the script works on any DB
+// (local IDs differ from production IDs since autoincrement diverges).
 // ═══════════════════════════════════════════════════════════
-const LISTINGS = [
+const LISTINGS_CONFIG = [
   {
-    listing_id: 1,
     slug: 'star-map-night-we-met',
     designs: ['sm001-design001', 'sm001-design002', 'sm001-design003', 'sm001-design004', 'sm001-design005', 'sm001-design006'],
   },
   {
-    listing_id: 2,
     slug: 'colored-map-home-street',
     designs: ['cmhs001-design001'],
   },
   {
-    listing_id: 3,
     slug: 'colored-map-heart',
     designs: ['cmhh001-design001'],
   },
   {
-    listing_id: 4,
     slug: 'street-map-monochrome',
     designs: ['smbw001-design001'],
   },
 ];
+
+// Resolve IDs from DB so hardcoded values can't diverge between environments
+const LISTINGS = LISTINGS_CONFIG.map(cfg => {
+  const row = db.prepare('SELECT id FROM listings WHERE slug = ?').get(cfg.slug);
+  if (!row) { console.log(`  SKIP: listing not found in DB: ${cfg.slug}`); return null; }
+  return { ...cfg, listing_id: row.id };
+}).filter(Boolean);
 
 // ═══════════════════════════════════════════════════════════
 // SIZE → template suffix mapping

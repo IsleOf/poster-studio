@@ -172,7 +172,11 @@ const StylePanel: React.FC = () => {
                 <Switch isChecked={snapEnabled} onChange={(e) => setSnapEnabled(e.target.checked)} colorScheme="blue" />
             </FormControl>
 
-            {/* Shape Outline Width — only relevant when border is visible */}
+            {/* Shape Outline */}
+            <FormControl display="flex" alignItems="center" justifyContent="space-between">
+                <FormLabel fontSize="sm" color="gray.700" fontWeight="500" mb={0}>Show Shape Outline</FormLabel>
+                <Switch isChecked={showBorder} onChange={(e) => setShowBorder(e.target.checked)} colorScheme="blue" />
+            </FormControl>
             {showBorder && sliderRow('Shape Outline Width', shapeOutlineWidth, `${shapeOutlineWidth.toFixed(1)}pt`, 0.5, 6.0, 0.5, setShapeOutlineWidth)}
 
             {/* Fineline Spacing — only relevant when border is visible and fineline style is active */}

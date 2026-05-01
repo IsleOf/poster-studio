@@ -87,7 +87,7 @@ Read this file before touching anything. The bugs in here have already cost hour
 │                    INFRASTRUCTURE                        │
 │                                                          │
 │  AWS EC2 t3.micro (ap-southeast-2, Sydney)               │
-│  Ubuntu 24.04 · IP: 13.210.227.152                       │
+│  Ubuntu 24.04 · IP: 3.107.34.169                       │
 │  Domain: themappedmoment.com (Let's Encrypt SSL)         │
 │  Nginx: reverse proxy port 3001 → Express                │
 │  Systemd: poster-studio-api.service                      │
@@ -151,8 +151,8 @@ node scripts/sync-listing-state.cjs                         # verify local
 node scripts/sync-listing-state.cjs --db /home/ubuntu/poster-studio/server/data/db.sqlite  # not possible remotely
 
 # Instead, run on prod:
-scp scripts/sync-listing-state.cjs ubuntu@13.210.227.152:/home/ubuntu/poster-studio/scripts/
-ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
+scp scripts/sync-listing-state.cjs ubuntu@3.107.34.169:/home/ubuntu/poster-studio/scripts/
+ssh ubuntu@3.107.34.169 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
   --db /home/ubuntu/poster-studio/server/data/db.sqlite"
 ```
 
@@ -170,7 +170,7 @@ ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-
 
 **Fix applied:** Always use `--exclude='designs/'` in rsync:
 ```bash
-rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@3.107.34.169:/var/www/poster-studio/
 ```
 This is already in CLAUDE.md deploy commands. Do not remove it.
 
@@ -289,7 +289,7 @@ node capture-thumbnails.cjs
 cp /tmp/thumb-newdesign.png public/designs/SM001/Design003/8x10.png
 
 # Production
-scp /tmp/thumb-newdesign.png ubuntu@13.210.227.152:/var/www/poster-studio/designs/SM001/Design003/8x10.png
+scp /tmp/thumb-newdesign.png ubuntu@3.107.34.169:/var/www/poster-studio/designs/SM001/Design003/8x10.png
 ```
 
 ### Step 5: Update DB thumbnail_path and listing_templates
@@ -301,8 +301,8 @@ Edit `scripts/sync-listing-state.cjs` — add the new design group to `DESIGNS` 
 node scripts/sync-listing-state.cjs
 
 # Apply on production
-scp scripts/sync-listing-state.cjs ubuntu@13.210.227.152:/home/ubuntu/poster-studio/scripts/
-ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
+scp scripts/sync-listing-state.cjs ubuntu@3.107.34.169:/home/ubuntu/poster-studio/scripts/
+ssh ubuntu@3.107.34.169 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
   --db /home/ubuntu/poster-studio/server/data/db.sqlite"
 ```
 
@@ -317,7 +317,7 @@ src={`${API}${thumbSize.thumbnail_path}?v=3`}  // was ?v=2
 
 ```bash
 npm run build
-rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@3.107.34.169:/var/www/poster-studio/
 ```
 
 ### Step 8: Visual verification (mandatory)
@@ -379,7 +379,7 @@ If you skip step 3, the font will show in the browser preview but render as a fa
 ### Frontend
 ```bash
 npm run build
-rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@3.107.34.169:/var/www/poster-studio/
 ```
 
 `--exclude='designs/'` is critical — do not remove it. The `/designs/` directory contains thumbnails that are NOT build artifacts; rsync `--delete` would wipe them.
@@ -387,8 +387,8 @@ rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/po
 ### Server
 ```bash
 rsync -avz --exclude node_modules --exclude data --exclude .env \
-  server/ ubuntu@13.210.227.152:/home/ubuntu/poster-studio/server/
-ssh ubuntu@13.210.227.152 "cd /home/ubuntu/poster-studio/server && \
+  server/ ubuntu@3.107.34.169:/home/ubuntu/poster-studio/server/
+ssh ubuntu@3.107.34.169 "cd /home/ubuntu/poster-studio/server && \
   npm install --production && sudo systemctl restart poster-studio-api && \
   sleep 2 && sudo systemctl is-active poster-studio-api"
 ```
@@ -565,7 +565,7 @@ After thumbnail changes only:
 ## 15. Server Management
 
 ```bash
-ssh ubuntu@13.210.227.152
+ssh ubuntu@3.107.34.169
 
 # Service
 sudo systemctl status poster-studio-api

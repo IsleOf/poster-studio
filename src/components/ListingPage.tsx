@@ -184,7 +184,7 @@ const TemplateCard: React.FC<{
             {t.thumbnail_path ? (
                 <Box
                     as="img"
-                    src={`${API}${t.thumbnail_path}?v=3`}
+                    src={`${API}${t.thumbnail_path}?v=4`}
                     alt={t.name}
                     w="100%"
                     h="100%"

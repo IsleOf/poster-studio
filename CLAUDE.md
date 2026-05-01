@@ -111,15 +111,15 @@ cd server && node index.js   # → http://localhost:3001
 ## Deployment (AWS EC2 VPS)
 
 **Server:** AWS EC2 t3.micro, Ubuntu 24.04, Sydney (`ap-southeast-2`)
-**Public IP:** `13.210.227.152` · Instance: `i-0dfddb55abbf931d1`
-**SSH:** `ssh ubuntu@13.210.227.152`
+**Public IP:** `3.107.34.169` · Instance: `i-0dfddb55abbf931d1`
+**SSH:** `ssh ubuntu@3.107.34.169`
 **Domain:** `https://themappedmoment.com` (Let's Encrypt SSL, auto-renews)
 **Served on:** Port 443 HTTPS + 80 → redirect, via nginx
 
 ### Deploy frontend
 ```bash
 npm run build
-rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@3.107.34.169:/var/www/poster-studio/
 ```
 
 ⚠️ The `--exclude='designs/'` flag is CRITICAL. Never remove it. The `/designs/` directory
@@ -128,15 +128,15 @@ contains thumbnails that are NOT build artifacts — `--delete` would wipe them 
 ### Deploy server
 ```bash
 rsync -avz --exclude node_modules --exclude data --exclude .env \
-  server/ ubuntu@13.210.227.152:/home/ubuntu/poster-studio/server/
-ssh ubuntu@13.210.227.152 "cd /home/ubuntu/poster-studio/server && \
+  server/ ubuntu@3.107.34.169:/home/ubuntu/poster-studio/server/
+ssh ubuntu@3.107.34.169 "cd /home/ubuntu/poster-studio/server && \
   npm install --production && sudo systemctl restart poster-studio-api && \
   sleep 2 && sudo systemctl is-active poster-studio-api"
 ```
 
 ### Quick frontend redeploy
 ```bash
-cd /home/dev/poster-studio && npm run build && rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+cd /home/dev/poster-studio && npm run build && rsync -avz --delete --exclude='designs/' dist/ ubuntu@3.107.34.169:/var/www/poster-studio/
 ```
 
 ## Key Files for Common Tasks
@@ -231,7 +231,7 @@ Visually verify the output image: real stars visible, correct title text, 4:5 as
 ### 5. Place thumbnail in both locations
 ```bash
 cp /tmp/thumb-newdesign.png public/designs/SM001/Design003/8x10.png
-scp /tmp/thumb-newdesign.png ubuntu@13.210.227.152:/var/www/poster-studio/designs/SM001/Design003/8x10.png
+scp /tmp/thumb-newdesign.png ubuntu@3.107.34.169:/var/www/poster-studio/designs/SM001/Design003/8x10.png
 ```
 
 ### 6. Increment thumbnail cache-bust version
@@ -243,11 +243,11 @@ src={`${API}${thumbSize.thumbnail_path}?v=3`}  // increment the number
 ### 7. Build, deploy, and sync prod DB
 ```bash
 npm run build
-rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@3.107.34.169:/var/www/poster-studio/
 
 # Sync DB state to production
-scp scripts/sync-listing-state.cjs ubuntu@13.210.227.152:/home/ubuntu/poster-studio/scripts/
-ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
+scp scripts/sync-listing-state.cjs ubuntu@3.107.34.169:/home/ubuntu/poster-studio/scripts/
+ssh ubuntu@3.107.34.169 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
   --db /home/ubuntu/poster-studio/server/data/db.sqlite"
 ```
 
@@ -482,8 +482,8 @@ cd server && node index.js   # → http://localhost:3001
 ### Deploy Server Changes
 ```bash
 rsync -avz --exclude node_modules --exclude data --exclude .env \
-  server/ ubuntu@13.210.227.152:/home/ubuntu/poster-studio/server/
-ssh ubuntu@13.210.227.152 "cd /home/ubuntu/poster-studio/server && npm install --production && sudo systemctl restart poster-studio-api"
+  server/ ubuntu@3.107.34.169:/home/ubuntu/poster-studio/server/
+ssh ubuntu@3.107.34.169 "cd /home/ubuntu/poster-studio/server && npm install --production && sudo systemctl restart poster-studio-api"
 ```
 
 ### Background Jobs

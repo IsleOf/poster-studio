@@ -430,10 +430,10 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 suppressNextMoveendRef.current = false;
                 return;
             }
-            // Ignore moves our own capture code triggered (stitch tile jumps)
             if (isCapturingRef.current) return;
-            // Wait 1.2 s after the last moveend before stitching — ensures the
-            // user has finished dragging/zooming before we start the 4-tile capture.
+            // Instant low-res preview so the poster reacts immediately
+            captureQuick();
+            // High-quality stitch after the user has settled
             if (stitchDebounceRef.current) clearTimeout(stitchDebounceRef.current);
             stitchDebounceRef.current = setTimeout(() => captureStitched(), 1200);
         });
@@ -509,12 +509,11 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        // Never interrupt an ongoing stitch — it reads storeRef.current at each
-        // iteration so it will naturally pick up the latest position.
-        if (isCapturingRef.current) {
-            pendingCaptureRef.current = true;
-            return;
-        }
+        // Always apply the jump immediately so the user sees their zoom/pan change.
+        // If a stitch is in flight, mark it pending so it restarts after completion.
+        // captureVersionRef is already incremented (via subscription) so the stitch
+        // detects the change and discards its stale result.
+        if (isCapturingRef.current) pendingCaptureRef.current = true;
         map.jumpTo({ center: [mapCenterLng, mapCenterLat], zoom: Math.min(mapZoom, 20), bearing: mapBearing });
     }, [mapCenterLat, mapCenterLng, mapZoom, mapBearing]);
 

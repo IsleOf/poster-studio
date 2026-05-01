@@ -228,7 +228,7 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                     </AccordionButton>
                                 </h2>
                                 <AccordionPanel pb={4} px={4}>
-                                    <Box display="grid" gridTemplateColumns={`repeat(${Math.min(designGroups.length, 3)}, 1fr)`} gap={3}>
+                                    <Box display="grid" gridTemplateColumns="repeat(3, 1fr)" gap={3}>
                                         {designGroups.map((group) => {
                                             // Always use 8x10 as the thumbnail representative — consistent 4:5 ratio across all designs
                                             const thumbSize = group.sizes.find(sz => sz.fulfillment_size === '8x10') ?? group.sizes[0];
@@ -263,7 +263,7 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                                     <Box
                                                         as="img"
                                                         src={thumbSize?.thumbnail_path
-                                                            ? `${API}${thumbSize.thumbnail_path}?v=3`
+                                                            ? `${API}${thumbSize.thumbnail_path}?v=4`
                                                             : `${API}/api/templates/${thumbSize?.id ?? group.sizes[0]?.id}/thumbnail`}
                                                         alt={group.name}
                                                         w="100%"
@@ -403,7 +403,7 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                                     <Box
                                                         as="img"
                                                         src={d.thumbnail_path
-                                                            ? `${API}${d.thumbnail_path}?v=3`
+                                                            ? `${API}${d.thumbnail_path}?v=4`
                                                             : `${API}/api/templates/${d.id}/thumbnail`}
                                                         alt={label}
                                                         w="100%"
@@ -431,13 +431,12 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
 
 
                 <Accordion allowToggle defaultIndex={[0]} allowMultiple>
-                    {/* Location and Text Section — only shown for star maps */}
-                    {posterType === 'starmap' && (
+                    {/* Location and Text Section */}
                     <AccordionItem border="none" borderBottom="1px" borderColor="gray.200">
                         <h2>
                             <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
                                 <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
-                                    Location and Text
+                                    {posterType === 'starmap' ? 'Location and Text' : 'Text'}
                                 </Box>
                                 <AccordionIcon color="gray.400" />
                             </AccordionButton>
@@ -446,7 +445,6 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                             <TextContentPanel />
                         </AccordionPanel>
                     </AccordionItem>
-                    )}
 
                     {/* Typography Section */}
                     < AccordionItem border="none" borderBottom="1px" borderColor="gray.200" >

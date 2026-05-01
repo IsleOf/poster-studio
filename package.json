@@ -14,6 +14,8 @@
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:update": "npx playwright test --update-snapshots",
+    "test:continue": "npx playwright test -c playwright.continuation.config.ts",
+    "test:continue:update": "npx playwright test -c playwright.continuation.config.ts --update-snapshots",
     "test:ui": "npx playwright test --ui",
     "test:report": "npx playwright show-report tests/report"
   },

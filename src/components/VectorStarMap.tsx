@@ -351,6 +351,18 @@ const VectorStarMap: React.FC = () => {
         // Draw Map Background (Clipped)
         const mapContent = mapLayer.append('g').attr('clip-path', 'url(#map-clip)');
 
+        // Mutable ref so the map-image drag handler can move the pin group in sync
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pinRef: { group: any } = { group: null };
+
+        // In map mode, hitGroup and pinGroup are .raise()d above shapeInteract after creation
+        // so interior/pin events win the hit-test; the uncovered edge ring falls to shape-drag.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let hitGroupRef: any = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let pinGroupRef: any = null;
+        const MAP_EDGE_ZONE = 44; // px ring at shape boundary reserved for shape-drag
+
         // Background Image or Color
         if (mapBackgroundImage) {
             // Use 3x radius so there's plenty of room to drag the image within the shape
@@ -367,8 +379,10 @@ const VectorStarMap: React.FC = () => {
                 .attr('preserveAspectRatio', 'none')
                 .attr('opacity', mapImageOpacity ?? 1);
 
-            // Transparent drag hit area over the shape — lets users reposition the map image
+            // Transparent drag hit area — inset by MAP_EDGE_ZONE so the outer ring
+            // falls through to shapeInteract (shape drag) once .raise() puts this on top.
             const hitGroup = mapLayer.append('g').style('cursor', 'grab');
+            hitGroupRef = hitGroup;
 
             if (maskShape === 'rect') {
                 hitGroup.append('rect')
@@ -376,22 +390,24 @@ const VectorStarMap: React.FC = () => {
                     .attr('fill', 'transparent')
                     .style('pointer-events', 'all');
             } else if (maskShape === 'heart') {
+                const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
                 hitGroup.append('path')
                     .attr('d', userHeartPath)
-                    .attr('transform', getHeartTransform(1))
+                    .attr('transform', getHeartTransform(insetScale))
                     .attr('fill', 'transparent')
                     .style('pointer-events', 'all');
             } else if (maskShape === 'house') {
+                const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
                 hitGroup.append('path')
                     .attr('d', userHousePath)
-                    .attr('transform', getHouseTransform(1))
+                    .attr('transform', getHouseTransform(insetScale))
                     .attr('fill', 'transparent')
                     .style('pointer-events', 'all');
             } else {
                 hitGroup.append('circle')
                     .attr('cx', center[0])
                     .attr('cy', center[1])
-                    .attr('r', mapRadius)
+                    .attr('r', Math.max(mapRadius - MAP_EDGE_ZONE, mapRadius * 0.5))
                     .attr('fill', 'transparent')
                     .style('pointer-events', 'all');
             }
@@ -426,32 +442,19 @@ const VectorStarMap: React.FC = () => {
                         const deltaX = imgOffsetX - dragStartOffsetX;
                         const deltaY = imgOffsetY - dragStartOffsetY;
                         if (deltaX !== 0 || deltaY !== 0) {
-                            // Persist the drag offset so the SVG keeps showing the image
-                            // in the dragged position while MapLibre re-renders at the new center.
-                            // MainLayout's handleMapCapture will clear these to 0 once the
-                            // new tile capture arrives, so no snap-back occurs.
                             const state = useStore.getState();
                             state.setMapImageOffsetX(imgOffsetX);
                             state.setMapImageOffsetY(imgOffsetY);
 
-                            // Convert SVG pixel delta → geographic delta and tell MapLibre
-                            // to re-render at the new center. The fresh capture will be
-                            // perfectly centred in the shape — no rectangular edges visible.
                             const svgToCanvas = 1200 / imgSize;
                             const worldWidthPx = 512 * Math.pow(2, state.mapZoom);
                             const degPerCanvasPx = 360 / worldWidthPx;
                             const newLng = state.mapCenterLng - deltaX * svgToCanvas * degPerCanvasPx;
                             const newLat = state.mapCenterLat + deltaY * svgToCanvas * degPerCanvasPx
                                 * Math.cos(state.mapCenterLat * Math.PI / 180);
-                            // Set coords FIRST — Zustand subscribe fires synchronously here,
-                            // incrementing captureVersionRef before any awaiting stitch resumes.
-                            // Then clear isDraggingMapImage so no stale capture can slip through
-                            // the guard with the old version number.
                             state.setMapCenterLng(newLng);
                             state.setMapCenterLat(newLat);
                         }
-                        // Clear dragging flag AFTER coordinate updates so the synchronous
-                        // version increment happens before any stale stitch checks the flag.
                         useStore.getState().setIsDraggingMapImage(false);
                     })
             );
@@ -538,6 +541,8 @@ const VectorStarMap: React.FC = () => {
             const pinGroup = mapLayer.append('g')
                 .attr('transform', `translate(${pinX}, ${pinY})`)
                 .style('cursor', 'grab');
+            pinRef.group = pinGroup;
+            pinGroupRef = pinGroup;
 
             pinGroup.append('path')
                 .attr('d', userHeartPath)
@@ -679,7 +684,9 @@ const VectorStarMap: React.FC = () => {
             // --- Interaction layer (on top of everything) ---
             const shapeInteract = mapLayer.append('g').style('cursor', 'move');
 
-            // Full bounding-box transparent hit area (catches all mouse events on/inside shape)
+            // Full bounding-box transparent hit area — always active.
+            // In map mode, hitGroup and pinGroup are .raise()d on top after this block,
+            // so they win interior hit-tests and this only fires in the uncovered edge ring.
             shapeInteract.append('rect')
                 .attr('x', bbX).attr('y', bbY).attr('width', bbW).attr('height', bbH)
                 .attr('fill', 'transparent').attr('stroke', 'none')
@@ -817,6 +824,14 @@ const VectorStarMap: React.FC = () => {
                         }
                     })
             );
+
+            // In map mode, raise hitGroup and pinGroup above shapeInteract in Z-order.
+            // This makes them win the hit-test in the interior and over the pin,
+            // leaving the uncovered edge ring to fall through to shapeInteract (shape drag).
+            if (mapBackgroundImage) {
+                if (hitGroupRef) hitGroupRef.raise();
+                if (pinGroupRef) pinGroupRef.raise();
+            }
         }
 
     }, [
@@ -870,7 +885,7 @@ const VectorStarMap: React.FC = () => {
         // circleSize IS used so same-ratio sizes (same circleSize) have identical textStartY.
         const _RECT_MAP_H = height * 0.74;
         const _baseRadius = Math.min(width, height) * 0.4;
-        const _shapeRadius = maskShape === 'rect' ? 0 : _baseRadius * (maskShape === 'circle' ? circleSize : maskShape === 'heart' ? heartSize : houseSize);
+        const _shapeRadius = maskShape === 'rect' ? 0 : _baseRadius * (maskShape === 'circle' ? debouncedCircleSize : maskShape === 'heart' ? debouncedHeartSize : debouncedHouseSize);
         const textStartY = maskShape === 'rect'
             ? _RECT_MAP_H + height * 0.03
             : height * 0.45 + _shapeRadius + height * 0.05;
@@ -1606,30 +1621,36 @@ const VectorStarMap: React.FC = () => {
             // hitPad in un-scaled units so the click target is large
             const hitPad = 30 / heartScale;
 
-            const heartGroup = textLayer.append('g')
-                .attr('transform', `translate(${width / 2}, ${heartBaseY + heartDecorOffsetY}) scale(${heartScale})`)
+            // Outer group: translate only + drag (no scale, so D3 coordinate projection is correct)
+            const heartOuter = textLayer.append('g')
+                .attr('transform', `translate(${width / 2}, ${heartBaseY + heartDecorOffsetY})`)
                 .style('cursor', 'move');
 
-            // Large transparent hit area (scale-compensated so it's ~60×60px on screen)
-            heartGroup.append('rect')
-                .attr('x', -hitPad / 2).attr('y', -hitPad / 4)
-                .attr('width', hitPad).attr('height', hitPad)
+            // Large transparent hit area in SVG user-space (not scale-inflated)
+            const hitPadOuter = 40;
+            heartOuter.append('rect')
+                .attr('x', -hitPadOuter / 2).attr('y', -hitPadOuter / 4)
+                .attr('width', hitPadOuter).attr('height', hitPadOuter)
                 .attr('fill', 'transparent')
                 .style('pointer-events', 'all');
 
-            heartGroup.append('path')
+            // Inner group: scale only (path lives here, no drag interaction)
+            const heartInner = heartOuter.append('g')
+                .attr('transform', `scale(${heartScale})`);
+
+            heartInner.append('path')
                 .attr('d', 'M0,15.5 C-10,5 -25,10 -25,25 C-25,45 0,65 0,65 C0,65 25,45 25,25 C25,10 10,5 0,15.5 Z')
                 .attr('fill', textColor)
                 .style('pointer-events', 'none');
 
             let heartDragAcc = 0;
-            heartGroup.call(
+            heartOuter.call(
                 drag<SVGGElement, unknown>()
                     .on('start', (event) => { event.sourceEvent.stopPropagation(); heartDragAcc = 0; })
                     .on('drag', function(event) {
                         heartDragAcc += event.dy / useStore.getState().previewZoom;
                         const newY = heartBaseY + heartDecorOffsetY + heartDragAcc;
-                        select(this).attr('transform', `translate(${width / 2}, ${newY}) scale(${heartScale})`);
+                        select(this).attr('transform', `translate(${width / 2}, ${newY})`);
                     })
                     .on('end', () => {
                         if (heartDragAcc !== 0) setHeartDecorOffsetY(heartDecorOffsetY + heartDragAcc);
@@ -1647,7 +1668,7 @@ const VectorStarMap: React.FC = () => {
         showNames, // Names toggle
         showDate, showLocation, showCoords, showDivider, dividerOffsetY, dividerLength, dividerThickness, vertSepOffsetY, showVertSep, vertSepHeight, vertSepThickness, // Toggles
         showHeartDecor, // Decorative heart below text
-        circleSize, heartSize, houseSize, maskShape, // Shape — textStartY depends on these (shapeOffsetY removed: text is now decoupled from shape position)
+        debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, maskShape, // Shape — textStartY depends on these (shapeOffsetY removed: text is now decoupled from shape position)
         textColor, width, height, frameInset, // Global
         selectedTemplate, // Template
         setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setNamesFontSize, setCustomText, setInlineEdit, // Stable setters
