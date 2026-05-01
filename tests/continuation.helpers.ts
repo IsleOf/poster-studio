@@ -112,6 +112,8 @@ export async function gotoDesigner(page: Page, route = '/') {
     await setupContinuationMocks(page);
     await page.goto(route);
     await waitForDesignerReady(page);
+    await page.locator('input[type="date"]').first().fill('2026-04-28').catch(() => {});
+    await page.waitForTimeout(100);
 }
 
 export async function gotoAdmin(page: Page, route: string) {

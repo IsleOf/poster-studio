@@ -2,6 +2,8 @@
 
 A browser-based print-quality poster designer. Create **star map posters** (showing the exact night sky at a date/time/location) or **street map posters** (stylized city maps) — both using the same professional SVG template system with draggable text, custom fonts, and 300 DPI export.
 
+> Agent/operator note: this README contains historical infrastructure notes. For current startup, listing parity, testing, and deployment guardrails, use `docs/AGENT_RUNBOOK.md`.
+
 ---
 
 ## Live URL
@@ -69,9 +71,12 @@ SSH key auth only (ed25519). Key is at `~/.ssh/id_ed25519` on the dev machine.
 
 ```bash
 cd /home/dev/poster-studio
-npm run dev        # Dev server at http://localhost:5173
+npm run api        # API server at http://localhost:3001
+npm run dev        # Vite dev server at http://localhost:5173
 npm run build      # Production build → dist/
 ```
+
+The Vite server proxies `/api` and `/auth` to `http://localhost:3001`. If listings/templates are missing locally, make sure `npm run api` is running.
 
 ## Deploying Updates
 

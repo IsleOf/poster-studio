@@ -18,6 +18,7 @@ const StreetMapCapture = React.lazy(() => import('./StreetMapCapture'));
 import type { DesignGroup } from '../types/listing';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
+const TEMPLATE_BOOTSTRAP_TIMEOUT_MS = 4000;
 
 const MainLayout: React.FC = () => {
     const { templateId, slug, designSlug } = useParams<{ templateId?: string; slug?: string; designSlug?: string }>();
@@ -74,21 +75,41 @@ const MainLayout: React.FC = () => {
     useEffect(() => {
         if (templateId || slug) return;
         const API = API_URL;
-        fetch(`${API}/api/templates`)
+        let cancelled = false;
+        const controller = new AbortController();
+        const bootstrapTimeout = window.setTimeout(() => controller.abort(), TEMPLATE_BOOTSTRAP_TIMEOUT_MS);
+        const finishLoading = () => {
+            if (!cancelled) setTemplateLoading(false);
+        };
+        const withTimeout = <T,>(promise: Promise<T>) => Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                window.setTimeout(() => reject(new Error('Template bootstrap timed out')), TEMPLATE_BOOTSTRAP_TIMEOUT_MS);
+            }),
+        ]);
+
+        fetch(`${API}/api/templates`, { signal: controller.signal })
             .then(r => r.ok ? r.json() : [])
             .then(async (rows: Array<{ id: string; design_group_id: string | null; posterType?: string }>) => {
                 if (!Array.isArray(rows) || rows.length === 0) {
-                    setTemplateLoading(false);
                     return;
                 }
                 const starmaps = rows.filter(r => r.design_group_id && (r.posterType ?? 'starmap') === 'starmap');
                 const design001 = starmaps.find(r => /-design001$/i.test(r.design_group_id || '')) || starmaps[0];
                 if (design001) {
-                    await fetchAndApplyTemplate(design001.id, { designGroupId: design001.design_group_id || undefined });
+                    await withTimeout(fetchAndApplyTemplate(design001.id, { designGroupId: design001.design_group_id || undefined }));
                 }
-                setTemplateLoading(false);
             })
-            .catch(() => { setTemplateLoading(false); });
+            .catch(() => {})
+            .finally(() => {
+                window.clearTimeout(bootstrapTimeout);
+                finishLoading();
+            });
+        return () => {
+            cancelled = true;
+            window.clearTimeout(bootstrapTimeout);
+            controller.abort();
+        };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

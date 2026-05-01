@@ -10,6 +10,26 @@ test.describe('Continuation smoke', () => {
         await expect(page.getByText('THE MAPPED MOMENT')).toBeVisible();
     });
 
+    test('designer falls back when template bootstrap stalls', async ({ page }) => {
+        await setupContinuationMocks(page);
+        let releaseTemplates: (() => void) | undefined;
+        await page.route('**/api/templates', async route => {
+            await new Promise<void>(resolve => {
+                releaseTemplates = resolve;
+            });
+            await route.fulfill({ json: [] }).catch(() => {});
+        });
+
+        await page.goto('/');
+
+        await expect(page.getByText('Loading design...')).toBeHidden({ timeout: 6500 });
+        await expect(page.locator('#poster-preview')).toHaveCSS('opacity', '1');
+        await expect(page.locator('#poster-preview svg')).toBeVisible();
+
+        releaseTemplates?.();
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+    });
+
     test('listing route loads design cards and design slug switching works', async ({ page }) => {
         await setupContinuationMocks(page);
         await page.goto('/l/star-map-night-we-met');

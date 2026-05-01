@@ -1,100 +1,166 @@
+#!/usr/bin/env node
 /**
  * verify-listing.cjs
  *
- * Visual verification script — takes a screenshot of the listing page on both
- * local dev server and production, and checks that all design thumbnails are
- * loading correctly (not 404, not broken, correct dimensions).
+ * Browser-level visual smoke for public listing pages. It opens local and
+ * production listing URLs, verifies design thumbnails render, and saves
+ * screenshots under /tmp.
  *
  * Usage:
- *   node scripts/verify-listing.cjs
+ *   npm run listings:verify
+ *   npm run listings:verify -- --prod-only
+ *   npm run listings:verify -- star-map-night-we-met
  *
- * Output:
- *   /tmp/verify-local.png  — screenshot of local listing page
- *   /tmp/verify-prod.png   — screenshot of production listing page
- *   Console output shows img src, dimensions, and load status for each thumbnail
- *
- * A thumbnail is healthy if:
- *   - complete === true
- *   - naturalWidth > 0 (not broken/404)
- *   - naturalWidth / naturalHeight ≈ 0.8 (4:5 ratio, i.e. 592×740)
+ * Defaults:
+ *   LOCAL_URL=http://localhost:5173
+ *   PROD_URL=https://themappedmoment.com
  */
 
 const { chromium } = require(require('path').resolve(__dirname, '../node_modules/playwright'));
-const fs = require('fs');
 
-const SLUG = 'star-map-night-we-met';
-const URLS = [
-    { label: 'LOCAL', url: `http://localhost:5173/l/${SLUG}` },
-    { label: 'PROD',  url: `https://themappedmoment.com/l/${SLUG}` },
+const ALL_SLUGS = [
+  'star-map-night-we-met',
+  'colored-map-home-street',
+  'colored-map-heart',
+  'street-map-monochrome',
 ];
 
-(async () => {
-    const browser = await chromium.launch({
-        executablePath: '/home/dev/.playwright/chromium-1208/chrome-linux64/chrome',
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+const args = process.argv.slice(2);
+const prodOnly = args.includes('--prod-only');
+const requestedSlugs = args.filter(arg => !arg.startsWith('--'));
+const slugs = requestedSlugs.length > 0 ? requestedSlugs : ALL_SLUGS;
+
+const environments = [
+  { label: 'local', baseUrl: stripTrailingSlash(process.env.LOCAL_URL || 'http://localhost:5173'), optional: true },
+  { label: 'prod', baseUrl: stripTrailingSlash(process.env.PROD_URL || 'https://themappedmoment.com'), optional: false },
+].filter(env => !prodOnly || env.label === 'prod');
+
+function stripTrailingSlash(value) {
+  return value.replace(/\/+$/, '');
+}
+
+function safeFilePart(value) {
+  return value.replace(/[^a-z0-9-]+/gi, '-').toLowerCase();
+}
+
+async function inspectListing(page) {
+  return page.evaluate(() => {
+    const imgs = Array.from(document.querySelectorAll('img'));
+    const thumbnails = imgs
+      .filter(img => img.src.includes('/designs/'))
+      .map(img => ({
+        src: img.src.replace(/^https?:\/\/[^/]+/, ''),
+        naturalWidth: img.naturalWidth,
+        naturalHeight: img.naturalHeight,
+        complete: img.complete,
+      }));
+
+    const preview = document.querySelector('#poster-preview');
+    return {
+      title: document.title,
+      hasPreview: !!preview,
+      previewOpacity: preview ? getComputedStyle(preview).opacity : null,
+      loadingVisible: Array.from(document.body.querySelectorAll('*')).some(el => {
+        return (el.textContent || '').trim() === 'Loading design...' && getComputedStyle(el).display !== 'none';
+      }),
+      thumbnails,
+    };
+  });
+}
+
+async function loadDesignThumbnails(page) {
+  const thumbs = await page.locator('img[src*="/designs/"]').all();
+  for (const thumb of thumbs) {
+    await thumb.scrollIntoViewIfNeeded().catch(() => {});
+    await page.waitForTimeout(150);
+  }
+
+  await page.waitForFunction(() => {
+    const imgs = Array.from(document.querySelectorAll('img')).filter(img => img.src.includes('/designs/'));
+    return imgs.length > 0 && imgs.every(img => {
+      if (!img.complete || img.naturalWidth <= 0) return false;
+      return true;
+    });
+  }, null, { timeout: 10000 }).catch(() => {});
+}
+
+async function waitForPreviewReady(page) {
+  await page.waitForFunction(() => {
+    const preview = document.querySelector('#poster-preview');
+    const loadingVisible = Array.from(document.body.querySelectorAll('*')).some(el => {
+      return (el.textContent || '').trim() === 'Loading design...' && getComputedStyle(el).display !== 'none';
     });
 
-    let hasErrors = false;
+    return !!preview && getComputedStyle(preview).opacity === '1' && !loadingVisible;
+  }, null, { timeout: 20000 }).catch(() => {});
+}
 
-    for (const { label, url } of URLS) {
-        console.log(`\n=== ${label}: ${url} ===`);
-        const page = await browser.newPage();
-        await page.setViewportSize({ width: 1400, height: 900 });
-        await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache, no-store' });
+(async () => {
+  const browser = await chromium.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
 
-        try {
-            await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
-        } catch (e) {
-            console.log(`  ✗ Failed to load: ${e.message}`);
-            hasErrors = true;
-            await page.close();
-            continue;
-        }
+  let hasErrors = false;
 
-        await page.waitForTimeout(2000); // wait for any lazy-loaded images
+  for (const env of environments) {
+    for (const slug of slugs) {
+      const url = `${env.baseUrl}/l/${slug}`;
+      console.log(`\n=== ${env.label.toUpperCase()}: ${url} ===`);
 
-        // Check all /designs/ thumbnails
-        const thumbInfo = await page.evaluate(() => {
-            const imgs = Array.from(document.querySelectorAll('img'));
-            return imgs
-                .filter(img => img.src.includes('/designs/'))
-                .map(img => ({
-                    src: img.src.replace(/^https?:\/\/[^/]+/, ''),
-                    naturalWidth: img.naturalWidth,
-                    naturalHeight: img.naturalHeight,
-                    complete: img.complete,
-                }));
-        });
+      const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+      await page.setExtraHTTPHeaders({ 'Cache-Control': 'no-cache, no-store' });
 
-        if (thumbInfo.length === 0) {
-            console.log('  ✗ No /designs/ thumbnails found on page');
-            hasErrors = true;
-        }
-
-        for (const t of thumbInfo) {
-            const ratio = t.naturalHeight > 0 ? (t.naturalWidth / t.naturalHeight).toFixed(2) : '?';
-            const ratioOk = t.naturalHeight > 0 && Math.abs(t.naturalWidth / t.naturalHeight - 0.8) < 0.05;
-            const ok = t.complete && t.naturalWidth > 0 && ratioOk;
-            const icon = ok ? '✓' : '✗';
-            console.log(`  ${icon} ${t.src}`);
-            console.log(`      ${t.naturalWidth}×${t.naturalHeight} (ratio ${ratio}) complete=${t.complete}`);
-            if (!ok) {
-                hasErrors = true;
-                if (!t.complete || t.naturalWidth === 0) console.log('      → Image failed to load (404 or network error)');
-                if (!ratioOk) console.log(`      → Wrong aspect ratio (expected ~0.80 for 4:5)`);
-            }
-        }
-
-        // Screenshot
-        const outPath = `/tmp/verify-${label.toLowerCase()}.png`;
-        await page.screenshot({ path: outPath });
-        console.log(`  Screenshot saved: ${outPath}`);
-
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
+        await page.waitForSelector('#poster-preview', { timeout: 15000 });
+        await waitForPreviewReady(page);
+        await loadDesignThumbnails(page);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const severity = env.optional ? 'WARN' : 'FAIL';
+        console.log(`  ${severity}: failed to load page: ${message}`);
+        if (!env.optional) hasErrors = true;
         await page.close();
+        continue;
+      }
+
+      const state = await inspectListing(page);
+      const issues = [];
+      if (!state.hasPreview) issues.push('poster preview missing');
+      if (state.previewOpacity !== '1') issues.push(`poster preview opacity is ${state.previewOpacity}`);
+      if (state.loadingVisible) issues.push('Loading design overlay is still visible');
+      if (state.thumbnails.length === 0) issues.push('no /designs/ thumbnails found');
+
+      for (const thumbnail of state.thumbnails) {
+        const ratio = thumbnail.naturalHeight > 0 ? thumbnail.naturalWidth / thumbnail.naturalHeight : 0;
+        const ratioOk = Math.abs(ratio - 0.8) < 0.05;
+        if (!thumbnail.complete || thumbnail.naturalWidth <= 0 || !ratioOk) {
+          issues.push(`${thumbnail.src} broken or wrong ratio (${thumbnail.naturalWidth}x${thumbnail.naturalHeight})`);
+        }
+      }
+
+      const screenshotPath = `/tmp/verify-${env.label}-${safeFilePart(slug)}.png`;
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+
+      if (issues.length > 0) {
+        hasErrors = true;
+        console.log(`  FAIL: ${issues.length} issue(s)`);
+        for (const issue of issues) console.log(`  - ${issue}`);
+      } else {
+        console.log(`  OK: ${state.thumbnails.length} thumbnails, preview ready`);
+      }
+      console.log(`  Screenshot: ${screenshotPath}`);
+
+      await page.close();
     }
+  }
 
-    await browser.close();
+  await browser.close();
 
-    console.log('\n' + (hasErrors ? '✗ Issues found — check output above' : '✓ All thumbnails healthy'));
-    process.exit(hasErrors ? 1 : 0);
+  if (hasErrors) {
+    console.log('\nVisual listing verification found issues.');
+    process.exit(1);
+  }
+
+  console.log('\nVisual listing verification passed.');
 })();

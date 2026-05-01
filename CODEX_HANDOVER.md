@@ -2,6 +2,8 @@
 
 This document is a deep, file-by-file walkthrough of every part of the Poster Studio codebase. It is written specifically for an autonomous coding agent (e.g. OpenAI Codex) that has no prior knowledge of the project. Read this together with `CLAUDE.md` (operational rules / known gotchas) and `HANDOVER.md` (failure modes + business context). Where those two documents focus on *what to avoid*, this one focuses on *what each piece of code is and why it exists*.
 
+For current startup commands, production/local listing checks, and handoff checklist, read `docs/AGENT_RUNBOOK.md` first. It supersedes older scattered operational notes when they conflict.
+
 > Last updated: 2026-04-28
 > Scope: the entire repo at `/home/dev/poster-studio`
 > Audience: AI coding agents performing implementation, refactoring, debugging.
