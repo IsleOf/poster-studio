@@ -197,6 +197,42 @@ function prefetchNearbyTiles(
 const PIXEL_RATIO = 3;
 const CONTAINER_SIZE = 1200; // CSS px
 const TILE_CANVAS_SIZE = CONTAINER_SIZE * PIXEL_RATIO; // 3600px per tile
+const TILE_SETTLE_TIMEOUT_MS = 1200;
+
+function waitForMapFrame(
+    map: maplibregl.Map,
+    jump: () => void,
+    draw: () => void,
+    timeoutMs = TILE_SETTLE_TIMEOUT_MS,
+): Promise<void> {
+    return new Promise(resolve => {
+        let settled = false;
+        let timer: ReturnType<typeof setTimeout>;
+
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            map.off('idle', onIdle);
+            draw();
+            resolve();
+        };
+
+        const onIdle = () => {
+            if (settled) return;
+            if (map.areTilesLoaded()) {
+                finish();
+                return;
+            }
+            map.once('idle', onIdle);
+        };
+
+        timer = setTimeout(finish, timeoutMs);
+        // Register BEFORE jumpTo so cached tiles cannot make us miss the idle event.
+        map.once('idle', onIdle);
+        jump();
+    });
+}
 
 // ─── Heritage POI filter ───────────────────────────────────────────────────────
 
@@ -220,7 +256,7 @@ function applyHeritagePOIFilter(map: maplibregl.Map): void {
         ],
     ] as maplibregl.FilterSpecification;
 
-    for (const layer of map.getStyle().layers) {
+    for (const layer of map.getStyle().layers ?? []) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((layer as any)['source-layer'] === 'poi') {
             const existing = map.getFilter(layer.id);
@@ -251,6 +287,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     const captureVersionRef = useRef(0);
     const colorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const stitchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const didSkipInitialStyleEffectRef = useRef(false);
 
     const { mapCenterLat, mapCenterLng, mapZoom, mapBearing, mapStreetColor, posterColor, mapStyleUrl, mapColorPreset, setCaptureHighResFn } = useStore();
     const activePreset = MAP_COLOR_PRESETS_FULL.find(p => p.id === mapColorPreset);
@@ -314,62 +351,50 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         stitchedCanvas.height = TILE_CANVAS_SIZE * 2;
         const ctx = stitchedCanvas.getContext('2d')!;
 
-        for (let i = 0; i < 4; i++) {
-            const col = i % 2;
-            const row = Math.floor(i / 2);
-            await new Promise<void>(resolve => {
-                // Register BEFORE jumpTo so we can't miss the idle event
-                // even when tiles are already cached.
-                function onIdle() {
-                    if (m.areTilesLoaded()) {
-                        // All tiles at captureZoom are present — safe to capture.
-                        ctx.drawImage(m.getCanvas(), col * TILE_CANVAS_SIZE, row * TILE_CANVAS_SIZE);
-                        resolve();
-                    } else {
-                        // Some tiles still loading (parent-tile placeholders visible) —
-                        // wait for the next idle, which fires once they arrive.
-                        m.once('idle', onIdle);
-                    }
-                }
-                m.once('idle', onIdle);
-                m.jumpTo({ center: [tiles[i].lng, tiles[i].lat], zoom: captureZoom, bearing: bearing ?? 0 });
+        try {
+            for (let i = 0; i < 4; i++) {
+                const col = i % 2;
+                const row = Math.floor(i / 2);
+                await waitForMapFrame(
+                    m,
+                    () => m.jumpTo({ center: [tiles[i].lng, tiles[i].lat], zoom: captureZoom, bearing: bearing ?? 0 }),
+                    () => ctx.drawImage(m.getCanvas(), col * TILE_CANVAS_SIZE, row * TILE_CANVAS_SIZE),
+                );
+            }
+
+            // Restore to the CURRENT store position (user may have changed it mid-capture).
+            // This avoids a visible snap-back to the pre-capture position.
+            const { mapCenterLat: latNow, mapCenterLng: lngNow, mapZoom: zoomNow, mapBearing: bearingNow } = storeRef.current;
+            suppressNextMoveendRef.current = true;
+            m.jumpTo({ center: [lngNow, latNow], zoom: Math.min(zoomNow, 20), bearing: bearingNow ?? 0 });
+
+            // Discard stale result — position changed while we were stitching
+            if (captureVersionRef.current !== startVersion) return;
+
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+                stitchedCanvas.toBlob(blob => {
+                    if (!blob) { reject(new Error('toBlob failed')); return; }
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                }, 'image/jpeg', 0.92);
             });
-        }
-
-        // Restore to the CURRENT store position (user may have changed it mid-capture).
-        // This avoids a visible snap-back to the pre-capture position.
-        const { mapCenterLat: latNow, mapCenterLng: lngNow, mapZoom: zoomNow, mapBearing: bearingNow } = storeRef.current;
-        suppressNextMoveendRef.current = true;
-        m.jumpTo({ center: [lngNow, latNow], zoom: Math.min(zoomNow, 20), bearing: bearingNow ?? 0 });
-
-        isCapturingRef.current = false;
-
-        // Discard stale result — position changed while we were stitching
-        if (captureVersionRef.current !== startVersion) {
-            if (pendingCaptureRef.current) { pendingCaptureRef.current = false; captureStitched(); }
-            return;
-        }
-
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-            stitchedCanvas.toBlob(blob => {
-                if (!blob) { reject(new Error('toBlob failed')); return; }
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            }, 'image/jpeg', 0.92);
-        });
-        // Don't push the new image while the user is mid-drag — it would interrupt
-        // their drag gesture by causing the SVG effect to re-run and reset the offset.
-        // After drag ends, the coordinate useEffect fires map.jumpTo() which triggers
-        // another captureStitched, so the image will update shortly after.
-        if (!useStore.getState().isDraggingMapImage) {
-            onCapture(dataUrl);
-        }
-
-        if (pendingCaptureRef.current) {
-            pendingCaptureRef.current = false;
-            captureStitched();
+            // Don't push the new image while the user is mid-drag — it would interrupt
+            // their drag gesture by causing the SVG effect to re-run and reset the offset.
+            // After drag ends, the coordinate useEffect fires map.jumpTo() which triggers
+            // another captureStitched, so the image will update shortly after.
+            if (!useStore.getState().isDraggingMapImage) {
+                onCapture(dataUrl);
+            }
+        } catch (error) {
+            console.error('Failed to capture stitched map preview', error);
+        } finally {
+            isCapturingRef.current = false;
+            if (pendingCaptureRef.current) {
+                pendingCaptureRef.current = false;
+                captureStitched();
+            }
         }
     }, [onCapture]);
 
@@ -393,11 +418,22 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             attributionControl: false,
         });
 
-        map.on('load', () => {
-            mapRef.current = map;
-            if (initialStyleUrl) applyHeritagePOIFilter(map);
+        mapRef.current = map;
+
+        let didInitialCapture = false;
+        const runInitialCapture = () => {
+            if (didInitialCapture) return;
+            didInitialCapture = true;
+            clearTimeout(initialCaptureTimer);
+            map.off('load', runInitialCapture);
+            map.off('idle', runInitialCapture);
+            if (initialStyleUrl && map.isStyleLoaded()) applyHeritagePOIFilter(map);
             captureStitched();
-        });
+        };
+        const initialCaptureTimer = setTimeout(runInitialCapture, TILE_SETTLE_TIMEOUT_MS);
+
+        map.once('load', runInitialCapture);
+        map.once('idle', runInitialCapture);
 
         map.on('moveend', () => {
             if (suppressNextMoveendRef.current) {
@@ -412,6 +448,9 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         });
 
         return () => {
+            clearTimeout(initialCaptureTimer);
+            map.off('load', runInitialCapture);
+            map.off('idle', runInitialCapture);
             map.remove();
             mapRef.current = null;
         };
@@ -424,15 +463,36 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
+        if (!didSkipInitialStyleEffectRef.current) {
+            didSkipInitialStyleEffectRef.current = true;
+            return;
+        }
 
         const newStyle = mapStyleUrl ?? getActiveStyle();
         map.setStyle(newStyle);
 
-        // After the style loads, apply POI filter (prebuilt styles only) then stitch
-        map.once('styledata', () => {
-            if (mapStyleUrl) applyHeritagePOIFilter(map);
+        // After the style loads, apply POI filter (prebuilt styles only) then stitch.
+        // Also keep a timer fallback; production tile/style loads can miss the exact
+        // event ordering, and the preview must not remain blank.
+        let didStyleCapture = false;
+        const runStyleCapture = () => {
+            if (didStyleCapture) return;
+            didStyleCapture = true;
+            clearTimeout(styleCaptureTimer);
+            map.off('styledata', runStyleCapture);
+            map.off('idle', runStyleCapture);
+            if (mapStyleUrl && map.isStyleLoaded()) applyHeritagePOIFilter(map);
             captureStitched();
-        });
+        };
+        const styleCaptureTimer = setTimeout(runStyleCapture, TILE_SETTLE_TIMEOUT_MS);
+        map.once('styledata', runStyleCapture);
+        map.once('idle', runStyleCapture);
+
+        return () => {
+            clearTimeout(styleCaptureTimer);
+            map.off('styledata', runStyleCapture);
+            map.off('idle', runStyleCapture);
+        };
     // posterColor/mapStreetColor intentionally excluded — the color effect below
     // handles those independently when mapStyleUrl is null.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -528,18 +588,11 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             for (let col = 0; col < GRID; col++) {
                 const lngOffset = offsets[col] * lngPerPx;
                 const latCenter = latFromMercatorY(centerY + offsets[row], effectiveZoom);
-                await new Promise<void>(resolve => {
-                    function onIdle() {
-                        if (m.areTilesLoaded()) {
-                            ctx.drawImage(m.getCanvas(), col * TILE_CANVAS_SIZE, row * TILE_CANVAS_SIZE);
-                            resolve();
-                        } else {
-                            m.once('idle', onIdle);
-                        }
-                    }
-                    m.once('idle', onIdle);
-                    m.jumpTo({ center: [lng + lngOffset, latCenter], zoom: captureZoom });
-                });
+                await waitForMapFrame(
+                    m,
+                    () => m.jumpTo({ center: [lng + lngOffset, latCenter], zoom: captureZoom, bearing: bearing ?? 0 }),
+                    () => ctx.drawImage(m.getCanvas(), col * TILE_CANVAS_SIZE, row * TILE_CANVAS_SIZE),
+                );
             }
         }
 

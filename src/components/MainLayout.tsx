@@ -817,7 +817,7 @@ const MainLayout: React.FC = () => {
                 </Box>
 
                 {/* Offscreen street map renderer */}
-                {posterType !== 'starmap' && (
+                {!templateLoading && posterType !== 'starmap' && (
                     <Box
                         position="fixed"
                         top="-9999px"
