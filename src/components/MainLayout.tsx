@@ -88,7 +88,9 @@ const MainLayout: React.FC = () => {
             }),
         ]);
 
-        fetch(`${API}/api/templates`, { signal: controller.signal })
+        const templatesUrl = new URL(`${API}/api/templates`, window.location.origin);
+        templatesUrl.searchParams.set('ts', `${Date.now()}`);
+        fetch(templatesUrl.toString(), { signal: controller.signal, cache: 'no-store' })
             .then(r => r.ok ? r.json() : [])
             .then(async (rows: Array<{ id: string; design_group_id: string | null; posterType?: string }>) => {
                 if (!Array.isArray(rows) || rows.length === 0) {
@@ -316,7 +318,9 @@ const MainLayout: React.FC = () => {
             // Listing page — fetch design groups and auto-load the default (first 8x10) template.
             // When ?d= is present, still load the listing groups for the sidebar design picker,
             // but skip fetchAndApplyTemplate so the ?d= state isn't overwritten.
-            fetch(`${API_URL}/api/listings/${slug}`)
+            const listingUrl = new URL(`${API_URL}/api/listings/${slug}`, window.location.origin);
+            listingUrl.searchParams.set('ts', `${Date.now()}`);
+            fetch(listingUrl.toString(), { cache: 'no-store' })
                 .then(r => r.ok ? r.json() : null)
                 .then(listing => {
                     if (!listing?.templates?.length) return;

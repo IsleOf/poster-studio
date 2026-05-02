@@ -197,7 +197,10 @@ export async function fetchAndApplyTemplate(
 ): Promise<boolean> {
     try {
         const API_URL = import.meta.env.VITE_API_URL || '';
-        const res = await fetch(`${API_URL}/api/templates/${templateId}`);
+        const url = new URL(`${API_URL}/api/templates/${templateId}`, window.location.origin);
+        // Bust browser disk caches so production always reflects the latest saved template.
+        url.searchParams.set('ts', `${Date.now()}`);
+        const res = await fetch(url.toString(), { cache: 'no-store' });
         if (!res.ok) return false;
         const data = await res.json();
         // Store the Etsy listing URL so DownloadButton can show the right CTA
