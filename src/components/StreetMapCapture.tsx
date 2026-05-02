@@ -373,32 +373,6 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         }
     }, [onCapture]);
 
-    /**
-     * Fast single-tile capture — downscaled to ~800px so the data URL is small
-     * (~50 KB vs ~1 MB) and React re-renders are near-instant.
-     * Used for live preview while the user is dragging/zooming.
-     */
-    const captureQuick = useCallback(() => {
-        const map = mapRef.current;
-        if (!map || isCapturingRef.current) return;
-        map.once('idle', () => {
-            if (useStore.getState().isDraggingMapImage) return;
-            const src = map.getCanvas();
-            const PREVIEW_SIZE = 800;
-            const preview = document.createElement('canvas');
-            preview.width  = PREVIEW_SIZE;
-            preview.height = PREVIEW_SIZE;
-            preview.getContext('2d')!.drawImage(src, 0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
-            preview.toBlob(blob => {
-                if (!blob) return;
-                const reader = new FileReader();
-                reader.onload = () => onCapture(reader.result as string);
-                reader.readAsDataURL(blob);
-            }, 'image/jpeg', 0.75);
-        });
-        map.triggerRepaint();
-    }, [onCapture]);
-
     // ── Initialize map once ────────────────────────────────────────────────────
     useEffect(() => {
         if (!containerRef.current || mapRef.current) return;
@@ -431,11 +405,10 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 return;
             }
             if (isCapturingRef.current) return;
-            // Instant low-res preview so the poster reacts immediately
-            captureQuick();
-            // High-quality stitch after the user has settled
+            // Only publish the stitched capture so the preview never regresses
+            // to the temporary low-resolution single-tile image.
             if (stitchDebounceRef.current) clearTimeout(stitchDebounceRef.current);
-            stitchDebounceRef.current = setTimeout(() => captureStitched(), 1200);
+            stitchDebounceRef.current = setTimeout(() => captureStitched(), 250);
         });
 
         return () => {
@@ -467,18 +440,17 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
     // ── Update 2-color style instantly via setPaintProperty (no tile reload) ──
     // Only applies when using the custom 2-color style (mapStyleUrl is null).
-    // Strategy: fast single-tile capture for instant preview, then full stitch
-    // after 1.2s debounce so rapid color-picker dragging stays smooth.
+    // Strategy: update the WebGL style immediately, then publish only the
+    // stitched capture so the poster image always stays high-resolution.
     useEffect(() => {
         const map = mapRef.current;
         if (!map || !map.isStyleLoaded() || mapStyleUrl !== null || activePreset?.customStyle) return;
         map.setPaintProperty('background', 'background-color', posterColor);
         map.setPaintProperty('water', 'fill-color', posterColor);
         map.setPaintProperty('roads_all', 'line-color', mapStreetColor);
-        captureQuick();
         if (colorDebounceRef.current) clearTimeout(colorDebounceRef.current);
-        colorDebounceRef.current = setTimeout(() => captureStitched(), 1200);
-    }, [posterColor, mapStreetColor, mapStyleUrl, captureQuick, captureStitched]);
+        colorDebounceRef.current = setTimeout(() => captureStitched(), 250);
+    }, [posterColor, mapStreetColor, mapStyleUrl, captureStitched]);
 
     // ── Synchronous version increment via Zustand subscription ───────────────
     // React useEffects run *after* the render, so there is a window where an
