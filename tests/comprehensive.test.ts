@@ -90,9 +90,9 @@ test.describe('1. Designer layout', () => {
         await expect(page.locator('[aria-label="zoom-slider"]')).toBeVisible();
     });
 
-    test('DEMO watermark overlay present', async ({ page }) => {
+    test('preview watermark overlay present', async ({ page }) => {
         await openDesigner(page);
-        expect(await page.getByText('DEMO').count()).toBeGreaterThan(0);
+        expect(await page.getByText('themappedmoment.com').count()).toBeGreaterThan(0);
     });
 });
 

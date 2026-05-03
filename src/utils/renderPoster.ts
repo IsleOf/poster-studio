@@ -156,30 +156,32 @@ export async function renderPosterToPdf(
 
 function drawDemoWatermark(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.save();
-    // Two passes: dark shadow for light-mode posters, bright text on top.
-    // This ensures the watermark is legible on both dark and light backgrounds.
-    const fontSize = Math.round(w * 0.09);
-    const step = w * 0.38;
-    const lines = ['SAMPLE', 'themappedmoment.com'];
 
-    for (let pass = 0; pass < 2; pass++) {
-        ctx.globalAlpha = pass === 0 ? 0.22 : 0.30;
-        ctx.fillStyle = pass === 0 ? '#000000' : '#ffffff';
-        ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+    const text = 'themappedmoment.com';
+    const shortSide = Math.min(w, h);
+    const fontSize = Math.round(shortSide * 0.055);
+    const positions = [
+        [0.22, 0.18],
+        [0.78, 0.18],
+        [0.22, 0.50],
+        [0.78, 0.50],
+        [0.22, 0.82],
+        [0.78, 0.82],
+    ];
 
-        for (let y = -h; y < h * 2; y += step) {
-            for (let x = -w; x < w * 2; x += step) {
-                ctx.save();
-                ctx.translate(x + (pass === 0 ? 2 : 0), y + (pass === 0 ? 2 : 0));
-                ctx.rotate(-Math.PI / 6);
-                lines.forEach((line, i) => {
-                    ctx.fillText(line, 0, i * (fontSize * 1.3));
-                });
-                ctx.restore();
-            }
-        }
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#6b7280';
+    ctx.font = `700 ${fontSize}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (const [xRatio, yRatio] of positions) {
+        ctx.save();
+        ctx.translate(w * xRatio, h * yRatio);
+        ctx.rotate(-Math.PI / 6);
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
     }
+
     ctx.restore();
 }

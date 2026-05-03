@@ -331,7 +331,7 @@ const DownloadButton: React.FC = () => {
                                     <Box>
                                         <Text fontWeight="600">This is a watermarked preview</Text>
                                         <Text color="gray.600" fontSize="xs" mt={0.5}>
-                                            The downloaded file will contain repeating "DEMO" text. Purchase on Etsy to receive the full-resolution, watermark-free file.
+                                            The downloaded file will contain a light themappedmoment.com watermark. Purchase on Etsy to receive the full-resolution, watermark-free file.
                                         </Text>
                                     </Box>
                                 </Alert>

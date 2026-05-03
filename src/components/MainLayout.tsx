@@ -784,7 +784,7 @@ const MainLayout: React.FC = () => {
                         opacity={templateLoading ? 0 : 1}
                     >
                         <VectorStarMap />
-                        {/* DEMO watermark overlay — matches the watermark baked into exports */}
+                        {/* Preview watermark overlay — matches the watermark baked into exports */}
                         <Box
                             position="absolute"
                             inset={0}
@@ -793,24 +793,30 @@ const MainLayout: React.FC = () => {
                             zIndex={5}
                             aria-hidden
                         >
-                            {/* Diagonal DEMO tiles — same pattern as drawDemoWatermark in renderPoster.ts */}
-                            {Array.from({ length: 12 }).map((_, i) => (
+                            {[
+                                ['22%', '18%'],
+                                ['78%', '18%'],
+                                ['22%', '50%'],
+                                ['78%', '50%'],
+                                ['22%', '82%'],
+                                ['78%', '82%'],
+                            ].map(([left, top], i) => (
                                 <Text
                                     key={i}
                                     position="absolute"
-                                    left={`${(i % 4) * 30 - 10}%`}
-                                    top={`${Math.floor(i / 4) * 36 - 5}%`}
-                                    fontSize="13%"
+                                    left={left}
+                                    top={top}
+                                    fontSize={`${Math.max(18, Math.min(48, previewDimensions.width * 0.055))}px`}
                                     fontWeight="bold"
-                                    color="white"
-                                    opacity={0.18}
-                                    transform="rotate(-36deg)"
+                                    color="gray.500"
+                                    opacity={0.28}
+                                    transform="translate(-50%, -50%) rotate(-36deg)"
                                     fontFamily="Arial, sans-serif"
                                     letterSpacing="0.05em"
                                     whiteSpace="nowrap"
                                     userSelect="none"
                                 >
-                                    DEMO
+                                    themappedmoment.com
                                 </Text>
                             ))}
                         </Box>
