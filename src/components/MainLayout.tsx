@@ -784,42 +784,6 @@ const MainLayout: React.FC = () => {
                         opacity={templateLoading ? 0 : 1}
                     >
                         <VectorStarMap />
-                        {/* Preview watermark overlay — matches the watermark baked into exports */}
-                        <Box
-                            position="absolute"
-                            inset={0}
-                            pointerEvents="none"
-                            overflow="hidden"
-                            zIndex={5}
-                            aria-hidden
-                        >
-                            {[
-                                ['22%', '18%'],
-                                ['78%', '18%'],
-                                ['22%', '50%'],
-                                ['78%', '50%'],
-                                ['22%', '82%'],
-                                ['78%', '82%'],
-                            ].map(([left, top], i) => (
-                                <Text
-                                    key={i}
-                                    position="absolute"
-                                    left={left}
-                                    top={top}
-                                    fontSize={`${Math.max(18, Math.min(48, previewDimensions.width * 0.055))}px`}
-                                    fontWeight="bold"
-                                    color="gray.500"
-                                    opacity={0.28}
-                                    transform="translate(-50%, -50%) rotate(-36deg)"
-                                    fontFamily="Arial, sans-serif"
-                                    letterSpacing="0.05em"
-                                    whiteSpace="nowrap"
-                                    userSelect="none"
-                                >
-                                    themappedmoment.com
-                                </Text>
-                            ))}
-                        </Box>
                 </Box>
 
                 {/* Offscreen street map renderer */}

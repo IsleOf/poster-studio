@@ -57,16 +57,15 @@ export type MapColorPreset = {
 // Re-export the base preset data under the original name for backward compatibility
 export { MAP_COLOR_PRESET_DATA as MAP_COLOR_PRESETS };
 
-/** Rectangle template: white bg, black highways, gray minor roads + land use fills */
+/** Monochrome street-map template: road linework and land/water masses, no building footprints. */
 function createDesign2Style(): maplibregl.StyleSpecification {
-    const bg = '#ffffff';
-    const highwayColor  = '#111111';  // black — motorway, trunk
-    const arterialColor = '#444444';  // dark gray — primary, secondary
-    const streetColor   = '#777777';  // medium gray — tertiary, residential, minor
-    const serviceColor  = '#aaaaaa';  // light gray — service lanes, paths
-    const waterColor = '#888888';
-    const landUseColor = '#cccccc';
-    const buildingColor = '#dddddd';
+    const bg = '#e8e5dd';
+    const waterColor = '#8f8f8f';
+    const landUseColor = '#a8a8a3';
+    const majorRoadColor = '#171717';
+    const arterialRoadColor = '#303030';
+    const localRoadColor = '#666666';
+    const serviceRoadColor = '#8a8a8a';
     return {
         version: 8,
         sources: {
@@ -78,42 +77,66 @@ function createDesign2Style(): maplibregl.StyleSpecification {
         },
         layers: [
             { id: 'background', type: 'background', paint: { 'background-color': bg } },
-            { id: 'water', type: 'fill', source: 'openmaptiles', 'source-layer': 'water',
-              paint: { 'fill-color': waterColor } },
-            { id: 'waterway', type: 'line', source: 'openmaptiles', 'source-layer': 'waterway',
-              paint: { 'line-color': waterColor, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 14, 4] as maplibregl.ExpressionSpecification } },
-            { id: 'landuse', type: 'fill', source: 'openmaptiles', 'source-layer': 'landuse',
-              filter: ['in', ['get', 'class'], ['literal', ['grass', 'park', 'forest', 'recreation_ground', 'meadow', 'garden', 'wood', 'nature_reserve']]] as maplibregl.ExpressionSpecification,
-              paint: { 'fill-color': landUseColor } },
-            { id: 'building', type: 'fill', source: 'openmaptiles', 'source-layer': 'building',
-              paint: { 'fill-color': buildingColor, 'fill-opacity': 0.9 } },
+            {
+                id: 'landuse',
+                type: 'fill',
+                source: 'openmaptiles',
+                'source-layer': 'landuse',
+                filter: ['in', ['get', 'class'], ['literal', [
+                    'grass', 'park', 'forest', 'recreation_ground', 'meadow',
+                    'garden', 'wood', 'nature_reserve', 'cemetery', 'hospital',
+                    'school', 'industrial', 'railway',
+                ]]] as maplibregl.ExpressionSpecification,
+                paint: { 'fill-color': landUseColor, 'fill-opacity': 0.82 },
+            },
+            {
+                id: 'water',
+                type: 'fill',
+                source: 'openmaptiles',
+                'source-layer': 'water',
+                paint: { 'fill-color': waterColor },
+            },
+            {
+                id: 'waterway',
+                type: 'line',
+                source: 'openmaptiles',
+                'source-layer': 'waterway',
+                paint: {
+                    'line-color': waterColor,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 14, 3.5, 18, 7] as maplibregl.ExpressionSpecification,
+                },
+            },
             {
                 id: 'roads_all', type: 'line', source: 'openmaptiles', 'source-layer': 'transportation',
                 minzoom: 6,
                 paint: {
                     'line-color': [
                         'match', ['get', 'class'],
-                        'motorway',   highwayColor,
-                        'trunk',      highwayColor,
-                        'primary',    arterialColor,
-                        'secondary',  arterialColor,
-                        'tertiary',   streetColor,
-                        'minor',      streetColor,
-                        'residential',streetColor,
-                        serviceColor,
+                        'motorway', majorRoadColor,
+                        'trunk', majorRoadColor,
+                        'primary', arterialRoadColor,
+                        'secondary', arterialRoadColor,
+                        'tertiary', localRoadColor,
+                        'minor', localRoadColor,
+                        'residential', localRoadColor,
+                        'service', serviceRoadColor,
+                        'path', serviceRoadColor,
+                        'track', serviceRoadColor,
+                        localRoadColor,
                     ] as maplibregl.ExpressionSpecification,
                     'line-width': [
                         'interpolate', ['exponential', 1.5], ['zoom'],
-                        6,  ['match', ['get', 'class'], 'motorway', 1.5, 'trunk', 1.2, 'primary', 0.7, 'secondary', 0.4, 0.15],
+                        6,  ['match', ['get', 'class'], 'motorway', 1.8, 'trunk', 1.5, 'primary', 0.9, 'secondary', 0.6, 0.2],
                         14, ['match', ['get', 'class'],
-                            'motorway', 10, 'trunk', 8, 'primary', 5.5, 'secondary', 4,
-                            'tertiary', 1.8, 'minor', 1.0, 'service', 0.6, 'residential', 1.0, 0.6,
+                            'motorway', 6.8, 'trunk', 5.8, 'primary', 3.8, 'secondary', 2.4,
+                            'tertiary', 1.05, 'minor', 0.45, 'service', 0.35, 'residential', 0.55, 0.35,
                         ],
                         18, ['match', ['get', 'class'],
-                            'motorway', 28, 'trunk', 24, 'primary', 16, 'secondary', 11,
-                            'tertiary', 5, 'minor', 3, 'service', 1.8, 'residential', 3, 1.8,
+                            'motorway', 15, 'trunk', 13, 'primary', 8.5, 'secondary', 5.5,
+                            'tertiary', 2.3, 'minor', 1.0, 'service', 0.75, 'residential', 1.15, 0.8,
                         ],
                     ] as maplibregl.ExpressionSpecification,
+                    'line-opacity': 0.95,
                 },
             },
         ],
@@ -271,7 +294,7 @@ function applyHeritagePOIFilter(map: maplibregl.Map): void {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface StreetMapCaptureProps {
-    /** Called with a data-URL of the stitched 7200×7200 map canvas */
+    /** Called with a data-URL of the rendered map canvas */
     onCapture: (dataUrl: string) => void;
 }
 
@@ -300,14 +323,9 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     });
 
     /**
-     * Captures a 2×2 grid of tiles at (displayZoom + 1) and stitches them into
-     * a single 7200×7200 JPEG that covers the same geographic area as a single
-     * displayZoom capture — but with one extra zoom level of tile detail.
-     *
-     * Critical ordering rule: always register map.once('idle') BEFORE calling
-     * map.jumpTo(). If the listener is registered after jumpTo, tiles may already
-     * be cached and the map might never leave the idle state, so the listener
-     * would fire for a *future* unrelated event (capturing the wrong frame).
+     * Captures one full high-pixel-ratio MapLibre canvas. Previous versions
+     * stitched multiple map viewports together for extra detail, but separate
+     * renders can disagree at quadrant boundaries and create visible seams.
      */
     const captureStitched = useCallback(async () => {
         const map = mapRef.current;
@@ -329,38 +347,18 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         // Cap at 20 — slider max; above 20 MapLibre scales up rather than loading
         // finer tiles, causing identical-tile artefacts and useless stitching.
         const effectiveZoom = Math.min(zoom, 20);
-        const captureZoom = Math.min(effectiveZoom + 1, 21);
 
-        const pixelOffset = 300;
-        const lngPerPx = 360 / (512 * Math.pow(2, effectiveZoom));
-        const lngOffset = pixelOffset * lngPerPx;
-
-        const centerY = mercatorY(lat, zoom);
-        const latNorth = latFromMercatorY(centerY - pixelOffset, zoom);
-        const latSouth = latFromMercatorY(centerY + pixelOffset, zoom);
-
-        const tiles = [
-            { lat: latNorth, lng: lng - lngOffset }, // NW
-            { lat: latNorth, lng: lng + lngOffset }, // NE
-            { lat: latSouth, lng: lng - lngOffset }, // SW
-            { lat: latSouth, lng: lng + lngOffset }, // SE
-        ];
-
-        const stitchedCanvas = document.createElement('canvas');
-        stitchedCanvas.width  = TILE_CANVAS_SIZE * 2;
-        stitchedCanvas.height = TILE_CANVAS_SIZE * 2;
-        const ctx = stitchedCanvas.getContext('2d')!;
+        const captureCanvas = document.createElement('canvas');
+        captureCanvas.width = TILE_CANVAS_SIZE;
+        captureCanvas.height = TILE_CANVAS_SIZE;
+        const ctx = captureCanvas.getContext('2d')!;
 
         try {
-            for (let i = 0; i < 4; i++) {
-                const col = i % 2;
-                const row = Math.floor(i / 2);
-                await waitForMapFrame(
-                    m,
-                    () => m.jumpTo({ center: [tiles[i].lng, tiles[i].lat], zoom: captureZoom, bearing: bearing ?? 0 }),
-                    () => ctx.drawImage(m.getCanvas(), col * TILE_CANVAS_SIZE, row * TILE_CANVAS_SIZE),
-                );
-            }
+            await waitForMapFrame(
+                m,
+                () => m.jumpTo({ center: [lng, lat], zoom: effectiveZoom, bearing: bearing ?? 0 }),
+                () => ctx.drawImage(m.getCanvas(), 0, 0, TILE_CANVAS_SIZE, TILE_CANVAS_SIZE),
+            );
 
             // Restore to the CURRENT store position (user may have changed it mid-capture).
             // This avoids a visible snap-back to the pre-capture position.
@@ -372,7 +370,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             if (captureVersionRef.current !== startVersion) return;
 
             const dataUrl = await new Promise<string>((resolve, reject) => {
-                stitchedCanvas.toBlob(blob => {
+                captureCanvas.toBlob(blob => {
                     if (!blob) { reject(new Error('toBlob failed')); return; }
                     const reader = new FileReader();
                     reader.onload = () => resolve(reader.result as string);
@@ -549,10 +547,11 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         map.jumpTo({ center: [mapCenterLng, mapCenterLat], zoom: Math.min(mapZoom, 20), bearing: mapBearing });
     }, [mapCenterLat, mapCenterLng, mapZoom, mapBearing]);
 
-    // ── High-res print capture — 3×3 grid at zoom+2 ───────────────────────────
+    // ── Print/download capture ────────────────────────────────────────────────
     // Registered in the store so DownloadButton can call it before exporting.
-    // Produces a 10800×10800 JPEG (3 × 3600px tiles × 3×3 grid) — sufficient
-    // for prints up to 36×36" at 300 DPI with twice the tile-detail of preview.
+    // Uses the same seam-free single-canvas strategy as the preview. It is better
+    // to scale a coherent capture than ship a higher-detail image with visible
+    // viewport boundaries across the map.
     const captureHighRes = useCallback(async (): Promise<string> => {
         const map = mapRef.current;
         if (!map) throw new Error('Map not initialised');
@@ -567,34 +566,16 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
         const { mapCenterLat: lat, mapCenterLng: lng, mapZoom: zoom, mapBearing: bearing } = storeRef.current;
         const effectiveZoom = Math.min(zoom, 20);
-        // Capture at zoom+2 for extra tile detail (one more doubling vs preview stitch)
-        const captureZoom = Math.min(effectiveZoom + 2, 21);
+        const captureCanvas = document.createElement('canvas');
+        captureCanvas.width = TILE_CANVAS_SIZE;
+        captureCanvas.height = TILE_CANVAS_SIZE;
+        const ctx = captureCanvas.getContext('2d')!;
 
-        // 3×3 grid: offsets of -400, 0, +400 px at display zoom
-        // At captureZoom=zoom+2, 1200 CSS px covers 300 display-px, so centres 400px apart
-        // cover: -400-150=-550 … +400+150=+550 display px → ~1100×1100 px at display zoom.
-        // Multiply by PIXEL_RATIO=3: 10800×10800 output.
-        const offsets = [-400, 0, 400];
-        const lngPerPx = 360 / (512 * Math.pow(2, effectiveZoom));
-        const centerY = mercatorY(lat, effectiveZoom);
-
-        const GRID = 3;
-        const stitched = document.createElement('canvas');
-        stitched.width  = TILE_CANVAS_SIZE * GRID;
-        stitched.height = TILE_CANVAS_SIZE * GRID;
-        const ctx = stitched.getContext('2d')!;
-
-        for (let row = 0; row < GRID; row++) {
-            for (let col = 0; col < GRID; col++) {
-                const lngOffset = offsets[col] * lngPerPx;
-                const latCenter = latFromMercatorY(centerY + offsets[row], effectiveZoom);
-                await waitForMapFrame(
-                    m,
-                    () => m.jumpTo({ center: [lng + lngOffset, latCenter], zoom: captureZoom, bearing: bearing ?? 0 }),
-                    () => ctx.drawImage(m.getCanvas(), col * TILE_CANVAS_SIZE, row * TILE_CANVAS_SIZE),
-                );
-            }
-        }
+        await waitForMapFrame(
+            m,
+            () => m.jumpTo({ center: [lng, lat], zoom: effectiveZoom, bearing: bearing ?? 0 }),
+            () => ctx.drawImage(m.getCanvas(), 0, 0, TILE_CANVAS_SIZE, TILE_CANVAS_SIZE),
+        );
 
         // Restore original position
         suppressNextMoveendRef.current = true;
@@ -602,7 +583,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         isCapturingRef.current = false;
 
         return new Promise<string>((resolve, reject) => {
-            stitched.toBlob(blob => {
+            captureCanvas.toBlob(blob => {
                 if (!blob) { reject(new Error('toBlob failed')); return; }
                 const reader = new FileReader();
                 reader.onload = () => resolve(reader.result as string);
