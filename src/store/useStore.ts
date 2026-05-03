@@ -25,7 +25,9 @@ const DESIGN_FIELDS = [
     'titleAllCaps',
     'customText', 'posterType', 'printSize', 'selectedTemplate',
     'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
-    'mapBgColor', 'mapStreetColor', 'mapColorPreset', 'mapStyleUrl',
+    'mapBgColor', 'mapStreetColor', 'mapWaterColor', 'mapLandColor',
+    'mapMainRoadColor', 'mapSmallRoadColor', 'mapDetailRoadColor',
+    'mapColorPreset', 'mapStyleUrl',
     'mapBackgroundImage', 'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
     'showLocationPin', 'locationPinSize', 'locationPinOffsetX', 'locationPinOffsetY',
 ] as const;
@@ -174,6 +176,11 @@ interface StoreState {
     mapBearing: number; // 0–360, degrees clockwise rotation of the map
     mapBgColor: string;
     mapStreetColor: string;
+    mapWaterColor: string;
+    mapLandColor: string;
+    mapMainRoadColor: string;
+    mapSmallRoadColor: string;
+    mapDetailRoadColor: string;
     mapColorPreset: string;
     mapStyleUrl: string | null; // null = custom 2-color style; URL = use prebuilt style (e.g. realistic)
 
@@ -290,6 +297,11 @@ interface StoreState {
     setMapBearing: (bearing: number) => void;
     setMapBgColor: (color: string) => void;
     setMapStreetColor: (color: string) => void;
+    setMapWaterColor: (color: string) => void;
+    setMapLandColor: (color: string) => void;
+    setMapMainRoadColor: (color: string) => void;
+    setMapSmallRoadColor: (color: string) => void;
+    setMapDetailRoadColor: (color: string) => void;
     setMapColorPreset: (preset: string) => void;
     setMapStyleUrl: (url: string | null) => void;
     setMapImageOffsetX: (x: number) => void;
@@ -479,6 +491,11 @@ export const useStore = create<StoreState>((set) => ({
     mapBearing: 0,
     mapBgColor: '#1a1a2e',
     mapStreetColor: '#3d5a80',
+    mapWaterColor: '#8f8f8f',
+    mapLandColor: '#b6b6b6',
+    mapMainRoadColor: '#111111',
+    mapSmallRoadColor: '#333333',
+    mapDetailRoadColor: '#555555',
     mapColorPreset: 'midnight',
     mapStyleUrl: null,
 
@@ -502,6 +519,15 @@ export const useStore = create<StoreState>((set) => ({
             textColor: state.textColor,
             starColor: state.starColor,
             mapInteriorColor: state.mapInteriorColor,
+            mapBgColor: state.mapBgColor,
+            mapStreetColor: state.mapStreetColor,
+            mapWaterColor: state.mapWaterColor,
+            mapLandColor: state.mapLandColor,
+            mapMainRoadColor: state.mapMainRoadColor,
+            mapSmallRoadColor: state.mapSmallRoadColor,
+            mapDetailRoadColor: state.mapDetailRoadColor,
+            mapColorPreset: state.mapColorPreset,
+            mapStyleUrl: state.mapStyleUrl,
             starScale: state.starScale,
             lineWeight: state.lineWeight,
             gridWidth: state.gridWidth,
@@ -573,6 +599,15 @@ export const useStore = create<StoreState>((set) => ({
             textColor: state.textColor,
             starColor: state.starColor,
             mapInteriorColor: state.mapInteriorColor,
+            mapBgColor: state.mapBgColor,
+            mapStreetColor: state.mapStreetColor,
+            mapWaterColor: state.mapWaterColor,
+            mapLandColor: state.mapLandColor,
+            mapMainRoadColor: state.mapMainRoadColor,
+            mapSmallRoadColor: state.mapSmallRoadColor,
+            mapDetailRoadColor: state.mapDetailRoadColor,
+            mapColorPreset: state.mapColorPreset,
+            mapStyleUrl: state.mapStyleUrl,
             starScale: state.starScale,
             lineWeight: state.lineWeight,
             gridWidth: state.gridWidth,
@@ -788,6 +823,11 @@ export const useStore = create<StoreState>((set) => ({
     setMapBearing: (mapBearing) => set({ mapBearing }),
     setMapBgColor: (mapBgColor) => set({ mapBgColor }),
     setMapStreetColor: (mapStreetColor) => set({ mapStreetColor }),
+    setMapWaterColor: (mapWaterColor) => set({ mapWaterColor }),
+    setMapLandColor: (mapLandColor) => set({ mapLandColor }),
+    setMapMainRoadColor: (mapMainRoadColor) => set({ mapMainRoadColor }),
+    setMapSmallRoadColor: (mapSmallRoadColor) => set({ mapSmallRoadColor }),
+    setMapDetailRoadColor: (mapDetailRoadColor) => set({ mapDetailRoadColor }),
     setMapColorPreset: (mapColorPreset) => set({ mapColorPreset }),
     setMapStyleUrl: (mapStyleUrl) => set({ mapStyleUrl }),
     setMapImageOffsetX: (mapImageOffsetX) => set({ mapImageOffsetX }),

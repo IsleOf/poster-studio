@@ -294,6 +294,11 @@ const MainLayout: React.FC = () => {
                 if (c.mapStyleUrl !== undefined) store.setMapStyleUrl(c.mapStyleUrl);
                 if (c.mapBgColor) store.setMapBgColor(c.mapBgColor);
                 if (c.mapStreetColor) store.setMapStreetColor(c.mapStreetColor);
+                if (c.mapWaterColor) store.setMapWaterColor(c.mapWaterColor);
+                if (c.mapLandColor) store.setMapLandColor(c.mapLandColor);
+                if (c.mapMainRoadColor) store.setMapMainRoadColor(c.mapMainRoadColor);
+                if (c.mapSmallRoadColor) store.setMapSmallRoadColor(c.mapSmallRoadColor);
+                if (c.mapDetailRoadColor) store.setMapDetailRoadColor(c.mapDetailRoadColor);
                 if (c.mapColorPreset) store.setMapColorPreset(c.mapColorPreset);
                 // Location pin
                 if (typeof c.showLocationPin === 'boolean') store.setShowLocationPin(c.showLocationPin);

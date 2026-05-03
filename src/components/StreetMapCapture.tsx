@@ -54,18 +54,25 @@ export type MapColorPreset = {
     customStyle?: () => maplibregl.StyleSpecification;
 };
 
+type Design2MapColors = {
+    bgColor: string;
+    waterColor: string;
+    landColor: string;
+    mainRoadColor: string;
+    smallRoadColor: string;
+    detailRoadColor: string;
+};
+
 // Re-export the base preset data under the original name for backward compatibility
 export { MAP_COLOR_PRESET_DATA as MAP_COLOR_PRESETS };
 
-/** Monochrome street-map template: road linework and land/water masses, no building footprints. */
-function createDesign2Style(): maplibregl.StyleSpecification {
-    const bg = '#e8e5dd';
-    const waterColor = '#8f8f8f';
-    const landUseColor = '#a8a8a3';
-    const majorRoadColor = '#171717';
-    const arterialRoadColor = '#303030';
-    const localRoadColor = '#666666';
-    const serviceRoadColor = '#8a8a8a';
+/** Monochrome street-map template: single-stroke road linework and land/water masses, no building footprints. */
+function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecification {
+    const { bgColor, waterColor, landColor, mainRoadColor, smallRoadColor, detailRoadColor } = colors;
+    const majorRoadClasses = ['motorway', 'trunk', 'primary', 'secondary'];
+    const smallRoadClasses = ['tertiary', 'minor', 'residential', 'unclassified'];
+    const detailRoadClasses = ['service'];
+
     return {
         version: 8,
         sources: {
@@ -76,7 +83,7 @@ function createDesign2Style(): maplibregl.StyleSpecification {
             },
         },
         layers: [
-            { id: 'background', type: 'background', paint: { 'background-color': bg } },
+            { id: 'background', type: 'background', paint: { 'background-color': bgColor } },
             {
                 id: 'landuse',
                 type: 'fill',
@@ -87,7 +94,7 @@ function createDesign2Style(): maplibregl.StyleSpecification {
                     'garden', 'wood', 'nature_reserve', 'cemetery', 'hospital',
                     'school', 'industrial', 'railway',
                 ]]] as maplibregl.ExpressionSpecification,
-                paint: { 'fill-color': landUseColor, 'fill-opacity': 0.82 },
+                paint: { 'fill-color': landColor, 'fill-opacity': 0.82 },
             },
             {
                 id: 'water',
@@ -107,36 +114,50 @@ function createDesign2Style(): maplibregl.StyleSpecification {
                 },
             },
             {
-                id: 'roads_all', type: 'line', source: 'openmaptiles', 'source-layer': 'transportation',
+                id: 'roads_detail',
+                type: 'line',
+                source: 'openmaptiles',
+                'source-layer': 'transportation',
                 minzoom: 6,
+                filter: ['in', ['get', 'class'], ['literal', detailRoadClasses]] as maplibregl.ExpressionSpecification,
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
-                    'line-color': [
-                        'match', ['get', 'class'],
-                        'motorway', majorRoadColor,
-                        'trunk', majorRoadColor,
-                        'primary', arterialRoadColor,
-                        'secondary', arterialRoadColor,
-                        'tertiary', localRoadColor,
-                        'minor', localRoadColor,
-                        'residential', localRoadColor,
-                        'service', serviceRoadColor,
-                        'path', serviceRoadColor,
-                        'track', serviceRoadColor,
-                        localRoadColor,
-                    ] as maplibregl.ExpressionSpecification,
+                    'line-color': detailRoadColor,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.15, 14, 0.28, 18, 0.65] as maplibregl.ExpressionSpecification,
+                    'line-opacity': 0.75,
+                },
+            },
+            {
+                id: 'roads_small',
+                type: 'line',
+                source: 'openmaptiles',
+                'source-layer': 'transportation',
+                minzoom: 6,
+                filter: ['in', ['get', 'class'], ['literal', smallRoadClasses]] as maplibregl.ExpressionSpecification,
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
+                paint: {
+                    'line-color': smallRoadColor,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.2, 14, 0.45, 18, 1.0] as maplibregl.ExpressionSpecification,
+                    'line-opacity': 0.88,
+                },
+            },
+            {
+                id: 'roads_major',
+                type: 'line',
+                source: 'openmaptiles',
+                'source-layer': 'transportation',
+                minzoom: 5,
+                filter: ['in', ['get', 'class'], ['literal', majorRoadClasses]] as maplibregl.ExpressionSpecification,
+                layout: { 'line-cap': 'round', 'line-join': 'round' },
+                paint: {
+                    'line-color': mainRoadColor,
                     'line-width': [
-                        'interpolate', ['exponential', 1.5], ['zoom'],
-                        6,  ['match', ['get', 'class'], 'motorway', 1.8, 'trunk', 1.5, 'primary', 0.9, 'secondary', 0.6, 0.2],
-                        14, ['match', ['get', 'class'],
-                            'motorway', 6.8, 'trunk', 5.8, 'primary', 3.8, 'secondary', 2.4,
-                            'tertiary', 1.05, 'minor', 0.45, 'service', 0.35, 'residential', 0.55, 0.35,
-                        ],
-                        18, ['match', ['get', 'class'],
-                            'motorway', 15, 'trunk', 13, 'primary', 8.5, 'secondary', 5.5,
-                            'tertiary', 2.3, 'minor', 1.0, 'service', 0.75, 'residential', 1.15, 0.8,
-                        ],
+                        'interpolate', ['linear'], ['zoom'],
+                        7, ['match', ['get', 'class'], 'motorway', 1.2, 'trunk', 1.0, 'primary', 0.8, 0.6],
+                        14, ['match', ['get', 'class'], 'motorway', 4.4, 'trunk', 3.7, 'primary', 2.8, 'secondary', 2.0, 1.6],
+                        18, ['match', ['get', 'class'], 'motorway', 9.0, 'trunk', 7.6, 'primary', 5.8, 'secondary', 4.2, 3.0],
                     ] as maplibregl.ExpressionSpecification,
-                    'line-opacity': 0.95,
+                    'line-opacity': 0.96,
                 },
             },
         ],
@@ -147,7 +168,7 @@ function createDesign2Style(): maplibregl.StyleSpecification {
 const MAP_COLOR_PRESETS_FULL: MapColorPreset[] = [
     ...MAP_COLOR_PRESET_DATA.filter(p => p.id !== 'design2' && p.id !== 'realistic'),
     // ── Rectangle: white bg, black highways, gray minor roads + land use fills ─
-    { id: 'design2', name: 'Rectangle (B&W)', bgColor: '#ffffff', streetColor: '#111111', customStyle: createDesign2Style },
+    { id: 'design2', name: 'Rectangle (B&W)', bgColor: '#ffffff', streetColor: '#111111' },
     // ── Realistic multicolor (uses OpenFreeMap's pre-built bright style) ──────
     {
         id: 'realistic',
@@ -220,7 +241,7 @@ function prefetchNearbyTiles(
 const PIXEL_RATIO = 3;
 const CONTAINER_SIZE = 1200; // CSS px
 const TILE_CANVAS_SIZE = CONTAINER_SIZE * PIXEL_RATIO; // 3600px per tile
-const TILE_SETTLE_TIMEOUT_MS = 1200;
+const TILE_SETTLE_TIMEOUT_MS = 8000;
 
 function waitForMapFrame(
     map: maplibregl.Map,
@@ -312,9 +333,26 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     const stitchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const didSkipInitialStyleEffectRef = useRef(false);
 
-    const { mapCenterLat, mapCenterLng, mapZoom, mapBearing, mapStreetColor, posterColor, mapStyleUrl, mapColorPreset, setCaptureHighResFn } = useStore();
+    const {
+        mapCenterLat, mapCenterLng, mapZoom, mapBearing,
+        mapBgColor, mapStreetColor, mapWaterColor, mapLandColor,
+        mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
+        mapStyleUrl, mapColorPreset, setCaptureHighResFn,
+    } = useStore();
     const activePreset = MAP_COLOR_PRESETS_FULL.find(p => p.id === mapColorPreset);
-    const getActiveStyle = () => activePreset?.customStyle ? activePreset.customStyle() : createMapStyle(posterColor, mapStreetColor);
+    const getActiveStyle = () => {
+        if (mapColorPreset === 'design2') {
+            return createDesign2Style({
+                bgColor: mapBgColor || '#ffffff',
+                waterColor: mapWaterColor || '#8f8f8f',
+                landColor: mapLandColor || '#b6b6b6',
+                mainRoadColor: mapMainRoadColor || mapStreetColor || '#111111',
+                smallRoadColor: mapSmallRoadColor || '#333333',
+                detailRoadColor: mapDetailRoadColor || '#555555',
+            });
+        }
+        return activePreset?.customStyle ? activePreset.customStyle() : createMapStyle(mapBgColor, mapStreetColor);
+    };
 
     // Always-current snapshot of the map position — read inside async captureStitched
     const storeRef = useRef({ mapCenterLat, mapCenterLng, mapZoom, mapBearing });
@@ -401,9 +439,19 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         if (!containerRef.current || mapRef.current) return;
 
         const initialStyleUrl = useStore.getState().mapStyleUrl;
-        const initialPresetId = useStore.getState().mapColorPreset;
+        const initialState = useStore.getState();
+        const initialPresetId = initialState.mapColorPreset;
         const initialPreset = MAP_COLOR_PRESETS_FULL.find(p => p.id === initialPresetId);
-        const initialStyle = initialStyleUrl ?? (initialPreset?.customStyle ? initialPreset.customStyle() : createMapStyle(posterColor, mapStreetColor));
+        const initialStyle = initialStyleUrl ?? (initialPresetId === 'design2'
+            ? createDesign2Style({
+                bgColor: initialState.mapBgColor || '#ffffff',
+                waterColor: initialState.mapWaterColor || '#8f8f8f',
+                landColor: initialState.mapLandColor || '#b6b6b6',
+                mainRoadColor: initialState.mapMainRoadColor || initialState.mapStreetColor || '#111111',
+                smallRoadColor: initialState.mapSmallRoadColor || '#333333',
+                detailRoadColor: initialState.mapDetailRoadColor || '#555555',
+            })
+            : (initialPreset?.customStyle ? initialPreset.customStyle() : createMapStyle(initialState.mapBgColor, initialState.mapStreetColor)));
 
         const map = new maplibregl.Map({
             container: containerRef.current,
@@ -491,10 +539,10 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             map.off('styledata', runStyleCapture);
             map.off('idle', runStyleCapture);
         };
-    // posterColor/mapStreetColor intentionally excluded — the color effect below
+    // Map colors intentionally excluded — the color effect below
     // handles those independently when mapStyleUrl is null.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mapStyleUrl]);
+    }, [mapStyleUrl, mapColorPreset]);
 
     // ── Update 2-color style instantly via setPaintProperty (no tile reload) ──
     // Only applies when using the custom 2-color style (mapStyleUrl is null).
@@ -502,13 +550,29 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     // stitched capture so the poster image always stays high-resolution.
     useEffect(() => {
         const map = mapRef.current;
-        if (!map || !map.isStyleLoaded() || mapStyleUrl !== null || activePreset?.customStyle) return;
-        map.setPaintProperty('background', 'background-color', posterColor);
-        map.setPaintProperty('water', 'fill-color', posterColor);
-        map.setPaintProperty('roads_all', 'line-color', mapStreetColor);
+        if (!map || !map.isStyleLoaded() || mapStyleUrl !== null) return;
+        if (mapColorPreset === 'design2') {
+            map.setPaintProperty('background', 'background-color', mapBgColor);
+            if (map.getLayer('landuse')) map.setPaintProperty('landuse', 'fill-color', mapLandColor);
+            if (map.getLayer('water')) map.setPaintProperty('water', 'fill-color', mapWaterColor);
+            if (map.getLayer('waterway')) map.setPaintProperty('waterway', 'line-color', mapWaterColor);
+            if (map.getLayer('roads_detail')) map.setPaintProperty('roads_detail', 'line-color', mapDetailRoadColor);
+            if (map.getLayer('roads_small')) map.setPaintProperty('roads_small', 'line-color', mapSmallRoadColor);
+            if (map.getLayer('roads_major')) map.setPaintProperty('roads_major', 'line-color', mapMainRoadColor || mapStreetColor);
+        } else if (!activePreset?.customStyle) {
+            map.setPaintProperty('background', 'background-color', mapBgColor);
+            map.setPaintProperty('water', 'fill-color', mapBgColor);
+            map.setPaintProperty('roads_all', 'line-color', mapStreetColor);
+        } else {
+            return;
+        }
         if (colorDebounceRef.current) clearTimeout(colorDebounceRef.current);
         colorDebounceRef.current = setTimeout(() => captureStitched(), 250);
-    }, [posterColor, mapStreetColor, mapStyleUrl, captureStitched]);
+    }, [
+        mapBgColor, mapStreetColor, mapWaterColor, mapLandColor,
+        mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
+        mapStyleUrl, mapColorPreset, captureStitched,
+    ]);
 
     // ── Synchronous version increment via Zustand subscription ───────────────
     // React useEffects run *after* the render, so there is a window where an
@@ -529,6 +593,11 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 state.posterType     !== prev.posterType     ||
                 state.mapBgColor     !== prev.mapBgColor     ||
                 state.mapStreetColor !== prev.mapStreetColor ||
+                state.mapWaterColor  !== prev.mapWaterColor  ||
+                state.mapLandColor   !== prev.mapLandColor   ||
+                state.mapMainRoadColor   !== prev.mapMainRoadColor   ||
+                state.mapSmallRoadColor  !== prev.mapSmallRoadColor  ||
+                state.mapDetailRoadColor !== prev.mapDetailRoadColor ||
                 state.mapColorPreset !== prev.mapColorPreset) {
                 captureVersionRef.current++;
             }

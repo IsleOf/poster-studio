@@ -26,6 +26,8 @@ const MapControlsPanel: React.FC = () => {
         mapColorPreset, setMapColorPreset,
         mapBgColor, setMapBgColor,
         mapStreetColor, setMapStreetColor,
+        setMapWaterColor, setMapLandColor,
+        setMapMainRoadColor, setMapSmallRoadColor, setMapDetailRoadColor,
         setMapStyleUrl,
         setPosterColor, setTextColor,
         showLocationPin, setShowLocationPin,
@@ -254,13 +256,13 @@ const MapControlsPanel: React.FC = () => {
                     </AccordionPanel>
                 </AccordionItem>
 
-                {/* 2-color presets — street map only */}
+                {/* Presets are starting points; exact map colors live in the Color panel. */}
                 {posterType === 'streetmap' && (
                     <AccordionItem border="none">
                         <h2>
                             <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
                                 <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
-                                    Map Colors
+                                    Map Style Presets
                                 </Box>
                                 <AccordionIcon color="gray.400" />
                             </AccordionButton>
@@ -278,6 +280,11 @@ const MapControlsPanel: React.FC = () => {
                                                 setMapStreetColor(preset.streetColor);
                                                 setMapStyleUrl(preset.styleUrl ?? null);
                                                 if (preset.id === 'design2') {
+                                                    setMapWaterColor('#8f8f8f');
+                                                    setMapLandColor('#b6b6b6');
+                                                    setMapMainRoadColor('#111111');
+                                                    setMapSmallRoadColor('#333333');
+                                                    setMapDetailRoadColor('#555555');
                                                     setPosterColor(preset.bgColor);
                                                     setTextColor('#111111');
                                                 } else if (preset.styleUrl) {
@@ -309,7 +316,9 @@ const MapControlsPanel: React.FC = () => {
                                         </Box>
                                     ))}
                                 </Grid>
-                                <Text fontSize="xs" color="gray.500">Fine-tune colors in the Color section below.</Text>
+                                <Text fontSize="xs" color="gray.500">
+                                    Use this only as a starting point. Fine-tune background, water, land, and street colors in the Color section.
+                                </Text>
                             </VStack>
                         </AccordionPanel>
                     </AccordionItem>
