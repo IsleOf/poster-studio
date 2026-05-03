@@ -8,6 +8,7 @@ import {
 } from '@chakra-ui/react';
 import { useStore } from '../store/useStore';
 import { renderPosterToBlob, renderPosterToPdf } from '../utils/renderPoster';
+import { calculateMapExportTarget } from '../utils/mapExportSizing';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -50,25 +51,40 @@ const DownloadButton: React.FC = () => {
     const getSvgEl = () =>
         document.getElementById('poster-preview')?.querySelector('svg') as SVGSVGElement | null;
 
-    /** Ensure the map background is captured at high-res before rendering */
-    const ensureHighResMap = async () => {
+    /** Ensure the map background is captured at print-size resolution before rendering. */
+    const ensureHighResMap = async (dpi: number): Promise<() => void> => {
         if (posterType !== 'starmap' && captureHighResFn) {
             try {
-                const highResUrl = await captureHighResFn();
+                const previousMapImage = useStore.getState().mapBackgroundImage;
+                const target = calculateMapExportTarget({
+                    printSize,
+                    dpi,
+                    maskShape,
+                    circleSize,
+                    heartSize,
+                    houseSize,
+                });
+                const highResUrl = await captureHighResFn({
+                    targetPx: target.targetPx,
+                    detailScale: target.detailScale,
+                });
                 setMapBackgroundImage(highResUrl);
                 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                return () => setMapBackgroundImage(previousMapImage);
             } catch (e) {
                 console.warn('High-res map capture failed, using preview image:', e);
             }
         }
+        return () => {};
     };
 
     const handleDownload = async () => {
         const svgEl = getSvgEl();
         if (!svgEl) return;
         setProgress('rendering');
+        let restoreMap = () => {};
         try {
-            await ensureHighResMap();
+            restoreMap = await ensureHighResMap(300);
             const blob = await renderPosterToBlob(svgEl, printSize.width, printSize.height, 300, true);
             const slug = title.replace(/\s+/g, '-').toLowerCase() || 'poster';
             const a = document.createElement('a');
@@ -80,6 +96,8 @@ const DownloadButton: React.FC = () => {
         } catch (err) {
             setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
             setProgress('error');
+        } finally {
+            restoreMap();
         }
     };
 
@@ -87,8 +105,9 @@ const DownloadButton: React.FC = () => {
         const svgEl = getSvgEl();
         if (!svgEl) return;
         setPdfProgress('rendering');
+        let restoreMap = () => {};
         try {
-            await ensureHighResMap();
+            restoreMap = await ensureHighResMap(300);
             const blob = await renderPosterToPdf(svgEl, printSize.width, printSize.height, title);
             const slug = title.replace(/\s+/g, '-').toLowerCase() || 'poster';
             const a = document.createElement('a');
@@ -100,6 +119,8 @@ const DownloadButton: React.FC = () => {
         } catch (err) {
             setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
             setPdfProgress('error');
+        } finally {
+            restoreMap();
         }
     };
 

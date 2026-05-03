@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { MapExportTarget } from '../utils/mapExportSizing';
 
 // ── History helpers ──────────────────────────────────────────────────────────
 
@@ -41,6 +42,8 @@ function captureDesignSnapshot(state: StoreState): Partial<StoreState> {
     }
     return snap;
 }
+
+export type MapCaptureOptions = Partial<Pick<MapExportTarget, 'targetPx' | 'detailScale'>>;
 
 interface StoreState {
     // Core Data
@@ -192,8 +195,8 @@ interface StoreState {
     templateSettings: Record<string, Partial<StoreState>>; // Store settings for each template
 
     // High-res print capture — set by StreetMapCapture on mount, called by DownloadButton
-    captureHighResFn: (() => Promise<string>) | null;
-    setCaptureHighResFn: (fn: (() => Promise<string>) | null) => void;
+    captureHighResFn: ((options?: MapCaptureOptions) => Promise<string>) | null;
+    setCaptureHighResFn: (fn: ((options?: MapCaptureOptions) => Promise<string>) | null) => void;
 
     // Setters
     setSelectedTemplate: (template: string) => void;
