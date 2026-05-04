@@ -744,7 +744,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         const targetPx = Math.max(TILE_CANVAS_SIZE, Math.round(options.targetPx ?? TILE_CANVAS_SIZE));
         const detailScale = Math.max(1, options.detailScale ?? 1);
 
-        if (targetPx > TILE_CANVAS_SIZE) {
+        if (targetPx > TILE_CANVAS_SIZE || detailScale > 1.05) {
             try {
                 return await captureOffscreenMap({ lng, lat, zoom, bearing: bearing ?? 0, targetPx, detailScale });
             } finally {

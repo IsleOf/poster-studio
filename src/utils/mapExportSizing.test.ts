@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { calculateMapExportTarget } from './mapExportSizing';
 
 describe('calculateMapExportTarget', () => {
-    it('keeps small print sizes at the baseline capture size', () => {
+    it('keeps small print sizes at the baseline pixel size but uses full street detail', () => {
         const target = calculateMapExportTarget({
             printSize: { label: 'A5', width: 5.83, height: 8.27, ratio: '210/297' },
             dpi: 300,
@@ -14,7 +14,7 @@ describe('calculateMapExportTarget', () => {
 
         expect(target.targetPx).toBe(3600);
         expect(target.rawTargetPx).toBeLessThan(3600);
-        expect(target.detailScale).toBe(1);
+        expect(target.detailScale).toBeGreaterThan(2);
     });
 
     it('requests a larger map capture for large print sizes', () => {

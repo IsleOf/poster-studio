@@ -18,6 +18,7 @@ export type MapExportTarget = {
 const SVG_WIDTH = 1200;
 const BASE_CAPTURE_PX = 3600;
 const DEFAULT_MAX_CAPTURE_PX = 10000;
+const MIN_CARTOGRAPHIC_DETAIL_SCALE = 2.6;
 
 export function calculateMapExportTarget({
     printSize,
@@ -63,7 +64,10 @@ export function calculateMapExportTarget({
     return {
         targetPx,
         rawTargetPx,
-        detailScale: Math.max(1, targetPx / BASE_CAPTURE_PX),
+        // Pixel count controls sharpness; detailScale controls vector-tile street
+        // density. Keep density consistent across sizes so 5x7/8x10 are not
+        // simplified compared with A1/24x36.
+        detailScale: Math.max(MIN_CARTOGRAPHIC_DETAIL_SCALE, targetPx / BASE_CAPTURE_PX),
         imageSvgSize,
         outputScale,
     };
