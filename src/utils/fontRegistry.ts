@@ -54,7 +54,7 @@ import Details002_300 from '../assets/fonts/Details002-300-normal.woff2?url';
 import Details002_400 from '../assets/fonts/Details002-400-normal.woff2?url';
 import Details002_700 from '../assets/fonts/Details002-700-normal.woff2?url';
 
-interface FontVariant { weight: string; url: string; }
+interface FontVariant { weight: string; url: string; sizeAdjust?: string; }
 
 // Map font-family name → list of weight variants
 export const FONT_REGISTRY: Record<string, FontVariant[]> = {
@@ -68,7 +68,7 @@ export const FONT_REGISTRY: Record<string, FontVariant[]> = {
     'Details001':           [{ weight: '400', url: Details001500 }, { weight: '500', url: Details001500 }, { weight: '700', url: Details001500 }],
     'Didact Gothic':        [{ weight: '400', url: DidactGothic400 }],
     'Great Vibes':          [{ weight: '400', url: GreatVibes400 }],
-    'Mapped Moment Script': [{ weight: '400', url: MappedMomentScript400 }],
+    'Mapped Moment Script': [{ weight: '400', url: MappedMomentScript400, sizeAdjust: '250%' }],
     'Mapped2':              [
         { weight: '300', url: Mapped2_300 }, { weight: '400', url: Mapped2_400 },
         { weight: '500', url: Mapped2_500 }, { weight: '600', url: Mapped2_600 },

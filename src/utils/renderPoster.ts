@@ -53,11 +53,12 @@ async function buildInlineFontStyle(usedFamilies: Set<string>): Promise<string> 
     for (const family of usedFamilies) {
         const variants = FONT_REGISTRY[family];
         if (!variants) continue; // not a custom font — system font, no embedding needed
-        for (const { weight, url } of variants) {
+        for (const { weight, url, sizeAdjust } of variants) {
             const dataUri = await fetchFontAsDataUri(url);
             if (!dataUri) continue;
+            const sizeAdjustRule = sizeAdjust ? `size-adjust:${sizeAdjust};` : '';
             rules.push(
-                `@font-face{font-family:'${family}';font-weight:${weight};font-style:normal;src:url('${dataUri}') format('woff2');}`
+                `@font-face{font-family:'${family}';font-weight:${weight};font-style:normal;${sizeAdjustRule}src:url('${dataUri}') format('woff2');}`
             );
         }
     }
