@@ -16,7 +16,41 @@ import {
 
 // ── Smart suggestion generators ──────────────────────────────────────────────
 
-function generateSmartTitleSuggestions(location: string, date: Date): string[] {
+const HEART_MAP_TITLE_SUGGESTIONS = [
+    'Where It All Began',
+    'Where Our Story Started',
+    'The First Date',
+    'Where We Met',
+    'It Was Always You',
+    'Where Forever Started',
+    'The Place You Said Yes',
+    'Where We Said I Do',
+    'Our Best Day',
+    'To the Moon and Back',
+    'Our Happy Place',
+    'My Favorite Place is with You',
+    "Home is Wherever I'm with You",
+    'Our Little Corner of the World',
+    'Our Love Story',
+    'Love Knows No Distance',
+    'Miles Apart, Close in Heart',
+    'Worth Every Mile',
+    'Together Anywhere',
+];
+
+function uniqueSuggestions(suggestions: string[]): string[] {
+    return Array.from(new Set(suggestions));
+}
+
+function generateSmartTitleSuggestions(
+    location: string,
+    date: Date,
+    context: { posterType: string; maskShape: string },
+): string[] {
+    if ((context.posterType === 'streetmap' || context.posterType === 'coloredmap') && context.maskShape === 'heart') {
+        return HEART_MAP_TITLE_SUGGESTIONS;
+    }
+
     const suggestions: string[] = [];
     const month = date.getMonth() + 1;
     const day = date.getDate();
@@ -64,7 +98,7 @@ function generateSmartTitleSuggestions(location: string, date: Date): string[] {
     ];
     const seen = new Set(suggestions);
     for (const g of generic) { if (!seen.has(g)) suggestions.push(g); }
-    return suggestions;
+    return uniqueSuggestions(suggestions);
 }
 
 function generateSmartSubtitleSuggestions(location: string, date: Date): string[] {
@@ -109,6 +143,8 @@ const TextContentPanel: React.FC = () => {
         showCoords, setShowCoords,
         showNames, setShowNames,
         customText, setCustomText,
+        posterType,
+        maskShape,
         locationAllCaps, setLocationAllCaps,
         showDivider, setShowDivider, dividerLength, setDividerLength, dividerThickness, setDividerThickness,
         showVertSep, setShowVertSep, vertSepHeight, setVertSepHeight, vertSepThickness, setVertSepThickness,
@@ -122,8 +158,16 @@ const TextContentPanel: React.FC = () => {
     const [showAllTitleSuggestions, setShowAllTitleSuggestions] = useState(false);
     const [showAllSubtitleSuggestions, setShowAllSubtitleSuggestions] = useState(false);
 
-    const titleSuggestions = useMemo(() => generateSmartTitleSuggestions(location, date), [location, date]);
+    const titleSuggestions = useMemo(
+        () => generateSmartTitleSuggestions(location, date, { posterType, maskShape }),
+        [location, date, posterType, maskShape],
+    );
     const subtitleSuggestions = useMemo(() => generateSmartSubtitleSuggestions(location, date), [location, date]);
+    const titleQuery = (customText.title || title).toLowerCase();
+    const filteredTitleSuggestions = titleSuggestions.filter(s => s.toLowerCase().includes(titleQuery));
+    const visibleTitleSuggestions = showAllTitleSuggestions || filteredTitleSuggestions.length === 0
+        ? titleSuggestions
+        : filteredTitleSuggestions;
 
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newDate = new Date(e.target.value);
@@ -243,10 +287,7 @@ const TextContentPanel: React.FC = () => {
                             bg="white" border="1px" borderColor="gray.300" borderRadius="md"
                             boxShadow="lg" maxH="48" overflowY="auto"
                         >
-                            {(showAllTitleSuggestions
-                                ? titleSuggestions
-                                : titleSuggestions.filter(s => s.toLowerCase().includes((customText.title || title).toLowerCase()))
-                            ).map((suggestion, index) => (
+                            {visibleTitleSuggestions.map((suggestion, index) => (
                                 <ListItem key={index} px={4} py={2}
                                     _hover={{ bg: 'gray.100', cursor: 'pointer' }} fontSize="sm"
                                     onMouseDown={() => {
