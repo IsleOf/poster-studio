@@ -136,6 +136,22 @@ describe('applyTemplate', () => {
         expect(state.posterType).toBe('streetmap');
     });
 
+    it('applies saved map viewport fields from settings', () => {
+        applyTemplate({
+            mapCity: 'Jacksonville',
+            mapCenterLat: 30.357,
+            mapCenterLng: -81.4635,
+            mapZoom: 16,
+            mapBearing: 12,
+        });
+        const state = getState();
+        expect(state.mapCity).toBe('Jacksonville');
+        expect(state.mapCenterLat).toBe(30.357);
+        expect(state.mapCenterLng).toBe(-81.4635);
+        expect(state.mapZoom).toBe(16);
+        expect(state.mapBearing).toBe(12);
+    });
+
     it('does not throw on empty settings object', () => {
         expect(() => applyTemplate({})).not.toThrow();
     });
@@ -179,6 +195,28 @@ describe('captureCurrentSettings', () => {
         expect(settings.dedication).toBe('To the moon and back');
     });
 
+    it('captures map viewport fields for admin Save and Sync', () => {
+        applyTemplate({
+            mapCity: 'Jacksonville',
+            mapCenterLat: 30.357,
+            mapCenterLng: -81.4635,
+            mapZoom: 16,
+            mapBearing: 12,
+        });
+        const settings = captureCurrentSettings();
+        expect(settings.mapCity).toBe('Jacksonville');
+        expect(settings.mapCenterLat).toBe(30.357);
+        expect(settings.mapCenterLng).toBe(-81.4635);
+        expect(settings.mapZoom).toBe(16);
+        expect(settings.mapBearing).toBe(12);
+    });
+
+    it('captures location all-caps setting with text settings', () => {
+        applyTemplate({ locationAllCaps: true });
+        const settings = captureCurrentSettings();
+        expect(settings.locationAllCaps).toBe(true);
+    });
+
     it('round-trips a full template apply → capture without data loss', () => {
         const input = {
             posterColor: '#001122',
@@ -189,6 +227,11 @@ describe('captureCurrentSettings', () => {
             showBorder: false,
             printSize: '16x20',
             title: 'Round Trip',
+            mapCity: 'Jacksonville',
+            mapCenterLat: 30.357,
+            mapCenterLng: -81.4635,
+            mapZoom: 16,
+            mapBearing: 12,
         };
         applyTemplate(input);
         const captured = captureCurrentSettings();
@@ -201,6 +244,11 @@ describe('captureCurrentSettings', () => {
         expect(captured.showBorder).toBe(false);
         expect(captured.printSize).toBe('16x20');
         expect(captured.title).toBe('Round Trip');
+        expect(captured.mapCity).toBe('Jacksonville');
+        expect(captured.mapCenterLat).toBe(30.357);
+        expect(captured.mapCenterLng).toBe(-81.4635);
+        expect(captured.mapZoom).toBe(16);
+        expect(captured.mapBearing).toBe(12);
     });
 
     it('applies → captures → applies again gives same result', () => {
