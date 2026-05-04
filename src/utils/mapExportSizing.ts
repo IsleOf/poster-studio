@@ -17,7 +17,7 @@ export type MapExportTarget = {
 
 const SVG_WIDTH = 1200;
 const BASE_CAPTURE_PX = 3600;
-const DEFAULT_MAX_CAPTURE_PX = 8192;
+const DEFAULT_MAX_CAPTURE_PX = 10000;
 
 export function calculateMapExportTarget({
     printSize,

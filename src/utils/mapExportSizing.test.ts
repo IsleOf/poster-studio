@@ -28,7 +28,7 @@ describe('calculateMapExportTarget', () => {
         });
 
         expect(target.rawTargetPx).toBe(9450);
-        expect(target.targetPx).toBe(8192);
+        expect(target.targetPx).toBe(9450);
         expect(target.detailScale).toBeGreaterThan(2);
     });
 });

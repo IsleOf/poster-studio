@@ -61,7 +61,6 @@ type Design2MapColors = {
     mainRoadColor: string;
     smallRoadColor: string;
     detailRoadColor: string;
-    lineWidthScale?: number;
 };
 
 // Re-export the base preset data under the original name for backward compatibility
@@ -70,7 +69,6 @@ export { MAP_COLOR_PRESET_DATA as MAP_COLOR_PRESETS };
 /** Monochrome street-map template: single-stroke road linework and land/water masses, no building footprints. */
 function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecification {
     const { bgColor, waterColor, landColor, mainRoadColor, smallRoadColor, detailRoadColor } = colors;
-    const lineWidthScale = colors.lineWidthScale ?? 1;
     const majorRoadClasses = ['motorway', 'trunk', 'primary', 'secondary'];
     const smallRoadClasses = ['tertiary', 'minor', 'residential', 'unclassified'];
     const detailRoadClasses = ['service'];
@@ -112,7 +110,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 'source-layer': 'waterway',
                 paint: {
                     'line-color': waterColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8 * lineWidthScale, 14, 3.5 * lineWidthScale, 18, 7 * lineWidthScale] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 14, 3.5, 18, 7] as maplibregl.ExpressionSpecification,
                 },
             },
             {
@@ -125,8 +123,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': detailRoadColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.15 * lineWidthScale, 14, 0.28 * lineWidthScale, 18, 0.65 * lineWidthScale] as maplibregl.ExpressionSpecification,
-                    'line-opacity': 0.75,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.2, 14, 0.45, 18, 0.9] as maplibregl.ExpressionSpecification,
+                    'line-opacity': 0.88,
                 },
             },
             {
@@ -139,8 +137,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': smallRoadColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.2 * lineWidthScale, 14, 0.45 * lineWidthScale, 18, 1.0 * lineWidthScale] as maplibregl.ExpressionSpecification,
-                    'line-opacity': 0.88,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.28, 14, 0.72, 18, 1.35] as maplibregl.ExpressionSpecification,
+                    'line-opacity': 0.96,
                 },
             },
             {
@@ -155,9 +153,9 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                     'line-color': mainRoadColor,
                     'line-width': [
                         'interpolate', ['linear'], ['zoom'],
-                        7, ['match', ['get', 'class'], 'motorway', 1.2 * lineWidthScale, 'trunk', 1.0 * lineWidthScale, 'primary', 0.8 * lineWidthScale, 0.6 * lineWidthScale],
-                        14, ['match', ['get', 'class'], 'motorway', 4.4 * lineWidthScale, 'trunk', 3.7 * lineWidthScale, 'primary', 2.8 * lineWidthScale, 'secondary', 2.0 * lineWidthScale, 1.6 * lineWidthScale],
-                        18, ['match', ['get', 'class'], 'motorway', 9.0 * lineWidthScale, 'trunk', 7.6 * lineWidthScale, 'primary', 5.8 * lineWidthScale, 'secondary', 4.2 * lineWidthScale, 3.0 * lineWidthScale],
+                        7, ['match', ['get', 'class'], 'motorway', 1.2, 'trunk', 1.0, 'primary', 0.8, 0.6],
+                        14, ['match', ['get', 'class'], 'motorway', 4.4, 'trunk', 3.7, 'primary', 2.8, 'secondary', 2.0, 1.6],
+                        18, ['match', ['get', 'class'], 'motorway', 9.0, 'trunk', 7.6, 'primary', 5.8, 'secondary', 4.2, 3.0],
                     ] as maplibregl.ExpressionSpecification,
                     'line-opacity': 0.96,
                 },
@@ -280,7 +278,7 @@ function waitForMapFrame(
     });
 }
 
-function canvasToDataUrl(canvas: HTMLCanvasElement, quality: number): Promise<string> {
+function canvasToDataUrl(canvas: HTMLCanvasElement, type = 'image/png', quality?: number): Promise<string> {
     return new Promise<string>((resolve, reject) => {
         canvas.toBlob(blob => {
             if (!blob) { reject(new Error('toBlob failed')); return; }
@@ -288,7 +286,7 @@ function canvasToDataUrl(canvas: HTMLCanvasElement, quality: number): Promise<st
             reader.onload = () => resolve(reader.result as string);
             reader.onerror = reject;
             reader.readAsDataURL(blob);
-        }, 'image/jpeg', quality);
+        }, type, quality);
     });
 }
 
@@ -354,16 +352,15 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         mapStyleUrl, mapColorPreset, setCaptureHighResFn,
     } = useStore();
     const activePreset = MAP_COLOR_PRESETS_FULL.find(p => p.id === mapColorPreset);
-    const getActiveStyle = (lineWidthScale = 1) => {
+    const getActiveStyle = () => {
         if (mapColorPreset === 'design2') {
             return createDesign2Style({
                 bgColor: mapBgColor || '#ffffff',
                 waterColor: mapWaterColor || '#8f8f8f',
                 landColor: mapLandColor || '#b6b6b6',
                 mainRoadColor: mapMainRoadColor || mapStreetColor || '#111111',
-                smallRoadColor: mapSmallRoadColor || '#333333',
-                detailRoadColor: mapDetailRoadColor || '#555555',
-                lineWidthScale,
+                smallRoadColor: mapSmallRoadColor || '#222222',
+                detailRoadColor: mapDetailRoadColor || '#333333',
             });
         }
         return activePreset?.customStyle ? activePreset.customStyle() : createMapStyle(mapBgColor, mapStreetColor);
@@ -422,7 +419,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             // Discard stale result — position changed while we were stitching
             if (captureVersionRef.current !== startVersion) return;
 
-            const dataUrl = await canvasToDataUrl(captureCanvas, 0.92);
+            const dataUrl = await canvasToDataUrl(captureCanvas, 'image/png');
             // Don't push the new image while the user is mid-drag — it would interrupt
             // their drag gesture by causing the SVG effect to re-run and reset the offset.
             // After drag ends, the coordinate useEffect fires map.jumpTo() which triggers
@@ -455,8 +452,8 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 waterColor: initialState.mapWaterColor || '#8f8f8f',
                 landColor: initialState.mapLandColor || '#b6b6b6',
                 mainRoadColor: initialState.mapMainRoadColor || initialState.mapStreetColor || '#111111',
-                smallRoadColor: initialState.mapSmallRoadColor || '#333333',
-                detailRoadColor: initialState.mapDetailRoadColor || '#555555',
+                smallRoadColor: initialState.mapSmallRoadColor || '#222222',
+                detailRoadColor: initialState.mapDetailRoadColor || '#333333',
             })
             : (initialPreset?.customStyle ? initialPreset.customStyle() : createMapStyle(initialState.mapBgColor, initialState.mapStreetColor)));
 
@@ -642,12 +639,10 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
         const { mapCenterLat: lat, mapCenterLng: lng, mapZoom: zoom, mapBearing: bearing } = storeRef.current;
         const targetPx = Math.max(TILE_CANVAS_SIZE, Math.round(options.targetPx ?? TILE_CANVAS_SIZE));
-        const detailScale = Math.max(1, options.detailScale ?? 1);
-        const lineWidthScale = 1 / Math.sqrt(detailScale);
-        const effectiveZoom = Math.min(zoom + Math.log2(detailScale), 20);
+        const effectiveZoom = Math.min(zoom, 20);
 
         if (targetPx > TILE_CANVAS_SIZE) {
-            const cssSize = Math.max(CONTAINER_SIZE, Math.round(CONTAINER_SIZE * detailScale));
+            const cssSize = CONTAINER_SIZE;
             const pixelRatio = targetPx / cssSize;
             const tempContainer = document.createElement('div');
             tempContainer.style.position = 'fixed';
@@ -662,7 +657,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             try {
                 tempMap = new maplibregl.Map({
                     container: tempContainer,
-                    style: mapStyleUrl ?? getActiveStyle(lineWidthScale),
+                    style: mapStyleUrl ?? getActiveStyle(),
                     center: [lng, lat],
                     zoom: effectiveZoom,
                     bearing: bearing ?? 0,
@@ -691,7 +686,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 captureCanvas.height = targetPx;
                 const ctx = captureCanvas.getContext('2d')!;
                 ctx.drawImage(tempMap.getCanvas(), 0, 0, targetPx, targetPx);
-                return await canvasToDataUrl(captureCanvas, 0.94);
+                return await canvasToDataUrl(captureCanvas, 'image/png');
             } finally {
                 tempMap?.remove();
                 tempContainer.remove();
@@ -715,7 +710,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         m.jumpTo({ center: [lng, lat], zoom: effectiveZoom, bearing: bearing ?? 0 });
         isCapturingRef.current = false;
 
-        return canvasToDataUrl(captureCanvas, 0.94);
+        return canvasToDataUrl(captureCanvas, 'image/png');
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         storeRef, mapStyleUrl, mapColorPreset,

@@ -283,8 +283,8 @@ const MapControlsPanel: React.FC = () => {
                                                     setMapWaterColor('#8f8f8f');
                                                     setMapLandColor('#b6b6b6');
                                                     setMapMainRoadColor('#111111');
-                                                    setMapSmallRoadColor('#333333');
-                                                    setMapDetailRoadColor('#555555');
+                                                    setMapSmallRoadColor('#222222');
+                                                    setMapDetailRoadColor('#333333');
                                                     setPosterColor(preset.bgColor);
                                                     setTextColor('#111111');
                                                 } else if (preset.styleUrl) {

@@ -497,8 +497,8 @@ export const useStore = create<StoreState>((set) => ({
     mapWaterColor: '#8f8f8f',
     mapLandColor: '#b6b6b6',
     mapMainRoadColor: '#111111',
-    mapSmallRoadColor: '#333333',
-    mapDetailRoadColor: '#555555',
+    mapSmallRoadColor: '#222222',
+    mapDetailRoadColor: '#333333',
     mapColorPreset: 'midnight',
     mapStyleUrl: null,
 
