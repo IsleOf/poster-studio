@@ -639,10 +639,14 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
         const { mapCenterLat: lat, mapCenterLng: lng, mapZoom: zoom, mapBearing: bearing } = storeRef.current;
         const targetPx = Math.max(TILE_CANVAS_SIZE, Math.round(options.targetPx ?? TILE_CANVAS_SIZE));
-        const effectiveZoom = Math.min(zoom, 20);
+        const detailScale = Math.max(1, options.detailScale ?? 1);
+        const effectiveZoom = Math.min(zoom + Math.log2(detailScale), 20);
 
         if (targetPx > TILE_CANVAS_SIZE) {
-            const cssSize = CONTAINER_SIZE;
+            // Increase the virtual viewport and zoom together. This preserves the
+            // same geographic bounds as preview while asking vector tiles for the
+            // denser street network needed by large print sizes.
+            const cssSize = Math.max(CONTAINER_SIZE, Math.round(CONTAINER_SIZE * detailScale));
             const pixelRatio = targetPx / cssSize;
             const tempContainer = document.createElement('div');
             tempContainer.style.position = 'fixed';
