@@ -291,38 +291,42 @@ function canvasToDataUrl(canvas: HTMLCanvasElement, type = 'image/png', quality?
     });
 }
 
-// ─── Heritage POI filter ───────────────────────────────────────────────────────
+// ─── Colored-map POI cleanup ──────────────────────────────────────────────────
 
 /**
- * Filters every POI layer in the current style to show only heritage /
- * sightseeing markers (museums, historic sites, places of worship, viewpoints)
- * and hides business POIs (shops, restaurants, hotels, banks, etc.).
- * Called once after a prebuilt style (e.g. "Realistic") finishes loading.
+ * Removes POI markers that make first-home maps feel like a navigation
+ * screenshot instead of a keepsake map. OpenFreeMap Bright stores transit,
+ * parking, and business markers in poi layers; roads, road shields, parks,
+ * water, and place/street labels remain in their own layers.
  */
-function applyHeritagePOIFilter(map: maplibregl.Map): void {
-    const HERITAGE_FILTER = [
-        'any',
-        ['==', ['get', 'class'], 'historic'],
-        ['==', ['get', 'class'], 'religion'],
-        ['all',
-            ['==', ['get', 'class'], 'tourism'],
-            ['in', ['get', 'subclass'], ['literal', [
-                'artwork', 'attraction', 'gallery', 'museum', 'viewpoint',
-                'zoo', 'theme_park',
-            ]]],
-        ],
-    ] as maplibregl.FilterSpecification;
+function applyColoredMapPOICleanup(map: maplibregl.Map): void {
+    const cleanupState = map as maplibregl.Map & { __coloredMapPOICleanupApplied?: boolean };
+    if (cleanupState.__coloredMapPOICleanupApplied || !map.isStyleLoaded()) return;
 
     for (const layer of map.getStyle().layers ?? []) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((layer as any)['source-layer'] === 'poi') {
-            const existing = map.getFilter(layer.id);
-            const combined: maplibregl.FilterSpecification = existing
-                ? (['all', existing, HERITAGE_FILTER] as maplibregl.FilterSpecification)
-                : HERITAGE_FILTER;
-            map.setFilter(layer.id, combined);
+        if ((layer.id === 'poi_transit' || (layer as { 'source-layer'?: string })['source-layer'] === 'poi')
+            && map.getLayer(layer.id)) {
+            map.setLayoutProperty(layer.id, 'visibility', 'none');
         }
     }
+
+    cleanupState.__coloredMapPOICleanupApplied = true;
+}
+
+function waitForNextMapRender(map: maplibregl.Map, timeoutMs = 500): Promise<void> {
+    return new Promise(resolve => {
+        let done = false;
+        const finish = () => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            map.off('render', finish);
+            resolve();
+        };
+        const timer = setTimeout(finish, timeoutMs);
+        map.once('render', finish);
+        map.triggerRepaint();
+    });
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -432,7 +436,10 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 const timer = setTimeout(finish, TILE_SETTLE_TIMEOUT_MS);
                 tempMap!.once('idle', finish);
             });
-            if (mapStyleUrl && tempMap.isStyleLoaded()) applyHeritagePOIFilter(tempMap);
+            if (mapStyleUrl && tempMap.isStyleLoaded()) {
+                applyColoredMapPOICleanup(tempMap);
+                await waitForNextMapRender(tempMap);
+            }
 
             const captureCanvas = document.createElement('canvas');
             captureCanvas.width = targetPx;
@@ -501,6 +508,11 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             captureCanvas.width = TILE_CANVAS_SIZE;
             captureCanvas.height = TILE_CANVAS_SIZE;
             const ctx = captureCanvas.getContext('2d')!;
+
+            if (mapStyleUrl && m.isStyleLoaded()) {
+                applyColoredMapPOICleanup(m);
+                await waitForNextMapRender(m);
+            }
 
             await waitForMapFrame(
                 m,
@@ -573,6 +585,12 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
         mapRef.current = map;
 
+        const applyInitialColoredCleanup = () => {
+            if (initialStyleUrl && map.isStyleLoaded()) applyColoredMapPOICleanup(map);
+        };
+        map.on('styledata', applyInitialColoredCleanup);
+        map.on('idle', applyInitialColoredCleanup);
+
         let didInitialCapture = false;
         const runInitialCapture = () => {
             if (didInitialCapture) return;
@@ -580,7 +598,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             clearTimeout(initialCaptureTimer);
             map.off('load', runInitialCapture);
             map.off('idle', runInitialCapture);
-            if (initialStyleUrl && map.isStyleLoaded()) applyHeritagePOIFilter(map);
+            if (initialStyleUrl && map.isStyleLoaded()) applyColoredMapPOICleanup(map);
             captureStitched();
         };
         const initialCaptureTimer = setTimeout(runInitialCapture, TILE_SETTLE_TIMEOUT_MS);
@@ -604,6 +622,8 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             clearTimeout(initialCaptureTimer);
             map.off('load', runInitialCapture);
             map.off('idle', runInitialCapture);
+            map.off('styledata', applyInitialColoredCleanup);
+            map.off('idle', applyInitialColoredCleanup);
             map.remove();
             mapRef.current = null;
         };
@@ -622,7 +642,11 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         }
 
         const newStyle = mapStyleUrl ?? getActiveStyle();
+        (map as maplibregl.Map & { __coloredMapPOICleanupApplied?: boolean }).__coloredMapPOICleanupApplied = false;
         map.setStyle(newStyle);
+        const applyStyleCleanup = () => {
+            if (mapStyleUrl && map.isStyleLoaded()) applyColoredMapPOICleanup(map);
+        };
 
         // After the style loads, apply POI filter (prebuilt styles only) then stitch.
         // Also keep a timer fallback; production tile/style loads can miss the exact
@@ -634,17 +658,21 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             clearTimeout(styleCaptureTimer);
             map.off('styledata', runStyleCapture);
             map.off('idle', runStyleCapture);
-            if (mapStyleUrl && map.isStyleLoaded()) applyHeritagePOIFilter(map);
+            if (mapStyleUrl && map.isStyleLoaded()) applyColoredMapPOICleanup(map);
             captureStitched();
         };
         const styleCaptureTimer = setTimeout(runStyleCapture, TILE_SETTLE_TIMEOUT_MS);
         map.once('styledata', runStyleCapture);
         map.once('idle', runStyleCapture);
+        map.on('styledata', applyStyleCleanup);
+        map.on('idle', applyStyleCleanup);
 
         return () => {
             clearTimeout(styleCaptureTimer);
             map.off('styledata', runStyleCapture);
             map.off('idle', runStyleCapture);
+            map.off('styledata', applyStyleCleanup);
+            map.off('idle', applyStyleCleanup);
         };
     // Map colors intentionally excluded — the color effect below
     // handles those independently when mapStyleUrl is null.
