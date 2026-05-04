@@ -55,7 +55,7 @@ const TEMPLATE_FIELD_DEFAULTS: Record<string, unknown> = {
     showLocationPin: true, locationPinSize: 70, locationPinOffsetX: 0, locationPinOffsetY: 0,
     mapStyleUrl: null, mapColorPreset: 'midnight', mapBgColor: '#1a1a2e', mapStreetColor: '#3d5a80',
     mapWaterColor: '#8f8f8f', mapLandColor: '#b6b6b6',
-    mapMainRoadColor: '#111111', mapSmallRoadColor: '#222222', mapDetailRoadColor: '#333333',
+    mapMainRoadColor: '#111111', mapSmallRoadColor: '#1a1a1a', mapDetailRoadColor: '#2a2a2a',
     showLocation: true, showDate: true, showCoords: true,
     titleKerning: 0.05, subtitleKerning: 0.2, detailsKerning: 0.1, dedicationKerning: 0.05, namesKerning: 0.15,
     finelineWidth: 1.0,

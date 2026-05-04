@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useStore, type MapCaptureOptions } from '../store/useStore';
 import { MAP_COLOR_PRESET_DATA } from './mapPresets';
+import { calculateMapExportTarget } from '../utils/mapExportSizing';
 
 function createMapStyle(bgColor: string, streetColor: string): maplibregl.StyleSpecification {
     return {
@@ -123,8 +124,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': detailRoadColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.2, 14, 0.45, 18, 0.9] as maplibregl.ExpressionSpecification,
-                    'line-opacity': 0.88,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.3, 14, 0.7, 18, 1.25] as maplibregl.ExpressionSpecification,
+                    'line-opacity': 0.94,
                 },
             },
             {
@@ -137,8 +138,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': smallRoadColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.28, 14, 0.72, 18, 1.35] as maplibregl.ExpressionSpecification,
-                    'line-opacity': 0.96,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.4, 14, 1.05, 18, 1.9] as maplibregl.ExpressionSpecification,
+                    'line-opacity': 1,
                 },
             },
             {
@@ -349,6 +350,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         mapCenterLat, mapCenterLng, mapZoom, mapBearing,
         mapBgColor, mapStreetColor, mapWaterColor, mapLandColor,
         mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
+        printSize, maskShape, circleSize, heartSize, houseSize,
         mapStyleUrl, mapColorPreset, setCaptureHighResFn,
     } = useStore();
     const activePreset = MAP_COLOR_PRESETS_FULL.find(p => p.id === mapColorPreset);
@@ -359,11 +361,89 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 waterColor: mapWaterColor || '#8f8f8f',
                 landColor: mapLandColor || '#b6b6b6',
                 mainRoadColor: mapMainRoadColor || mapStreetColor || '#111111',
-                smallRoadColor: mapSmallRoadColor || '#222222',
-                detailRoadColor: mapDetailRoadColor || '#333333',
+                smallRoadColor: mapSmallRoadColor || '#1a1a1a',
+                detailRoadColor: mapDetailRoadColor || '#2a2a2a',
             });
         }
         return activePreset?.customStyle ? activePreset.customStyle() : createMapStyle(mapBgColor, mapStreetColor);
+    };
+
+    const getPrintDetailTarget = () => calculateMapExportTarget({
+        printSize,
+        dpi: 300,
+        maskShape,
+        circleSize,
+        heartSize,
+        houseSize,
+    });
+
+    const captureOffscreenMap = async ({
+        lng,
+        lat,
+        zoom,
+        bearing,
+        targetPx,
+        detailScale,
+    }: {
+        lng: number;
+        lat: number;
+        zoom: number;
+        bearing: number;
+        targetPx: number;
+        detailScale: number;
+    }): Promise<string> => {
+        const effectiveZoom = Math.min(zoom + Math.log2(Math.max(1, detailScale)), 20);
+        // Increase virtual viewport and zoom together. This preserves geographic
+        // bounds while asking vector tiles for the denser street network.
+        const cssSize = Math.max(CONTAINER_SIZE, Math.round(CONTAINER_SIZE * detailScale));
+        const pixelRatio = targetPx / cssSize;
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'fixed';
+        tempContainer.style.left = '-100000px';
+        tempContainer.style.top = '0';
+        tempContainer.style.width = `${cssSize}px`;
+        tempContainer.style.height = `${cssSize}px`;
+        tempContainer.style.pointerEvents = 'none';
+        document.body.appendChild(tempContainer);
+
+        let tempMap: maplibregl.Map | null = null;
+        try {
+            tempMap = new maplibregl.Map({
+                container: tempContainer,
+                style: mapStyleUrl ?? getActiveStyle(),
+                center: [lng, lat],
+                zoom: effectiveZoom,
+                bearing: bearing ?? 0,
+                pixelRatio,
+                canvasContextAttributes: { preserveDrawingBuffer: true },
+                interactive: false,
+                attributionControl: false,
+            });
+
+            await new Promise<void>((resolve) => {
+                let done = false;
+                const finish = () => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    tempMap?.off('idle', finish);
+                    resolve();
+                };
+                const timer = setTimeout(finish, TILE_SETTLE_TIMEOUT_MS);
+                tempMap!.once('idle', finish);
+            });
+            if (mapStyleUrl && tempMap.isStyleLoaded()) applyHeritagePOIFilter(tempMap);
+
+            const captureCanvas = document.createElement('canvas');
+            captureCanvas.width = targetPx;
+            captureCanvas.height = targetPx;
+            const ctx = captureCanvas.getContext('2d')!;
+            ctx.drawImage(tempMap.getCanvas(), 0, 0, targetPx, targetPx);
+            return canvasToDataUrl(captureCanvas, 'image/png');
+        } finally {
+            tempMap?.remove();
+            tempContainer.remove();
+        }
     };
 
     // Always-current snapshot of the map position — read inside async captureStitched
@@ -398,12 +478,30 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         // finer tiles, causing identical-tile artefacts and useless stitching.
         const effectiveZoom = Math.min(zoom, 20);
 
-        const captureCanvas = document.createElement('canvas');
-        captureCanvas.width = TILE_CANVAS_SIZE;
-        captureCanvas.height = TILE_CANVAS_SIZE;
-        const ctx = captureCanvas.getContext('2d')!;
-
         try {
+            const printDetailTarget = getPrintDetailTarget();
+            if (printDetailTarget.detailScale > 1.05) {
+                const dataUrl = await captureOffscreenMap({
+                    lng,
+                    lat,
+                    zoom,
+                    bearing: bearing ?? 0,
+                    targetPx: TILE_CANVAS_SIZE,
+                    detailScale: printDetailTarget.detailScale,
+                });
+
+                if (captureVersionRef.current !== startVersion) return;
+                if (!useStore.getState().isDraggingMapImage) {
+                    onCapture(dataUrl);
+                }
+                return;
+            }
+
+            const captureCanvas = document.createElement('canvas');
+            captureCanvas.width = TILE_CANVAS_SIZE;
+            captureCanvas.height = TILE_CANVAS_SIZE;
+            const ctx = captureCanvas.getContext('2d')!;
+
             await waitForMapFrame(
                 m,
                 () => m.jumpTo({ center: [lng, lat], zoom: effectiveZoom, bearing: bearing ?? 0 }),
@@ -436,7 +534,12 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 captureStitched();
             }
         }
-    }, [onCapture]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        onCapture, printSize, maskShape, circleSize, heartSize, houseSize,
+        mapStyleUrl, mapColorPreset, mapBgColor, mapStreetColor, mapWaterColor,
+        mapLandColor, mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
+    ]);
 
     // ── Initialize map once ────────────────────────────────────────────────────
     useEffect(() => {
@@ -452,8 +555,8 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 waterColor: initialState.mapWaterColor || '#8f8f8f',
                 landColor: initialState.mapLandColor || '#b6b6b6',
                 mainRoadColor: initialState.mapMainRoadColor || initialState.mapStreetColor || '#111111',
-                smallRoadColor: initialState.mapSmallRoadColor || '#222222',
-                detailRoadColor: initialState.mapDetailRoadColor || '#333333',
+                smallRoadColor: initialState.mapSmallRoadColor || '#1a1a1a',
+                detailRoadColor: initialState.mapDetailRoadColor || '#2a2a2a',
             })
             : (initialPreset?.customStyle ? initialPreset.customStyle() : createMapStyle(initialState.mapBgColor, initialState.mapStreetColor)));
 
@@ -640,60 +743,11 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         const { mapCenterLat: lat, mapCenterLng: lng, mapZoom: zoom, mapBearing: bearing } = storeRef.current;
         const targetPx = Math.max(TILE_CANVAS_SIZE, Math.round(options.targetPx ?? TILE_CANVAS_SIZE));
         const detailScale = Math.max(1, options.detailScale ?? 1);
-        const effectiveZoom = Math.min(zoom + Math.log2(detailScale), 20);
 
         if (targetPx > TILE_CANVAS_SIZE) {
-            // Increase the virtual viewport and zoom together. This preserves the
-            // same geographic bounds as preview while asking vector tiles for the
-            // denser street network needed by large print sizes.
-            const cssSize = Math.max(CONTAINER_SIZE, Math.round(CONTAINER_SIZE * detailScale));
-            const pixelRatio = targetPx / cssSize;
-            const tempContainer = document.createElement('div');
-            tempContainer.style.position = 'fixed';
-            tempContainer.style.left = '-100000px';
-            tempContainer.style.top = '0';
-            tempContainer.style.width = `${cssSize}px`;
-            tempContainer.style.height = `${cssSize}px`;
-            tempContainer.style.pointerEvents = 'none';
-            document.body.appendChild(tempContainer);
-
-            let tempMap: maplibregl.Map | null = null;
             try {
-                tempMap = new maplibregl.Map({
-                    container: tempContainer,
-                    style: mapStyleUrl ?? getActiveStyle(),
-                    center: [lng, lat],
-                    zoom: effectiveZoom,
-                    bearing: bearing ?? 0,
-                    pixelRatio,
-                    canvasContextAttributes: { preserveDrawingBuffer: true },
-                    interactive: false,
-                    attributionControl: false,
-                });
-
-                await new Promise<void>((resolve) => {
-                    let done = false;
-                    const finish = () => {
-                        if (done) return;
-                        done = true;
-                        clearTimeout(timer);
-                        tempMap?.off('idle', finish);
-                        resolve();
-                    };
-                    const timer = setTimeout(finish, TILE_SETTLE_TIMEOUT_MS);
-                    tempMap!.once('idle', finish);
-                });
-                if (mapStyleUrl && tempMap.isStyleLoaded()) applyHeritagePOIFilter(tempMap);
-
-                const captureCanvas = document.createElement('canvas');
-                captureCanvas.width = targetPx;
-                captureCanvas.height = targetPx;
-                const ctx = captureCanvas.getContext('2d')!;
-                ctx.drawImage(tempMap.getCanvas(), 0, 0, targetPx, targetPx);
-                return await canvasToDataUrl(captureCanvas, 'image/png');
+                return await captureOffscreenMap({ lng, lat, zoom, bearing: bearing ?? 0, targetPx, detailScale });
             } finally {
-                tempMap?.remove();
-                tempContainer.remove();
                 isCapturingRef.current = false;
             }
         }
@@ -711,7 +765,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
         // Restore original position
         suppressNextMoveendRef.current = true;
-        m.jumpTo({ center: [lng, lat], zoom: effectiveZoom, bearing: bearing ?? 0 });
+        m.jumpTo({ center: [lng, lat], zoom: Math.min(zoom, 20), bearing: bearing ?? 0 });
         isCapturingRef.current = false;
 
         return canvasToDataUrl(captureCanvas, 'image/png');
