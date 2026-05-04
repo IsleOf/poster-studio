@@ -23,7 +23,7 @@ const DESIGN_FIELDS = [
     'maskShape', 'isLightMode', 'designStyle', 'borderStyle',
     'titleFont', 'subtitleFont', 'detailsFont', 'dedicationFont', 'namesFont',
     'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
-    'titleAllCaps',
+    'titleAllCaps', 'locationAllCaps',
     'customText', 'posterType', 'printSize', 'selectedTemplate',
     'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
     'mapBgColor', 'mapStreetColor', 'mapWaterColor', 'mapLandColor',
@@ -125,6 +125,7 @@ interface StoreState {
     dedicationKerning: number;
     namesKerning: number;
     titleAllCaps: boolean;
+    locationAllCaps: boolean;
 
     // Preview Zoom
     previewZoom: number;
@@ -290,6 +291,7 @@ interface StoreState {
     setDedicationKerning: (kerning: number) => void;
     setNamesKerning: (kerning: number) => void;
     setTitleAllCaps: (v: boolean) => void;
+    setLocationAllCaps: (v: boolean) => void;
 
     // Poster type setters
     setPosterType: (type: 'starmap' | 'streetmap' | 'coloredmap') => void;
@@ -430,6 +432,7 @@ export const useStore = create<StoreState>((set) => ({
     dedicationKerning: 0.05,
     namesKerning: 0.15,
     titleAllCaps: false,
+    locationAllCaps: false,
 
     // Preview Zoom & Pan - Default Values
     previewZoom: 1.0,
@@ -579,6 +582,7 @@ export const useStore = create<StoreState>((set) => ({
             namesKerning: state.namesKerning,
             showNames: state.showNames,
             titleAllCaps: state.titleAllCaps,
+            locationAllCaps: state.locationAllCaps,
         };
         return {
             templateSettings: {
@@ -662,6 +666,7 @@ export const useStore = create<StoreState>((set) => ({
             namesKerning: state.namesKerning,
             showNames: state.showNames,
             titleAllCaps: state.titleAllCaps,
+            locationAllCaps: state.locationAllCaps,
         };
 
         // Save to localStorage
@@ -773,6 +778,7 @@ export const useStore = create<StoreState>((set) => ({
     setShowNames: (showNames) => set({ showNames }),
     setNamesKerning: (namesKerning) => set({ namesKerning }),
     setTitleAllCaps: (titleAllCaps) => set({ titleAllCaps }),
+    setLocationAllCaps: (locationAllCaps) => set({ locationAllCaps }),
     setTitleOffsetX: (titleOffsetX) => set({ titleOffsetX }),
     setTitleOffsetY: (titleOffsetY) => set({ titleOffsetY }),
     setSubtitleOffsetY: (subtitleOffsetY) => set({ subtitleOffsetY }),

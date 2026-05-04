@@ -64,7 +64,7 @@ const VectorStarMap: React.FC = () => {
         detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, dividerOffsetY, shapeOutlineWidth, showFrame, frameInset, frameWidth,
         titleFont, subtitleFont, detailsFont, dedicationFont, namesFont,
         titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
-        titleAllCaps,
+        titleAllCaps, locationAllCaps,
         showNames,
         mapBackgroundImage, borderStyle, selectedTemplate, starColor, mapInteriorColor,
         showDivider, dividerLength, dividerThickness,
@@ -110,7 +110,7 @@ const VectorStarMap: React.FC = () => {
         dedicationFont: s.dedicationFont, namesFont: s.namesFont,
         titleKerning: s.titleKerning, subtitleKerning: s.subtitleKerning,
         detailsKerning: s.detailsKerning, dedicationKerning: s.dedicationKerning, namesKerning: s.namesKerning,
-        titleAllCaps: s.titleAllCaps, showNames: s.showNames,
+        titleAllCaps: s.titleAllCaps, locationAllCaps: s.locationAllCaps, showNames: s.showNames,
         mapBackgroundImage: s.mapBackgroundImage, borderStyle: s.borderStyle,
         selectedTemplate: s.selectedTemplate, starColor: s.starColor, mapInteriorColor: s.mapInteriorColor,
         showDivider: s.showDivider, dividerLength: s.dividerLength, dividerThickness: s.dividerThickness,
@@ -1305,7 +1305,8 @@ const VectorStarMap: React.FC = () => {
             .attr('text-anchor', 'middle');
 
         const dateStr = customText.date || format(new Date(date), 'MMMM do, yyyy').toUpperCase();
-        const locStr = customText.location || (location ? location.toUpperCase() : '');
+        const rawLocStr = customText.location || (location ? location.toUpperCase() : '');
+        const locStr = locationAllCaps ? rawLocStr.toUpperCase() : rawLocStr;
         const coordsStr = customText.coords || `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
 
         // When only location + date are shown (no coords), render on ONE line with vertical separator.
@@ -1406,7 +1407,7 @@ const VectorStarMap: React.FC = () => {
                         const r = textEl.getBoundingClientRect();
                         textEl.style.visibility = 'hidden';
                         useStore.getState().setIsInlineEditing(true);
-                        setInlineEdit({ field: 'location', value: locStr, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
+                        setInlineEdit({ field: 'location', value: customText.location || locStr, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize, uppercase: locationAllCaps });
                         setActiveTypoField('details');
                     });
 
@@ -1443,7 +1444,7 @@ const VectorStarMap: React.FC = () => {
                             useStore.getState().setIsInlineEditing(true);
                             const f = side === -1 ? 'location' : 'date';
                             const v = side === -1 ? locStr : dateStr;
-                            setInlineEdit({ field: f, value: v, svgEl: target, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
+                            setInlineEdit({ field: f, value: f === 'location' ? (customText.location || v) : v, svgEl: target, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize, uppercase: f === 'location' ? locationAllCaps : undefined });
                             setActiveTypoField('details');
                         });
                 });
@@ -1460,7 +1461,7 @@ const VectorStarMap: React.FC = () => {
                             const r = textEl.getBoundingClientRect();
                             textEl.style.visibility = 'hidden';
                             useStore.getState().setIsInlineEditing(true);
-                            setInlineEdit({ field, value: text, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
+                            setInlineEdit({ field, value: field === 'location' ? (customText.location || text) : text, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize, uppercase: field === 'location' ? locationAllCaps : undefined });
                             setActiveTypoField('details');
                         });
                 });
@@ -1663,7 +1664,7 @@ const VectorStarMap: React.FC = () => {
         titleFont, subtitleFont, detailsFont, dedicationFont, namesFont, // Fonts
         titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize, // Sizes
         debouncedTitleKerning, debouncedSubtitleKerning, debouncedDetailsKerning, debouncedDedicationKerning, debouncedNamesKerning, // Kerning
-        titleAllCaps, // Title casing
+        titleAllCaps, locationAllCaps, // Text casing
         titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, // Offsets
         showNames, // Names toggle
         showDate, showLocation, showCoords, showDivider, dividerOffsetY, dividerLength, dividerThickness, vertSepOffsetY, showVertSep, vertSepHeight, vertSepThickness, // Toggles

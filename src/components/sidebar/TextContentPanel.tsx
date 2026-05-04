@@ -109,6 +109,7 @@ const TextContentPanel: React.FC = () => {
         showCoords, setShowCoords,
         showNames, setShowNames,
         customText, setCustomText,
+        locationAllCaps, setLocationAllCaps,
         showDivider, setShowDivider, dividerLength, setDividerLength, dividerThickness, setDividerThickness,
         showVertSep, setShowVertSep, vertSepHeight, setVertSepHeight, vertSepThickness, setVertSepThickness,
     } = useStore();
@@ -420,7 +421,18 @@ const TextContentPanel: React.FC = () => {
                                 />
                             </FormControl>
                             <FormControl>
-                                <FormLabel {...labelStyles}>Custom Location Text</FormLabel>
+                                <HStack justify="space-between" align="center" mb={2}>
+                                    <FormLabel {...labelStyles} mb={0}>Custom Location Text</FormLabel>
+                                    <HStack spacing={2}>
+                                        <Text fontSize="xs" color="gray.600" fontWeight="600">Full Caps</Text>
+                                        <Switch
+                                            size="sm"
+                                            isChecked={locationAllCaps}
+                                            onChange={(e) => setLocationAllCaps(e.target.checked)}
+                                            colorScheme="gray"
+                                        />
+                                    </HStack>
+                                </HStack>
                                 <Input
                                     value={customText.location}
                                     onChange={(e) => setCustomText('location', e.target.value)}

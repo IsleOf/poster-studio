@@ -273,6 +273,7 @@ const MainLayout: React.FC = () => {
                 // Names & text flags
                 if (typeof c.showNames === 'boolean') store.setShowNames(c.showNames);
                 if (typeof c.titleAllCaps === 'boolean') store.setTitleAllCaps(c.titleAllCaps);
+                if (typeof c.locationAllCaps === 'boolean') store.setLocationAllCaps(c.locationAllCaps);
                 // Shape
                 if (c.circleSize != null) store.setCircleSize(c.circleSize);
                 if (c.heartSize != null) store.setHeartSize(c.heartSize);

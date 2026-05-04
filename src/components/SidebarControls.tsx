@@ -618,6 +618,7 @@ const OrderSection: React.FC = () => {
                 titleFontSize: store.titleFontSize, subtitleFontSize: store.subtitleFontSize,
                 detailsFontSize: store.detailsFontSize,
                 customText: store.customText,
+                titleAllCaps: store.titleAllCaps, locationAllCaps: store.locationAllCaps,
                 showBorder: store.showBorder, showFrame: store.showFrame,
                 borderStyle: store.borderStyle, circleSize: store.circleSize,
                 showConstellations: store.showConstellations, showGrid: store.showGrid,
@@ -720,7 +721,7 @@ const OrderSection: React.FC = () => {
             namesOffsetY: s.namesOffsetY,
             heartDecorOffsetY: s.heartDecorOffsetY, dividerOffsetY: s.dividerOffsetY,
             // Names
-            showNames: s.showNames, titleAllCaps: s.titleAllCaps,
+            showNames: s.showNames, titleAllCaps: s.titleAllCaps, locationAllCaps: s.locationAllCaps,
             // Shape
             circleSize: s.circleSize, heartSize: s.heartSize, houseSize: s.houseSize,
             shapeOutlineWidth: s.shapeOutlineWidth, shapeOffsetY: s.shapeOffsetY,
