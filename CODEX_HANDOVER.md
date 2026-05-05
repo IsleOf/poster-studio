@@ -4,6 +4,8 @@ This document is a deep, file-by-file walkthrough of every part of the Poster St
 
 For current startup commands, production/local listing checks, and handoff checklist, read `docs/AGENT_RUNBOOK.md` first. It supersedes older scattered operational notes when they conflict.
 
+For product copy, mockup generation prompts, customer positioning, and profitable map-product expansion ideas, read `docs/CUSTOMER_PROFILE_JESSICA.md`. Use that profile when changing listing copy, default suggested texts, mockup assets, or design defaults.
+
 > Last updated: 2026-04-28
 > Scope: the entire repo at `/home/dev/poster-studio`
 > Audience: AI coding agents performing implementation, refactoring, debugging.

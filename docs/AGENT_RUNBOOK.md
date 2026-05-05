@@ -4,6 +4,10 @@ This is the operational handoff for coding agents. Read this before changing lis
 
 Last updated: 2026-05-01
 
+## Customer Profile For Product Decisions
+
+Use `docs/CUSTOMER_PROFILE_JESSICA.md` when changing listing copy, design defaults, title/subtitle suggestions, mockup prompts, or product expansion strategy. The target buyer is a high-income Etsy customer looking for modern, minimalist luxury and emotionally meaningful custom wall art.
+
 ## Current Backup
 
 - Git branch: `codex/backup-current-state-20260501`
