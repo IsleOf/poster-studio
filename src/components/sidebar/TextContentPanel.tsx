@@ -38,8 +38,129 @@ const HEART_MAP_TITLE_SUGGESTIONS = [
     'Together Anywhere',
 ];
 
+const HEART_MAP_SUBTITLE_SUGGESTIONS = [
+    'Our Story Began Here',
+    'Forever Starts Here',
+    'The Place That Changed Everything',
+    'Every Love Story Has a Place',
+    'The Beginning of Always',
+    'A Moment We Will Never Forget',
+    'Two Hearts, One Place',
+    'A Love Worth Every Mile',
+    'From This Place, Forever',
+    'Where My Heart Found Home',
+];
+
+const HOUSE_MAP_TITLE_SUGGESTIONS = [
+    'Our First Home',
+    'Home Sweet Home',
+    'Our Forever Home',
+    'Where Love Lives',
+    'The Place We Call Home',
+    'Our New Beginning',
+    'Home Is Here',
+    'The First Place We Called Ours',
+    'Our Little Home',
+    'Where Our Story Lives',
+    'Our Happy Place',
+    'The Door We Opened Together',
+    'A Place to Call Ours',
+    'New Home, New Memories',
+    'The Home We Built Together',
+    'Our Nest',
+    'The Address That Became Home',
+    'Where Family Begins',
+];
+
+const HOUSE_MAP_SUBTITLE_SUGGESTIONS = [
+    'The Place We Call Home',
+    'Our First Chapter Together',
+    'Where Love Lives',
+    'A New Beginning',
+    'Built on Love and Memories',
+    'Our Favorite Place to Be',
+    'The Start of Our Next Adventure',
+    'Home Is Wherever We Are Together',
+    'Made for Us',
+    'Established with Love',
+];
+
+const STREET_MAP_TITLE_SUGGESTIONS = [
+    'Our Happy Place',
+    'The Place That Matters',
+    'Life Is an Adventure With You',
+    'Our Little Corner of the World',
+    'The City That Made Us',
+    'Where Our Story Started',
+    'A Map of Us',
+    'City of Memories',
+    'The Streets We Know by Heart',
+    'Always Take the Scenic Route',
+    'Adventure Awaits',
+    'Our Favorite Place',
+    'The Place We Keep Coming Back To',
+    'Where We Belong',
+    'Home, Mapped',
+    'A City Worth Remembering',
+    'The Road That Led to You',
+    'Every Street Leads to You',
+];
+
+const STREET_MAP_SUBTITLE_SUGGESTIONS = [
+    'The Place That Matters',
+    'Life Is an Adventure With You...',
+    'A City Worth Remembering',
+    'Mapped With Love',
+    'Our Favorite Place on Earth',
+    'Where the Best Memories Live',
+    'The Streets That Tell Our Story',
+    'Always Worth the Journey',
+    'A Place We Will Never Forget',
+    'Made for the Places We Love',
+];
+
+const STAR_MAP_TITLE_SUGGESTIONS = [
+    'The Night We Met',
+    'The Night Our Stars Aligned',
+    'Written in the Stars',
+    'The Stars Aligned',
+    'The Night We Said I Do',
+    'Our Wedding Night',
+    'The Beginning of Forever',
+    'The Night Our Love Was Born',
+    'The Day You Were Born',
+    'The Night You Were Born',
+    'The Sky on Your Birthday',
+    'Welcome to the World',
+    'Our First Night as Three',
+    'A Moment in Time',
+    'Under These Stars',
+    'The Night Everything Changed',
+    'First Night of Forever',
+    'Love Under the Stars',
+    'The Universe Remembered',
+    'Our Special Night',
+];
+
+const STAR_MAP_SUBTITLE_SUGGESTIONS = [
+    'The Sky Above Us That Night',
+    'Under These Stars',
+    'The Moment Everything Changed',
+    'Our Story Began',
+    'Forever and Always',
+    'A Night to Remember',
+    'The Start of Something Beautiful',
+    'Love Written in the Stars',
+    'The Universe Had a Plan',
+    'A Moment We Will Never Forget',
+];
+
 function uniqueSuggestions(suggestions: string[]): string[] {
     return Array.from(new Set(suggestions));
+}
+
+function isMapDesign(context: { posterType: string }): boolean {
+    return context.posterType === 'streetmap' || context.posterType === 'coloredmap';
 }
 
 function generateSmartTitleSuggestions(
@@ -47,8 +168,14 @@ function generateSmartTitleSuggestions(
     date: Date,
     context: { posterType: string; maskShape: string },
 ): string[] {
-    if ((context.posterType === 'streetmap' || context.posterType === 'coloredmap') && context.maskShape === 'heart') {
+    if (isMapDesign(context) && context.maskShape === 'heart') {
         return HEART_MAP_TITLE_SUGGESTIONS;
+    }
+    if (isMapDesign(context) && context.maskShape === 'house') {
+        return HOUSE_MAP_TITLE_SUGGESTIONS;
+    }
+    if (context.posterType === 'streetmap' && context.maskShape === 'rect') {
+        return STREET_MAP_TITLE_SUGGESTIONS;
     }
 
     const suggestions: string[] = [];
@@ -91,17 +218,25 @@ function generateSmartTitleSuggestions(
         suggestions.push("Winter Stars", "Stars in the Winter Sky");
     }
 
-    const generic = [
-        "Our Night Sky", "The Night We Met", "Where It All Began", "The Day You Were Born",
-        "Our Love Story", "Written in the Stars", "The Stars Aligned", "A Moment in Time",
-        "Our Special Night", "The Beginning of Forever", "Love Under the Stars",
-    ];
-    const seen = new Set(suggestions);
-    for (const g of generic) { if (!seen.has(g)) suggestions.push(g); }
+    suggestions.push(...STAR_MAP_TITLE_SUGGESTIONS);
     return uniqueSuggestions(suggestions);
 }
 
-function generateSmartSubtitleSuggestions(location: string, date: Date): string[] {
+function generateSmartSubtitleSuggestions(
+    location: string,
+    date: Date,
+    context: { posterType: string; maskShape: string },
+): string[] {
+    if (isMapDesign(context) && context.maskShape === 'heart') {
+        return HEART_MAP_SUBTITLE_SUGGESTIONS;
+    }
+    if (isMapDesign(context) && context.maskShape === 'house') {
+        return HOUSE_MAP_SUBTITLE_SUGGESTIONS;
+    }
+    if (context.posterType === 'streetmap' && context.maskShape === 'rect') {
+        return STREET_MAP_SUBTITLE_SUGGESTIONS;
+    }
+
     const suggestions: string[] = [];
     const month = date.getMonth() + 1;
     const day = date.getDate();
@@ -118,14 +253,8 @@ function generateSmartSubtitleSuggestions(location: string, date: Date): string[
         suggestions.push("Where the Water Meets the Stars", "Salt Air and Starlight");
     }
 
-    const generic = [
-        "A Moment to Remember", "Under These Stars", "Our Story Began", "Forever and Always",
-        "The Day Everything Changed", "When Our Hearts Met", "The Start of Something Beautiful",
-        "Our Universe", "Love Under the Stars", "A Night to Remember",
-    ];
-    const seen = new Set(suggestions);
-    for (const g of generic) { if (!seen.has(g)) suggestions.push(g); }
-    return suggestions;
+    suggestions.push(...STAR_MAP_SUBTITLE_SUGGESTIONS);
+    return uniqueSuggestions(suggestions);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -162,12 +291,20 @@ const TextContentPanel: React.FC = () => {
         () => generateSmartTitleSuggestions(location, date, { posterType, maskShape }),
         [location, date, posterType, maskShape],
     );
-    const subtitleSuggestions = useMemo(() => generateSmartSubtitleSuggestions(location, date), [location, date]);
+    const subtitleSuggestions = useMemo(
+        () => generateSmartSubtitleSuggestions(location, date, { posterType, maskShape }),
+        [location, date, posterType, maskShape],
+    );
     const titleQuery = (customText.title || title).toLowerCase();
     const filteredTitleSuggestions = titleSuggestions.filter(s => s.toLowerCase().includes(titleQuery));
     const visibleTitleSuggestions = showAllTitleSuggestions || filteredTitleSuggestions.length === 0
         ? titleSuggestions
         : filteredTitleSuggestions;
+    const subtitleQuery = (customText.subtitle || subtitle).toLowerCase();
+    const filteredSubtitleSuggestions = subtitleSuggestions.filter(s => s.toLowerCase().includes(subtitleQuery));
+    const visibleSubtitleSuggestions = showAllSubtitleSuggestions || filteredSubtitleSuggestions.length === 0
+        ? subtitleSuggestions
+        : filteredSubtitleSuggestions;
 
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newDate = new Date(e.target.value);
@@ -342,10 +479,7 @@ const TextContentPanel: React.FC = () => {
                             bg="white" border="1px" borderColor="gray.300" borderRadius="md"
                             boxShadow="lg" maxH="48" overflowY="auto"
                         >
-                            {(showAllSubtitleSuggestions
-                                ? subtitleSuggestions
-                                : subtitleSuggestions.filter(s => s.toLowerCase().includes((customText.subtitle || subtitle).toLowerCase()))
-                            ).map((suggestion, index) => (
+                            {visibleSubtitleSuggestions.map((suggestion, index) => (
                                 <ListItem key={index} px={4} py={2}
                                     _hover={{ bg: 'gray.100', cursor: 'pointer' }} fontSize="sm"
                                     onMouseDown={() => {
