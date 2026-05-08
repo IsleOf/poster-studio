@@ -17,6 +17,7 @@
     "mockups:compose": "python3 scripts/composite-mockups.py",
     "prod:pull-state": "bash scripts/pull-production-state.sh",
     "prod:health": "bash scripts/check-production-health.sh",
+    "prod:apply-hardening": "bash scripts/apply-production-hardening.sh",
     "test": "npx playwright test",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",

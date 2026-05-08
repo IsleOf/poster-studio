@@ -55,6 +55,33 @@ Post-cleanup health:
 
 Do not reinstall global AI/coding-agent stacks on the production host. Keep production limited to Poster Studio runtime dependencies, Nginx, SSL, tunneling/network services, and explicit monitoring/deployment tools.
 
+The cleanup exposed one deployment hygiene issue: production had been resolving `zod` from the old parent `/home/ubuntu/node_modules` tree instead of from `/home/ubuntu/poster-studio/node_modules`. After removing the parent dependency tree, the API initially failed with `ERR_MODULE_NOT_FOUND: Cannot find package 'zod'`. Fixed by installing `zod` into `/home/ubuntu/poster-studio`.
+
+Future deploy rule: production dependencies must be installed inside `/home/ubuntu/poster-studio` only. Do not rely on `/home/ubuntu/node_modules`.
+
+## 2026-05-08 Production Hardening
+
+Applied low-risk host guardrails:
+
+- Added systemd override at `/etc/systemd/system/poster-studio-api.service.d/override.conf`.
+- Changed API restart policy to `Restart=always`.
+- Set API memory ceilings: `MemoryMax=750M`, `MemorySwapMax=1500M`.
+- Added journald cap at `/etc/systemd/journald.conf.d/poster-studio.conf`: `SystemMaxUse=300M`, `RuntimeMaxUse=100M`, `MaxRetentionSec=14day`.
+- Added hourly maintenance cron at `/etc/cron.d/poster-studio-maintenance`.
+- Added `/usr/local/bin/poster-studio-maintenance.sh` to log disk/memory status and remove only temporary `/tmp/poster-studio-*` scratch files plus old npm logs.
+
+Reapply from local:
+
+```bash
+npm run prod:apply-hardening
+```
+
+Post-hardening checks passed:
+
+- `https://themappedmoment.com/api/health`
+- `npm run listings:audit -- --prod-only`
+- `npm run prod:health`
+
 ## Pull Production State To Local
 
 Run from `/home/dev/poster-studio`:
