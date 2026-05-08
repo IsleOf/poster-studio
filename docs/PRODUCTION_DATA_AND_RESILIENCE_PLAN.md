@@ -33,6 +33,28 @@ Production health checked on 2026-05-08 with `npm run prod:health`:
 
 Conclusion: the current production crash risk is mostly the small EC2 memory/disk headroom plus accumulated user-level caches. Render storage is small today, but 300-DPI PNG output can become a disk pressure problem as order volume grows.
 
+## 2026-05-08 Production Cleanup
+
+Removed old non-Poster-Studio AI/agent/news-video data from `/home/ubuntu` after confirming it was unrelated to the live app:
+
+- OpenClaw user services and data: `.openclaw`, `.config/clawhub`, `openclaw-memory`, OpenClaw npm global package, OpenClaw user systemd units.
+- Old OpenCode user services/data and local caches.
+- Old Telegram/Claw bot scripts and user service.
+- Old `ai-news-video`, `cmd-server`, `autonomous_work`, top-level home `node_modules`, and related one-off scripts/output files.
+- Old user Python ML/Whisper/Torch packages and caches.
+- Old Playwright/Puppeteer/HuggingFace/npm caches unrelated to the production app.
+
+Post-cleanup health:
+
+- Root disk improved from 76% used to 25% used.
+- Free root disk improved from 6.8 GB to 22 GB.
+- Available memory improved from 268 MiB to 424 MiB.
+- `poster-studio-api.service` remained active.
+- `https://themappedmoment.com/api/health` returned `{"ok":true,...}`.
+- `npm run listings:audit -- --prod-only` passed.
+
+Do not reinstall global AI/coding-agent stacks on the production host. Keep production limited to Poster Studio runtime dependencies, Nginx, SSL, tunneling/network services, and explicit monitoring/deployment tools.
+
 ## Pull Production State To Local
 
 Run from `/home/dev/poster-studio`:
