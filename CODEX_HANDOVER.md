@@ -4,6 +4,8 @@ This document is a deep, file-by-file walkthrough of every part of the Poster St
 
 For current startup commands, production/local listing checks, and handoff checklist, read `docs/AGENT_RUNBOOK.md` first. It supersedes older scattered operational notes when they conflict.
 
+For production-authored template syncing, production health checks, and render-storage/object-storage planning, read `docs/PRODUCTION_DATA_AND_RESILIENCE_PLAN.md`. As of 2026-05-08, production is the source of truth for manually edited templates; pull production state locally with `npm run prod:pull-state` before debugging template parity.
+
 For product copy, mockup generation prompts, customer positioning, and profitable map-product expansion ideas, read `docs/CUSTOMER_PROFILE_JESSICA.md`. Use that profile when changing listing copy, default suggested texts, mockup assets, or design defaults.
 
 > Last updated: 2026-04-28
