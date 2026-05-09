@@ -59,6 +59,20 @@ The cleanup exposed one deployment hygiene issue: production had been resolving 
 
 Future deploy rule: production dependencies must be installed inside `/home/ubuntu/poster-studio` only. Do not rely on `/home/ubuntu/node_modules`.
 
+Check this rule from local:
+
+```bash
+npm run prod:integrity
+```
+
+This verifies that:
+
+- `/home/ubuntu/node_modules` does not exist.
+- Runtime packages resolve from `/home/ubuntu/poster-studio/node_modules`.
+- `poster-studio-api.service` is active.
+- Local production API health passes.
+- Public production listing API audit passes.
+
 ## 2026-05-08 Production Hardening
 
 Applied low-risk host guardrails:

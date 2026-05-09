@@ -18,6 +18,7 @@
     "prod:pull-state": "bash scripts/pull-production-state.sh",
     "prod:health": "bash scripts/check-production-health.sh",
     "prod:apply-hardening": "bash scripts/apply-production-hardening.sh",
+    "prod:integrity": "bash scripts/check-production-integrity.sh",
     "test": "npx playwright test",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
