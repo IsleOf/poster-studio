@@ -126,7 +126,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': bgColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.4, 13, 4.8, 18, 4.8] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.6, 13, 2.8, 16, 6.2, 18, 9.0] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -140,7 +140,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': bgColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 3.2, 13, 7.2, 18, 7.2] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 13, 4.6, 16, 10.0, 18, 14.0] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -157,8 +157,9 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                     'line-width': [
                         'interpolate', ['linear'], ['zoom'],
                         7, ['match', ['get', 'class'], 'motorway', 3.8, 'trunk', 3.2, 'primary', 2.8, 2.4],
-                        13, ['match', ['get', 'class'], 'motorway', 12.8, 'trunk', 11.4, 'primary', 10.0, 'secondary', 8.8, 7.8],
-                        18, ['match', ['get', 'class'], 'motorway', 12.8, 'trunk', 11.4, 'primary', 10.0, 'secondary', 8.8, 7.8],
+                        13, ['match', ['get', 'class'], 'motorway', 8.6, 'trunk', 7.8, 'primary', 6.6, 'secondary', 5.6, 4.8],
+                        16, ['match', ['get', 'class'], 'motorway', 15.0, 'trunk', 13.5, 'primary', 12.0, 'secondary', 10.4, 9.0],
+                        18, ['match', ['get', 'class'], 'motorway', 22.0, 'trunk', 20.0, 'primary', 17.5, 'secondary', 15.0, 12.8],
                     ] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
@@ -173,7 +174,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': detailStroke,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.4, 13, 2.4, 18, 2.4] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.85, 13, 1.35, 16, 3.3, 18, 5.0] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -187,7 +188,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': minorStroke,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.8, 13, 4.0, 18, 4.0] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.25, 13, 2.35, 16, 5.6, 18, 8.0] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -204,8 +205,9 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                     'line-width': [
                         'interpolate', ['linear'], ['zoom'],
                         7, ['match', ['get', 'class'], 'motorway', 2.4, 'trunk', 2.0, 'primary', 1.7, 1.2],
-                        13, ['match', ['get', 'class'], 'motorway', 9.4, 'trunk', 8.2, 'primary', 7.0, 'secondary', 5.8, 4.8],
-                        18, ['match', ['get', 'class'], 'motorway', 9.4, 'trunk', 8.2, 'primary', 7.0, 'secondary', 5.8, 4.8],
+                        13, ['match', ['get', 'class'], 'motorway', 6.2, 'trunk', 5.4, 'primary', 4.5, 'secondary', 3.6, 2.8],
+                        16, ['match', ['get', 'class'], 'motorway', 11.0, 'trunk', 10.0, 'primary', 8.6, 'secondary', 7.2, 5.8],
+                        18, ['match', ['get', 'class'], 'motorway', 16.0, 'trunk', 14.5, 'primary', 12.5, 'secondary', 10.5, 8.5],
                     ] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
