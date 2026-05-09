@@ -14,7 +14,7 @@ describe('calculateMapExportTarget', () => {
 
         expect(target.targetPx).toBe(3600);
         expect(target.rawTargetPx).toBeLessThan(3600);
-        expect(target.detailScale).toBeGreaterThan(2);
+        expect(target.detailScale).toBeGreaterThan(3);
     });
 
     it('requests a larger map capture for large print sizes', () => {
@@ -28,7 +28,7 @@ describe('calculateMapExportTarget', () => {
         });
 
         expect(target.rawTargetPx).toBe(9450);
-        expect(target.targetPx).toBe(9450);
-        expect(target.detailScale).toBeGreaterThan(2);
+        expect(target.targetPx).toBe(12000);
+        expect(target.detailScale).toBeGreaterThan(3);
     });
 });

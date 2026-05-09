@@ -17,8 +17,9 @@ export type MapExportTarget = {
 
 const SVG_WIDTH = 1200;
 const BASE_CAPTURE_PX = 3600;
-const DEFAULT_MAX_CAPTURE_PX = 10000;
-const MIN_CARTOGRAPHIC_DETAIL_SCALE = 2.6;
+const DEFAULT_MAX_CAPTURE_PX = 12000;
+const EXPORT_SUPERSAMPLE = 1.35;
+const MIN_CARTOGRAPHIC_DETAIL_SCALE = 3.4;
 
 export function calculateMapExportTarget({
     printSize,
@@ -59,7 +60,8 @@ export function calculateMapExportTarget({
     // the clipped viewport, otherwise moved maps get upscaled at print time.
     const imageSvgSize = mapRadius * 3;
     const rawTargetPx = Math.ceil(imageSvgSize * outputScale);
-    const targetPx = Math.max(minPx, Math.min(maxPx, rawTargetPx));
+    const supersampledTargetPx = Math.ceil(rawTargetPx * EXPORT_SUPERSAMPLE);
+    const targetPx = Math.max(minPx, Math.min(maxPx, supersampledTargetPx));
 
     return {
         targetPx,
