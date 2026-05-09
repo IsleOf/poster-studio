@@ -73,6 +73,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
     const majorRoadClasses = ['motorway', 'trunk', 'primary', 'secondary'];
     const smallRoadClasses = ['tertiary', 'minor', 'residential', 'unclassified'];
     const detailRoadClasses = ['service'];
+    const minorStroke = smallRoadColor || '#4a4a4a';
+    const detailStroke = detailRoadColor || '#6f6f6f';
 
     return {
         version: 8,
@@ -124,7 +126,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': bgColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.6, 14, 3.2, 18, 6.4] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.6, 13, 2.8, 18, 2.8] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -138,7 +140,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': bgColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 14, 5.2, 18, 9.8] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 13, 4.6, 18, 4.6] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -155,8 +157,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                     'line-width': [
                         'interpolate', ['linear'], ['zoom'],
                         7, ['match', ['get', 'class'], 'motorway', 3.8, 'trunk', 3.2, 'primary', 2.8, 2.4],
-                        14, ['match', ['get', 'class'], 'motorway', 9.8, 'trunk', 8.8, 'primary', 7.4, 'secondary', 6.2, 5.2],
-                        18, ['match', ['get', 'class'], 'motorway', 18, 'trunk', 16, 'primary', 13, 'secondary', 10.5, 8.5],
+                        13, ['match', ['get', 'class'], 'motorway', 8.6, 'trunk', 7.8, 'primary', 6.6, 'secondary', 5.6, 4.8],
+                        18, ['match', ['get', 'class'], 'motorway', 8.6, 'trunk', 7.8, 'primary', 6.6, 'secondary', 5.6, 4.8],
                     ] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
@@ -170,8 +172,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 filter: ['in', ['get', 'class'], ['literal', detailRoadClasses]] as maplibregl.ExpressionSpecification,
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
-                    'line-color': detailRoadColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.85, 14, 1.6, 18, 3.0] as maplibregl.ExpressionSpecification,
+                    'line-color': detailStroke,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.85, 13, 1.35, 18, 1.35] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -184,8 +186,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 filter: ['in', ['get', 'class'], ['literal', smallRoadClasses]] as maplibregl.ExpressionSpecification,
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
-                    'line-color': smallRoadColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.25, 14, 2.8, 18, 5.0] as maplibregl.ExpressionSpecification,
+                    'line-color': minorStroke,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.25, 13, 2.35, 18, 2.35] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -202,8 +204,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                     'line-width': [
                         'interpolate', ['linear'], ['zoom'],
                         7, ['match', ['get', 'class'], 'motorway', 2.4, 'trunk', 2.0, 'primary', 1.7, 1.2],
-                        14, ['match', ['get', 'class'], 'motorway', 7.2, 'trunk', 6.2, 'primary', 5.0, 'secondary', 4.0, 3.1],
-                        18, ['match', ['get', 'class'], 'motorway', 14, 'trunk', 12, 'primary', 9.5, 'secondary', 7.4, 5.8],
+                        13, ['match', ['get', 'class'], 'motorway', 6.2, 'trunk', 5.4, 'primary', 4.5, 'secondary', 3.6, 2.8],
+                        18, ['match', ['get', 'class'], 'motorway', 6.2, 'trunk', 5.4, 'primary', 4.5, 'secondary', 3.6, 2.8],
                     ] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
