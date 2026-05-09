@@ -73,8 +73,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
     const majorRoadClasses = ['motorway', 'trunk', 'primary', 'secondary'];
     const smallRoadClasses = ['tertiary', 'minor', 'residential', 'unclassified'];
     const detailRoadClasses = ['service'];
-    const minorStroke = smallRoadColor || '#4a4a4a';
-    const detailStroke = detailRoadColor || '#6f6f6f';
+    const minorStroke = !smallRoadColor || smallRoadColor === '#1a1a1a' ? '#666666' : smallRoadColor;
+    const detailStroke = !detailRoadColor || detailRoadColor === '#2a2a2a' ? '#8a8a8a' : detailRoadColor;
 
     return {
         version: 8,
@@ -126,7 +126,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': bgColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.6, 13, 2.8, 18, 2.8] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.4, 13, 4.8, 18, 4.8] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -140,7 +140,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': bgColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 13, 4.6, 18, 4.6] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 3.2, 13, 7.2, 18, 7.2] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -157,8 +157,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                     'line-width': [
                         'interpolate', ['linear'], ['zoom'],
                         7, ['match', ['get', 'class'], 'motorway', 3.8, 'trunk', 3.2, 'primary', 2.8, 2.4],
-                        13, ['match', ['get', 'class'], 'motorway', 8.6, 'trunk', 7.8, 'primary', 6.6, 'secondary', 5.6, 4.8],
-                        18, ['match', ['get', 'class'], 'motorway', 8.6, 'trunk', 7.8, 'primary', 6.6, 'secondary', 5.6, 4.8],
+                        13, ['match', ['get', 'class'], 'motorway', 12.8, 'trunk', 11.4, 'primary', 10.0, 'secondary', 8.8, 7.8],
+                        18, ['match', ['get', 'class'], 'motorway', 12.8, 'trunk', 11.4, 'primary', 10.0, 'secondary', 8.8, 7.8],
                     ] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
@@ -173,7 +173,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': detailStroke,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.85, 13, 1.35, 18, 1.35] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.4, 13, 2.4, 18, 2.4] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -187,7 +187,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': minorStroke,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.25, 13, 2.35, 18, 2.35] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.8, 13, 4.0, 18, 4.0] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },
@@ -204,8 +204,8 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                     'line-width': [
                         'interpolate', ['linear'], ['zoom'],
                         7, ['match', ['get', 'class'], 'motorway', 2.4, 'trunk', 2.0, 'primary', 1.7, 1.2],
-                        13, ['match', ['get', 'class'], 'motorway', 6.2, 'trunk', 5.4, 'primary', 4.5, 'secondary', 3.6, 2.8],
-                        18, ['match', ['get', 'class'], 'motorway', 6.2, 'trunk', 5.4, 'primary', 4.5, 'secondary', 3.6, 2.8],
+                        13, ['match', ['get', 'class'], 'motorway', 9.4, 'trunk', 8.2, 'primary', 7.0, 'secondary', 5.8, 4.8],
+                        18, ['match', ['get', 'class'], 'motorway', 9.4, 'trunk', 8.2, 'primary', 7.0, 'secondary', 5.8, 4.8],
                     ] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
@@ -736,12 +736,15 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         const map = mapRef.current;
         if (!map || !map.isStyleLoaded() || mapStyleUrl !== null) return;
         if (mapColorPreset === 'design2') {
+            const minorRoadColor = !mapSmallRoadColor || mapSmallRoadColor === '#1a1a1a' ? '#666666' : mapSmallRoadColor;
+            const detailRoadColor = !mapDetailRoadColor || mapDetailRoadColor === '#2a2a2a' ? '#8a8a8a' : mapDetailRoadColor;
+
             map.setPaintProperty('background', 'background-color', mapBgColor);
             if (map.getLayer('landuse')) map.setPaintProperty('landuse', 'fill-color', mapLandColor);
             if (map.getLayer('water')) map.setPaintProperty('water', 'fill-color', mapWaterColor);
             if (map.getLayer('waterway')) map.setPaintProperty('waterway', 'line-color', mapWaterColor);
-            if (map.getLayer('roads_detail')) map.setPaintProperty('roads_detail', 'line-color', mapDetailRoadColor);
-            if (map.getLayer('roads_small')) map.setPaintProperty('roads_small', 'line-color', mapSmallRoadColor);
+            if (map.getLayer('roads_detail')) map.setPaintProperty('roads_detail', 'line-color', detailRoadColor);
+            if (map.getLayer('roads_small')) map.setPaintProperty('roads_small', 'line-color', minorRoadColor);
             if (map.getLayer('roads_major')) map.setPaintProperty('roads_major', 'line-color', mapMainRoadColor || mapStreetColor);
         } else if (!activePreset?.customStyle) {
             map.setPaintProperty('background', 'background-color', mapBgColor);
