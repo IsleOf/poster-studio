@@ -124,7 +124,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': detailRoadColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.3, 14, 0.7, 18, 1.25] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.45, 14, 0.95, 18, 1.6] as maplibregl.ExpressionSpecification,
                     'line-opacity': 0.94,
                 },
             },
@@ -138,7 +138,7 @@ function createDesign2Style(colors: Design2MapColors): maplibregl.StyleSpecifica
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
                 paint: {
                     'line-color': smallRoadColor,
-                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.4, 14, 1.05, 18, 1.9] as maplibregl.ExpressionSpecification,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.7, 14, 1.45, 18, 2.65] as maplibregl.ExpressionSpecification,
                     'line-opacity': 1,
                 },
             },

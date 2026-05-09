@@ -51,6 +51,35 @@ const DownloadButton: React.FC = () => {
     const getSvgEl = () =>
         document.getElementById('poster-preview')?.querySelector('svg') as SVGSVGElement | null;
 
+    const waitForImageDecode = (src: string): Promise<void> => new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = src;
+    });
+
+    const waitForSvgMapImage = async (src: string): Promise<void> => {
+        const deadline = Date.now() + 8000;
+        while (Date.now() < deadline) {
+            const svgEl = getSvgEl();
+            const images = Array.from(svgEl?.querySelectorAll('image') ?? []);
+            const hasHighResImage = images.some(image => {
+                const href = image.getAttribute('href')
+                    || image.getAttribute('xlink:href')
+                    || (image as SVGImageElement).href?.baseVal;
+                return href === src;
+            });
+
+            if (hasHighResImage) {
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                return;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        console.warn('Timed out waiting for high-res map image to appear in SVG; export may use preview map image.');
+    };
+
     /** Ensure the map background is captured at print-size resolution before rendering. */
     const ensureHighResMap = async (dpi: number): Promise<() => void> => {
         if (posterType !== 'starmap' && captureHighResFn) {
@@ -68,8 +97,9 @@ const DownloadButton: React.FC = () => {
                     targetPx: target.targetPx,
                     detailScale: target.detailScale,
                 });
+                await waitForImageDecode(highResUrl);
                 setMapBackgroundImage(highResUrl);
-                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                await waitForSvgMapImage(highResUrl);
                 return () => setMapBackgroundImage(previousMapImage);
             } catch (e) {
                 console.warn('High-res map capture failed, using preview image:', e);
