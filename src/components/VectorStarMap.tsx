@@ -9,6 +9,11 @@ import { useShallow } from 'zustand/react/shallow';
 import { getProjectionRotation } from '../utils/astronomy';
 import { format } from 'date-fns';
 import { useDebounce } from '../hooks/useDebounce';
+import {
+    isVectorStreetMapEnabled,
+    renderVectorStreetMap,
+    type VectorStreetMapRender,
+} from '../utils/vectorStreetMapRenderer';
 
 interface StarFeature {
     type: 'Feature';
@@ -38,6 +43,7 @@ const VectorStarMap: React.FC = () => {
     const inlineEditInputRef = useRef<HTMLInputElement>(null);
     const [starsData, setStarsData] = useState<any>(null);
     const [constellationsData, setConstellationsData] = useState<any>(null);
+    const [vectorStreetMap, setVectorStreetMap] = useState<VectorStreetMapRender | null>(null);
 
     // Snap guide line visibility (shown while dragging shape near vertical center)
     const [snapGuideX, setSnapGuideX] = useState(false);
@@ -72,7 +78,9 @@ const VectorStarMap: React.FC = () => {
         showVertSep, vertSepHeight, vertSepThickness, setShowVertSep, setVertSepHeight, setVertSepThickness,
         setTitleOffsetX, setTitleOffsetY, setSubtitleOffsetY, setDetailsOffsetY, setDedicationOffsetY, setHeartDecorOffsetY, setDividerOffsetY, setDividerLength, setDividerThickness,
         posterType, mapImageOffsetX, mapImageOffsetY, mapImageOpacity, setMapImageOffsetX, setMapImageOffsetY,
-        mapStreetColor, setCustomText,
+        mapCenterLat, mapCenterLng, mapZoom, mapBearing, mapColorPreset,
+        mapBgColor, mapStreetColor, mapWaterColor, mapLandColor, mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
+        setCustomText,
         setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setNamesFontSize,
         setNamesOffsetY,
         setIsInlineEditing,
@@ -117,7 +125,11 @@ const VectorStarMap: React.FC = () => {
         vertSepOffsetY: s.vertSepOffsetY,
         showVertSep: s.showVertSep, vertSepHeight: s.vertSepHeight, vertSepThickness: s.vertSepThickness,
         posterType: s.posterType, mapImageOffsetX: s.mapImageOffsetX, mapImageOffsetY: s.mapImageOffsetY,
-        mapImageOpacity: s.mapImageOpacity, mapStreetColor: s.mapStreetColor,
+        mapImageOpacity: s.mapImageOpacity,
+        mapCenterLat: s.mapCenterLat, mapCenterLng: s.mapCenterLng, mapZoom: s.mapZoom, mapBearing: s.mapBearing,
+        mapColorPreset: s.mapColorPreset,
+        mapBgColor: s.mapBgColor, mapStreetColor: s.mapStreetColor, mapWaterColor: s.mapWaterColor, mapLandColor: s.mapLandColor,
+        mapMainRoadColor: s.mapMainRoadColor, mapSmallRoadColor: s.mapSmallRoadColor, mapDetailRoadColor: s.mapDetailRoadColor,
         showLocationPin: s.showLocationPin, locationPinSize: s.locationPinSize,
         locationPinOffsetX: s.locationPinOffsetX, locationPinOffsetY: s.locationPinOffsetY,
         pendingGlyphForInlineEdit: s.pendingGlyphForInlineEdit,
@@ -205,6 +217,56 @@ const VectorStarMap: React.FC = () => {
     const [rW, rH] = printSize.ratio.split('/').map(Number);
     const ratioVal = rW / rH;
     const height = width / ratioVal;
+    const useVectorStreetMap = isVectorStreetMapEnabled()
+        && posterType === 'streetmap'
+        && mapColorPreset === 'design2';
+
+    useEffect(() => {
+        if (!useVectorStreetMap) {
+            setVectorStreetMap(null);
+            return;
+        }
+
+        let cancelled = false;
+        const RECT_MAP_H = height * 0.74;
+        const RECT_MAP_PAD = width * 0.0625;
+        const RECT_MAP_INNER_W = width - 2 * RECT_MAP_PAD;
+        const baseMapRadius = Math.min(width, height) * 0.4;
+        const mapRadius = maskShape === 'rect' ? RECT_MAP_INNER_W / 2 : baseMapRadius * (
+            maskShape === 'circle' ? debouncedCircleSize :
+            maskShape === 'heart' ? debouncedHeartSize :
+            debouncedHouseSize
+        );
+        const center = maskShape === 'rect'
+            ? [width / 2, RECT_MAP_PAD + (RECT_MAP_H - 2 * RECT_MAP_PAD) / 2]
+            : [width / 2 + debouncedShapeOffsetX, (height * 0.45) + debouncedShapeOffsetY];
+        const imgSize = mapRadius * 3;
+
+        renderVectorStreetMap({
+            lng: mapCenterLng,
+            lat: mapCenterLat,
+            zoom: mapZoom,
+            bearing: mapBearing,
+            x: center[0] - imgSize / 2 + mapImageOffsetX,
+            y: center[1] - imgSize / 2 + mapImageOffsetY,
+            size: imgSize,
+        })
+            .then(result => { if (!cancelled) setVectorStreetMap(result); })
+            .catch(error => {
+                if (!cancelled) {
+                    console.warn('Vector street map render failed; raster renderer remains available.', error);
+                    setVectorStreetMap(null);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        useVectorStreetMap, width, height, maskShape, debouncedCircleSize, debouncedHeartSize, debouncedHouseSize,
+        debouncedShapeOffsetX, debouncedShapeOffsetY, mapCenterLng, mapCenterLat, mapZoom, mapBearing,
+        mapImageOffsetX, mapImageOffsetY,
+    ]);
 
     // Fetch Data Effect (Runs once) — Cache API for offline support + faster repeat visits
     useEffect(() => {
@@ -364,7 +426,52 @@ const VectorStarMap: React.FC = () => {
         const MAP_EDGE_ZONE = 44; // px ring at shape boundary reserved for shape-drag
 
         // Background Image or Color
-        if (mapBackgroundImage) {
+        if (useVectorStreetMap && vectorStreetMap) {
+            mapContent.append('rect')
+                .attr('x', center[0] - mapRadius * 1.5 + mapImageOffsetX)
+                .attr('y', center[1] - mapRadius * 1.5 + mapImageOffsetY)
+                .attr('width', mapRadius * 3)
+                .attr('height', mapRadius * 3)
+                .attr('fill', mapBgColor || '#ffffff');
+
+            if (vectorStreetMap.landuseD) {
+                mapContent.append('path')
+                    .attr('d', vectorStreetMap.landuseD)
+                    .attr('fill', mapLandColor || '#b6b6b6')
+                    .attr('fill-rule', 'evenodd')
+                    .attr('opacity', 0.82);
+            }
+            if (vectorStreetMap.waterD) {
+                mapContent.append('path')
+                    .attr('d', vectorStreetMap.waterD)
+                    .attr('fill', mapWaterColor || '#8f8f8f')
+                    .attr('fill-rule', 'evenodd');
+            }
+
+            const roadGroup = mapContent.append('g')
+                .attr('fill', 'none')
+                .attr('stroke-linecap', 'round')
+                .attr('stroke-linejoin', 'round');
+
+            if (vectorStreetMap.detailRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.detailRoadD)
+                    .attr('stroke', mapDetailRoadColor || '#8a8a8a')
+                    .attr('stroke-width', vectorStreetMap.detailRoadWidth);
+            }
+            if (vectorStreetMap.smallRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.smallRoadD)
+                    .attr('stroke', mapSmallRoadColor || '#666666')
+                    .attr('stroke-width', vectorStreetMap.smallRoadWidth);
+            }
+            if (vectorStreetMap.majorRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.majorRoadD)
+                    .attr('stroke', mapMainRoadColor || mapStreetColor || '#111111')
+                    .attr('stroke-width', vectorStreetMap.majorRoadWidth);
+            }
+        } else if (mapBackgroundImage) {
             // Use 3x radius so there's plenty of room to drag the image within the shape
             const imgSize = mapRadius * 3;
             let imgOffsetX = mapImageOffsetX;
@@ -533,7 +640,7 @@ const VectorStarMap: React.FC = () => {
         }
 
         // Location Pin — small red heart, draggable
-        if (showLocationPin && posterType !== 'starmap' && mapBackgroundImage) {
+        if (showLocationPin && posterType !== 'starmap' && (mapBackgroundImage || (useVectorStreetMap && vectorStreetMap))) {
             const pinScale = locationPinSize / heartOrigWidth;
             const pinX = center[0] + locationPinOffsetX;
             const pinY = center[1] + locationPinOffsetY;
@@ -1671,6 +1778,9 @@ const VectorStarMap: React.FC = () => {
         showHeartDecor, // Decorative heart below text
         debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, maskShape, // Shape — textStartY depends on these (shapeOffsetY removed: text is now decoupled from shape position)
         textColor, width, height, frameInset, // Global
+        useVectorStreetMap, vectorStreetMap, mapBgColor, mapWaterColor, mapLandColor,
+        mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor, mapStreetColor,
+        mapImageOffsetX, mapImageOffsetY,
         selectedTemplate, // Template
         setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setNamesFontSize, setCustomText, setInlineEdit, // Stable setters
         inlineEdit, // Guard: effect is skipped while editing (inlineEdit !== null), re-runs when it closes
