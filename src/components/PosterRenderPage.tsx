@@ -9,7 +9,9 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
 import VectorStarMap from './VectorStarMap';
+import StreetMapCapture from './StreetMapCapture';
 import { renderPosterToBlob } from '../utils/renderPoster';
+import { calculateMapExportTarget } from '../utils/mapExportSizing';
 
 declare global {
     interface Window {
@@ -47,8 +49,13 @@ function applyDesignState(state: Record<string, unknown>) {
 
 const PosterRenderPage: React.FC = () => {
     const [ready, setReady] = useState(false);
+    const [mapReady, setMapReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const { printSize } = useStore();
+    const renderStartedRef = React.useRef(false);
+    const {
+        printSize, posterType, captureHighResFn, setMapBackgroundImage,
+        maskShape, circleSize, heartSize, houseSize,
+    } = useStore();
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -74,9 +81,65 @@ const PosterRenderPage: React.FC = () => {
             });
     }, []);
 
-    // Once the SVG is rendered, export it to PNG and signal completion
     useEffect(() => {
         if (!ready) return;
+        if (posterType === 'starmap') {
+            setMapBackgroundImage(null);
+            setMapReady(true);
+            return;
+        }
+        setMapReady(false);
+    }, [ready, posterType, setMapBackgroundImage]);
+
+    useEffect(() => {
+        if (!ready || posterType === 'starmap' || !captureHighResFn) return;
+
+        let cancelled = false;
+        const prepareMap = async () => {
+            try {
+                const target = calculateMapExportTarget({
+                    printSize,
+                    dpi: 300,
+                    maskShape,
+                    circleSize,
+                    heartSize,
+                    houseSize,
+                });
+                const highResUrl = await captureHighResFn({
+                    targetPx: target.targetPx,
+                    detailScale: target.detailScale,
+                });
+
+                if (cancelled) return;
+                await new Promise<void>(resolve => {
+                    const img = new Image();
+                    img.onload = () => resolve();
+                    img.onerror = () => resolve();
+                    img.src = highResUrl;
+                });
+
+                if (cancelled) return;
+                setMapBackgroundImage(highResUrl);
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                if (!cancelled) setMapReady(true);
+            } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.error('[PosterRenderPage] High-res map capture failed:', msg);
+                setError(`High-res map capture failed: ${msg}`);
+                document.body.setAttribute('data-render-error', msg);
+            }
+        };
+
+        prepareMap();
+        return () => {
+            cancelled = true;
+        };
+    }, [ready, posterType, captureHighResFn, printSize, maskShape, circleSize, heartSize, houseSize, setMapBackgroundImage]);
+
+    // Once the SVG and high-resolution map image are ready, export it to PNG and signal completion
+    useEffect(() => {
+        if (!ready || !mapReady || renderStartedRef.current) return;
+        renderStartedRef.current = true;
 
         // Give the SVG rendering a moment to settle (star data fetch + D3 paint)
         const timer = setTimeout(async () => {
@@ -105,10 +168,10 @@ const PosterRenderPage: React.FC = () => {
                 console.error('[PosterRenderPage] Export failed:', msg);
                 document.body.setAttribute('data-render-error', msg);
             }
-        }, 3500); // 3.5s for star data + D3 render
+        }, posterType === 'starmap' ? 3500 : 500); // maps are explicitly prepared above
 
         return () => clearTimeout(timer);
-    }, [ready, printSize]);
+    }, [ready, mapReady, printSize, posterType]);
 
     if (error) {
         return (
@@ -126,8 +189,34 @@ const PosterRenderPage: React.FC = () => {
         );
     }
 
+    const hiddenMapCapture = posterType !== 'starmap' ? (
+        <div
+            style={{
+                position: 'fixed',
+                left: '-9999px',
+                top: 0,
+                width: '1200px',
+                height: '1200px',
+                pointerEvents: 'none',
+            }}
+            aria-hidden="true"
+        >
+            <StreetMapCapture onCapture={setMapBackgroundImage} />
+        </div>
+    ) : null;
+
+    if (!mapReady) {
+        return (
+            <>
+                <div style={{ padding: 20, fontFamily: 'monospace', color: '#666' }}>
+                    Preparing high-resolution map...
+                </div>
+                {hiddenMapCapture}
+            </>
+        );
+    }
+
     return (
-        // Render the poster at its natural SVG size (1200px wide)
         <div
             id="poster-render"
             style={{
@@ -138,6 +227,7 @@ const PosterRenderPage: React.FC = () => {
                 pointerEvents: 'none',
             }}
         >
+            {hiddenMapCapture}
             <VectorStarMap />
         </div>
     );
