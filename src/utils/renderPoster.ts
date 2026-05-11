@@ -99,6 +99,8 @@ export async function renderPosterToBlob(
             canvas.width = outputWidth;
             canvas.height = outputHeight;
             const ctx = canvas.getContext('2d')!;
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, outputWidth, outputHeight);
             if (watermark) drawDemoWatermark(ctx, outputWidth, outputHeight);
             URL.revokeObjectURL(svgUrl);

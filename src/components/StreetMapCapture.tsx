@@ -447,11 +447,16 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         targetPx: number;
         detailScale: number;
     }): Promise<string> => {
-        const effectiveZoom = Math.min(zoom + Math.log2(Math.max(1, detailScale)), 20);
+        // Render the offscreen WebGL viewport at or above the requested export
+        // pixels. Relying on MapLibre's pixelRatio here is fragile across
+        // browsers/headless Chromium; if it is ignored, the map canvas is
+        // silently upscaled and large 24x36/A1 exports look pixelated while SVG
+        // text/pins remain sharp.
+        const renderPx = Math.max(targetPx, Math.round(CONTAINER_SIZE * detailScale));
+        const effectiveZoom = Math.min(zoom + Math.log2(renderPx / CONTAINER_SIZE), 20);
         // Increase virtual viewport and zoom together. This preserves geographic
         // bounds while asking vector tiles for the denser street network.
-        const cssSize = Math.max(CONTAINER_SIZE, Math.round(CONTAINER_SIZE * detailScale));
-        const pixelRatio = targetPx / cssSize;
+        const cssSize = renderPx;
         const tempContainer = document.createElement('div');
         tempContainer.style.position = 'fixed';
         tempContainer.style.left = '-100000px';
@@ -469,7 +474,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 center: [lng, lat],
                 zoom: effectiveZoom,
                 bearing: bearing ?? 0,
-                pixelRatio,
+                pixelRatio: 1,
                 canvasContextAttributes: { preserveDrawingBuffer: true },
                 interactive: false,
                 attributionControl: false,
@@ -492,11 +497,18 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
                 await waitForNextMapRender(tempMap);
             }
 
+            const sourceCanvas = tempMap.getCanvas();
+            if (sourceCanvas.width === targetPx && sourceCanvas.height === targetPx) {
+                return canvasToDataUrl(sourceCanvas, 'image/png');
+            }
+
             const captureCanvas = document.createElement('canvas');
             captureCanvas.width = targetPx;
             captureCanvas.height = targetPx;
             const ctx = captureCanvas.getContext('2d')!;
-            ctx.drawImage(tempMap.getCanvas(), 0, 0, targetPx, targetPx);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(sourceCanvas, 0, 0, targetPx, targetPx);
             return canvasToDataUrl(captureCanvas, 'image/png');
         } finally {
             tempMap?.remove();
