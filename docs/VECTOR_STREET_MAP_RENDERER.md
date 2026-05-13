@@ -98,3 +98,27 @@ Local checks after clipping/readiness changes:
 - Headless `/render`, `24x36`: 6 vector map paths, 0 map images, ~1.08M path chars, completed in ~8.5s.
 
 These are smoke tests, not load tests. Before enabling vector mode globally, run concurrent render tests for `24x36` and `A1` on production-sized hardware.
+
+## Stress Test Harness
+
+Use the render stress harness to exercise the same `/render?token=...` page that local Puppeteer uses for server-side rendering:
+
+```bash
+npm run stress:render -- --base-url http://localhost:5173 --api-url http://localhost:3001 --size 24x36 --runs 4 --concurrency 2 --vector
+```
+
+Production-safe small test:
+
+```bash
+npm run stress:render -- --base-url https://themappedmoment.com --api-url https://themappedmoment.com --size 24x36 --runs 2 --concurrency 1 --vector
+```
+
+The script creates temporary saved-design tokens, opens concurrent render pages, and reports:
+
+- render duration
+- approximate PNG size
+- vector path count and path character count
+- raster map image count
+- page errors
+
+Keep production concurrency low until the queue/backpressure behavior is verified. The live order queue still processes one queued render at a time by design.

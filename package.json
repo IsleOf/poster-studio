@@ -15,6 +15,7 @@
     "listings:audit": "node scripts/audit-listing-parity.cjs",
     "listings:verify": "node scripts/verify-listing.cjs",
     "mockups:compose": "python3 scripts/composite-mockups.py",
+    "stress:render": "node scripts/stress-render.cjs",
     "prod:pull-state": "bash scripts/pull-production-state.sh",
     "prod:health": "bash scripts/check-production-health.sh",
     "prod:apply-hardening": "bash scripts/apply-production-hardening.sh",
