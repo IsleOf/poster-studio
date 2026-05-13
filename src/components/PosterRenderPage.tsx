@@ -12,6 +12,7 @@ import VectorStarMap from './VectorStarMap';
 import StreetMapCapture from './StreetMapCapture';
 import { renderPosterToBlob } from '../utils/renderPoster';
 import { calculateMapExportTarget } from '../utils/mapExportSizing';
+import { isVectorStreetMapEnabled } from '../utils/vectorStreetMapRenderer';
 
 declare global {
     interface Window {
@@ -55,7 +56,11 @@ const PosterRenderPage: React.FC = () => {
     const {
         printSize, posterType, captureHighResFn, setMapBackgroundImage,
         maskShape, circleSize, heartSize, houseSize,
+        mapColorPreset,
     } = useStore();
+    const useVectorStreetMap = posterType === 'streetmap'
+        && mapColorPreset === 'design2'
+        && isVectorStreetMapEnabled();
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -83,16 +88,16 @@ const PosterRenderPage: React.FC = () => {
 
     useEffect(() => {
         if (!ready) return;
-        if (posterType === 'starmap') {
+        if (posterType === 'starmap' || useVectorStreetMap) {
             setMapBackgroundImage(null);
             setMapReady(true);
             return;
         }
         setMapReady(false);
-    }, [ready, posterType, setMapBackgroundImage]);
+    }, [ready, posterType, useVectorStreetMap, setMapBackgroundImage]);
 
     useEffect(() => {
-        if (!ready || posterType === 'starmap' || !captureHighResFn) return;
+        if (!ready || posterType === 'starmap' || useVectorStreetMap || !captureHighResFn) return;
 
         let cancelled = false;
         const prepareMap = async () => {
@@ -134,7 +139,7 @@ const PosterRenderPage: React.FC = () => {
         return () => {
             cancelled = true;
         };
-    }, [ready, posterType, captureHighResFn, printSize, maskShape, circleSize, heartSize, houseSize, setMapBackgroundImage]);
+    }, [ready, posterType, useVectorStreetMap, captureHighResFn, printSize, maskShape, circleSize, heartSize, houseSize, setMapBackgroundImage]);
 
     // Once the SVG and high-resolution map image are ready, export it to PNG and signal completion
     useEffect(() => {
@@ -189,7 +194,7 @@ const PosterRenderPage: React.FC = () => {
         );
     }
 
-    const hiddenMapCapture = posterType !== 'starmap' ? (
+    const hiddenMapCapture = posterType !== 'starmap' && !useVectorStreetMap ? (
         <div
             style={{
                 position: 'fixed',

@@ -27,9 +27,34 @@ export type VectorStreetMapOptions = {
 const TILEJSON_URL = 'https://tiles.openfreemap.org/planet';
 const TILE_SIZE = 512;
 const MAX_SOURCE_ZOOM = 14;
+const TILE_FETCH_TIMEOUT_MS = 15000;
 
 let tileUrlTemplatePromise: Promise<string> | null = null;
 const tileCache = new Map<string, Promise<VectorTile>>();
+
+async function fetchJsonWithTimeout(url: string): Promise<any> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TILE_FETCH_TIMEOUT_MS);
+    try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) throw new Error(`TileJSON failed: ${res.status}`);
+        return await res.json();
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+async function fetchArrayBufferWithTimeout(url: string): Promise<ArrayBuffer> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TILE_FETCH_TIMEOUT_MS);
+    try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) throw new Error(`Vector tile failed: ${res.status}`);
+        return await res.arrayBuffer();
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
 function degToRad(deg: number): number {
     return deg * Math.PI / 180;
@@ -55,15 +80,15 @@ function wrapTileX(x: number, zoom: number): number {
 
 async function getTileUrlTemplate(): Promise<string> {
     if (!tileUrlTemplatePromise) {
-        tileUrlTemplatePromise = fetch(TILEJSON_URL)
-            .then(res => {
-                if (!res.ok) throw new Error(`TileJSON failed: ${res.status}`);
-                return res.json();
-            })
+        tileUrlTemplatePromise = fetchJsonWithTimeout(TILEJSON_URL)
             .then(json => {
                 const template = json?.tiles?.[0];
                 if (typeof template !== 'string') throw new Error('TileJSON has no vector tile URL template');
                 return template;
+            })
+            .catch(error => {
+                tileUrlTemplatePromise = null;
+                throw error;
             });
     }
     return tileUrlTemplatePromise;
@@ -76,15 +101,17 @@ async function fetchTile(z: number, x: number, y: number): Promise<VectorTile> {
 
     const key = `${z}/${safeX}/${y}`;
     if (!tileCache.has(key)) {
-        tileCache.set(key, getTileUrlTemplate().then(async template => {
+        const tilePromise = getTileUrlTemplate().then(async template => {
             const url = template
                 .replace('{z}', String(z))
                 .replace('{x}', String(safeX))
                 .replace('{y}', String(y));
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`Vector tile failed: ${res.status} ${key}`);
-            return new VectorTile(new Pbf(new Uint8Array(await res.arrayBuffer())));
-        }));
+            return new VectorTile(new Pbf(new Uint8Array(await fetchArrayBufferWithTimeout(url))));
+        }).catch(error => {
+            tileCache.delete(key);
+            throw error;
+        });
+        tileCache.set(key, tilePromise);
     }
     return tileCache.get(key)!;
 }

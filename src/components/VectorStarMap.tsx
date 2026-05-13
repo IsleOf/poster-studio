@@ -427,28 +427,33 @@ const VectorStarMap: React.FC = () => {
 
         // Background Image or Color
         if (useVectorStreetMap && vectorStreetMap) {
-            mapContent.append('rect')
+            const imgSize = mapRadius * 3;
+            let imgOffsetX = mapImageOffsetX;
+            let imgOffsetY = mapImageOffsetY;
+            const vectorGroup = mapContent.append('g');
+
+            vectorGroup.append('rect')
                 .attr('x', center[0] - mapRadius * 1.5 + mapImageOffsetX)
                 .attr('y', center[1] - mapRadius * 1.5 + mapImageOffsetY)
-                .attr('width', mapRadius * 3)
-                .attr('height', mapRadius * 3)
+                .attr('width', imgSize)
+                .attr('height', imgSize)
                 .attr('fill', mapBgColor || '#ffffff');
 
             if (vectorStreetMap.landuseD) {
-                mapContent.append('path')
+                vectorGroup.append('path')
                     .attr('d', vectorStreetMap.landuseD)
                     .attr('fill', mapLandColor || '#b6b6b6')
                     .attr('fill-rule', 'evenodd')
                     .attr('opacity', 0.82);
             }
             if (vectorStreetMap.waterD) {
-                mapContent.append('path')
+                vectorGroup.append('path')
                     .attr('d', vectorStreetMap.waterD)
                     .attr('fill', mapWaterColor || '#8f8f8f')
                     .attr('fill-rule', 'evenodd');
             }
 
-            const roadGroup = mapContent.append('g')
+            const roadGroup = vectorGroup.append('g')
                 .attr('fill', 'none')
                 .attr('stroke-linecap', 'round')
                 .attr('stroke-linejoin', 'round');
@@ -471,6 +476,82 @@ const VectorStarMap: React.FC = () => {
                     .attr('stroke', mapMainRoadColor || mapStreetColor || '#111111')
                     .attr('stroke-width', vectorStreetMap.majorRoadWidth);
             }
+
+            // Same map-pan behavior as the raster image path. During drag we
+            // translate the rendered SVG path group immediately, then persist the
+            // offset and geographic center on drag end so the next vector render
+            // fetches the correct tile coverage.
+            const hitGroup = mapLayer.append('g').style('cursor', 'grab');
+            hitGroupRef = hitGroup;
+
+            if (maskShape === 'rect') {
+                hitGroup.append('rect')
+                    .attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H)
+                    .attr('fill', 'transparent')
+                    .style('pointer-events', 'all');
+            } else if (maskShape === 'heart') {
+                const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
+                hitGroup.append('path')
+                    .attr('d', userHeartPath)
+                    .attr('transform', getHeartTransform(insetScale))
+                    .attr('fill', 'transparent')
+                    .style('pointer-events', 'all');
+            } else if (maskShape === 'house') {
+                const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
+                hitGroup.append('path')
+                    .attr('d', userHousePath)
+                    .attr('transform', getHouseTransform(insetScale))
+                    .attr('fill', 'transparent')
+                    .style('pointer-events', 'all');
+            } else {
+                hitGroup.append('circle')
+                    .attr('cx', center[0])
+                    .attr('cy', center[1])
+                    .attr('r', Math.max(mapRadius - MAP_EDGE_ZONE, mapRadius * 0.5))
+                    .attr('fill', 'transparent')
+                    .style('pointer-events', 'all');
+            }
+
+            let dragStartOffsetX = imgOffsetX;
+            let dragStartOffsetY = imgOffsetY;
+
+            hitGroup.call(
+                drag<SVGGElement, unknown>()
+                    .on('start', (event) => {
+                        event.sourceEvent.stopPropagation();
+                        hitGroup.style('cursor', 'grabbing');
+                        dragStartOffsetX = imgOffsetX;
+                        dragStartOffsetY = imgOffsetY;
+                        useStore.getState().setIsDraggingMapImage(true);
+                    })
+                    .on('drag', (event) => {
+                        event.sourceEvent.stopPropagation();
+                        const zoom = useStore.getState().previewZoom;
+                        imgOffsetX += event.dx / zoom;
+                        imgOffsetY += event.dy / zoom;
+                        vectorGroup.attr('transform', `translate(${imgOffsetX - mapImageOffsetX}, ${imgOffsetY - mapImageOffsetY})`);
+                    })
+                    .on('end', () => {
+                        hitGroup.style('cursor', 'grab');
+                        const deltaX = imgOffsetX - dragStartOffsetX;
+                        const deltaY = imgOffsetY - dragStartOffsetY;
+                        if (deltaX !== 0 || deltaY !== 0) {
+                            const state = useStore.getState();
+                            state.setMapImageOffsetX(imgOffsetX);
+                            state.setMapImageOffsetY(imgOffsetY);
+
+                            const svgToCanvas = 1200 / imgSize;
+                            const worldWidthPx = 512 * Math.pow(2, state.mapZoom);
+                            const degPerCanvasPx = 360 / worldWidthPx;
+                            const newLng = state.mapCenterLng - deltaX * svgToCanvas * degPerCanvasPx;
+                            const newLat = state.mapCenterLat + deltaY * svgToCanvas * degPerCanvasPx
+                                * Math.cos(state.mapCenterLat * Math.PI / 180);
+                            state.setMapCenterLng(newLng);
+                            state.setMapCenterLat(newLat);
+                        }
+                        useStore.getState().setIsDraggingMapImage(false);
+                    })
+            );
         } else if (mapBackgroundImage) {
             // Use 3x radius so there's plenty of room to drag the image within the shape
             const imgSize = mapRadius * 3;
@@ -935,7 +1016,7 @@ const VectorStarMap: React.FC = () => {
             // In map mode, raise hitGroup and pinGroup above shapeInteract in Z-order.
             // This makes them win the hit-test in the interior and over the pin,
             // leaving the uncovered edge ring to fall through to shapeInteract (shape drag).
-            if (mapBackgroundImage) {
+            if (mapBackgroundImage || (useVectorStreetMap && vectorStreetMap)) {
                 if (hitGroupRef) hitGroupRef.raise();
                 if (pinGroupRef) pinGroupRef.raise();
             }
@@ -948,6 +1029,8 @@ const VectorStarMap: React.FC = () => {
         showBorder, showConstellations, showGrid, designStyle, maskShape, isLightMode, // Toggles
         debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetY, debouncedShapeOffsetX, debouncedShapeOutlineWidth, // Shape
         posterColor, textColor, starColor, mapInteriorColor, mapStreetColor, width, height, // Colors & Dims
+        useVectorStreetMap, vectorStreetMap, mapBgColor, mapWaterColor, mapLandColor,
+        mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
         mapBackgroundImage, mapImageOffsetX, mapImageOffsetY, mapImageOpacity, borderStyle, posterType, // New Props
         showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY, // Location pin
         showInnerRing, innerRingWidth, innerRingInset,
@@ -1778,9 +1861,6 @@ const VectorStarMap: React.FC = () => {
         showHeartDecor, // Decorative heart below text
         debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, maskShape, // Shape — textStartY depends on these (shapeOffsetY removed: text is now decoupled from shape position)
         textColor, width, height, frameInset, // Global
-        useVectorStreetMap, vectorStreetMap, mapBgColor, mapWaterColor, mapLandColor,
-        mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor, mapStreetColor,
-        mapImageOffsetX, mapImageOffsetY,
         selectedTemplate, // Template
         setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setNamesFontSize, setCustomText, setInlineEdit, // Stable setters
         inlineEdit, // Guard: effect is skipped while editing (inlineEdit !== null), re-runs when it closes

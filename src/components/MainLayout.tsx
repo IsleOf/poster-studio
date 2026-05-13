@@ -9,6 +9,7 @@ import { useStore } from '../store/useStore';
 import { AUTO_SAVE_KEY } from '../store/useStore';
 import { trackEvent } from '../utils/analytics';
 import { fetchAndApplyTemplate } from '../utils/applyTemplate';
+import { isVectorStreetMapEnabled } from '../utils/vectorStreetMapRenderer';
 import VectorStarMap from './VectorStarMap';
 import SidebarControls from './SidebarControls';
 
@@ -34,9 +35,11 @@ const MainLayout: React.FC = () => {
         previewPanY, setPreviewPanY,
         printSize,
         posterType,
+        mapColorPreset,
         setMapBackgroundImage,
         isInlineEditing,
     } = useStore();
+    const useVectorStreetMap = posterType === 'streetmap' && mapColorPreset === 'design2' && isVectorStreetMapEnabled();
 
     const { canUndo, canRedo, undo, redo } = useStore();
     const toast = useToast();
@@ -405,10 +408,10 @@ const MainLayout: React.FC = () => {
     }, [setMapBackgroundImage]);
 
     useEffect(() => {
-        if (posterType === 'starmap') {
+        if (posterType === 'starmap' || useVectorStreetMap) {
             setMapBackgroundImage(null);
         }
-    }, [posterType, setMapBackgroundImage]);
+    }, [posterType, setMapBackgroundImage, useVectorStreetMap]);
 
     // ── Preview dimensions ───────────────────────────────────────────────────
     useEffect(() => {
@@ -793,7 +796,7 @@ const MainLayout: React.FC = () => {
                 </Box>
 
                 {/* Offscreen street map renderer */}
-                {!templateLoading && posterType !== 'starmap' && (
+                {!templateLoading && posterType !== 'starmap' && !useVectorStreetMap && (
                     <Box
                         position="fixed"
                         top="-9999px"

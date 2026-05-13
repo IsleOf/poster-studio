@@ -9,6 +9,7 @@ import {
 import { useStore } from '../store/useStore';
 import { renderPosterToBlob, renderPosterToPdf } from '../utils/renderPoster';
 import { calculateMapExportTarget } from '../utils/mapExportSizing';
+import { isVectorStreetMapEnabled } from '../utils/vectorStreetMapRenderer';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -82,6 +83,14 @@ const DownloadButton: React.FC = () => {
 
     /** Ensure the map background is captured at print-size resolution before rendering. */
     const ensureHighResMap = async (dpi: number): Promise<() => void> => {
+        if (posterType === 'streetmap' && mapColorPreset === 'design2' && isVectorStreetMapEnabled()) {
+            // Vector maps are already SVG paths in the poster. Capturing a
+            // high-res raster map here would only slow downloads and could hide
+            // the vector renderer during export.
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return () => {};
+        }
+
         if (posterType !== 'starmap' && captureHighResFn) {
             try {
                 const previousMapImage = useStore.getState().mapBackgroundImage;
