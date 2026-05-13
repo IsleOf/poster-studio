@@ -134,15 +134,25 @@ function geometryToPath(
     bearing: number,
     close: boolean,
 ): string {
-    const sourceScale = Math.pow(2, sourceZoom);
     const renderWorldSize = TILE_SIZE * Math.pow(2, renderZoom);
     const cosBearing = Math.cos(degToRad(bearing));
     const sinBearing = Math.sin(degToRad(bearing));
+    const clipMargin = 64;
+    const minPointDistance = 0.25;
+    const minX = outX - clipMargin;
+    const minY = outY - clipMargin;
+    const maxX = outX + outSize + clipMargin;
+    const maxY = outY + outSize + clipMargin;
     let d = '';
 
     for (const part of geometry) {
         if (part.length < 2) continue;
-        let started = false;
+        const projected: Point[] = [];
+        let partMinX = Infinity;
+        let partMinY = Infinity;
+        let partMaxX = -Infinity;
+        let partMaxY = -Infinity;
+
         for (const p of part) {
             const normX = tileIndexToNorm(tileX + p.x / extent, sourceZoom);
             const normY = tileIndexToNorm(tileY + p.y / extent, sourceZoom);
@@ -154,8 +164,31 @@ function geometryToPath(
             const ry = dx * sinBearing + dy * cosBearing;
             const sx = outX + outSize / 2 + rx;
             const sy = outY + outSize / 2 + ry;
-            d += `${started ? 'L' : 'M'}${formatCoord(sx)} ${formatCoord(sy)}`;
+
+            projected.push({ x: sx, y: sy });
+            partMinX = Math.min(partMinX, sx);
+            partMinY = Math.min(partMinY, sy);
+            partMaxX = Math.max(partMaxX, sx);
+            partMaxY = Math.max(partMaxY, sy);
+        }
+
+        if (partMaxX < minX || partMinX > maxX || partMaxY < minY || partMinY > maxY) continue;
+
+        let started = false;
+        let lastX = NaN;
+        let lastY = NaN;
+        for (let i = 0; i < projected.length; i++) {
+            const point = projected[i];
+            const isLast = i === projected.length - 1;
+            if (started && !isLast) {
+                const dx = point.x - lastX;
+                const dy = point.y - lastY;
+                if ((dx * dx + dy * dy) < minPointDistance * minPointDistance) continue;
+            }
+            d += `${started ? 'L' : 'M'}${formatCoord(point.x)} ${formatCoord(point.y)}`;
             started = true;
+            lastX = point.x;
+            lastY = point.y;
         }
         if (started && close) d += 'Z';
     }

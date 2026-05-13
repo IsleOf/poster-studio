@@ -81,13 +81,31 @@ const DownloadButton: React.FC = () => {
         console.warn('Timed out waiting for high-res map image to appear in SVG; export may use preview map image.');
     };
 
+    const waitForVectorStreetMap = async (): Promise<void> => {
+        const deadline = Date.now() + 60000;
+        while (Date.now() < deadline) {
+            const mapLayer = getSvgEl()?.querySelector('#map-layer');
+            const pathChars = Array.from(mapLayer?.querySelectorAll('path') ?? [])
+                .reduce((total, path) => total + (path.getAttribute('d')?.length || 0), 0);
+            const text = mapLayer?.textContent || '';
+
+            if (pathChars > 10000 && !text.includes('Search a city to load map')) {
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                return;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        throw new Error('Timed out waiting for vector street map paths');
+    };
+
     /** Ensure the map background is captured at print-size resolution before rendering. */
     const ensureHighResMap = async (dpi: number): Promise<() => void> => {
         if (posterType === 'streetmap' && mapColorPreset === 'design2' && isVectorStreetMapEnabled()) {
             // Vector maps are already SVG paths in the poster. Capturing a
             // high-res raster map here would only slow downloads and could hide
             // the vector renderer during export.
-            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            await waitForVectorStreetMap();
             return () => {};
         }
 

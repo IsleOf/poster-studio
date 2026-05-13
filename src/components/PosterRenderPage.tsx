@@ -48,6 +48,24 @@ function applyDesignState(state: Record<string, unknown>) {
     useStore.setState(patch as Partial<ReturnType<typeof useStore.getState>>);
 }
 
+async function waitForVectorStreetMap(svgEl: SVGSVGElement): Promise<void> {
+    const deadline = Date.now() + 60000;
+    while (Date.now() < deadline) {
+        const mapLayer = svgEl.querySelector('#map-layer');
+        const pathChars = Array.from(mapLayer?.querySelectorAll('path') ?? [])
+            .reduce((total, path) => total + (path.getAttribute('d')?.length || 0), 0);
+        const text = mapLayer?.textContent || '';
+
+        if (pathChars > 10000 && !text.includes('Search a city to load map')) {
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error('Timed out waiting for vector street map paths');
+}
+
 const PosterRenderPage: React.FC = () => {
     const [ready, setReady] = useState(false);
     const [mapReady, setMapReady] = useState(false);
@@ -144,13 +162,17 @@ const PosterRenderPage: React.FC = () => {
     // Once the SVG and high-resolution map image are ready, export it to PNG and signal completion
     useEffect(() => {
         if (!ready || !mapReady || renderStartedRef.current) return;
-        renderStartedRef.current = true;
 
         // Give the SVG rendering a moment to settle (star data fetch + D3 paint)
         const timer = setTimeout(async () => {
+            if (renderStartedRef.current) return;
+            renderStartedRef.current = true;
             try {
                 const svgEl = document.querySelector('#poster-render svg') as SVGSVGElement | null;
                 if (!svgEl) throw new Error('SVG element not found');
+                if (useVectorStreetMap) {
+                    await waitForVectorStreetMap(svgEl);
+                }
 
                 const blob = await renderPosterToBlob(
                     svgEl,
@@ -176,7 +198,7 @@ const PosterRenderPage: React.FC = () => {
         }, posterType === 'starmap' ? 3500 : 500); // maps are explicitly prepared above
 
         return () => clearTimeout(timer);
-    }, [ready, mapReady, printSize, posterType]);
+    }, [ready, mapReady, printSize, posterType, useVectorStreetMap]);
 
     if (error) {
         return (

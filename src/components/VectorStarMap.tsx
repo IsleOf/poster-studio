@@ -333,7 +333,8 @@ const VectorStarMap: React.FC = () => {
 
     // Map Rendering Effect (Heavy)
     useEffect(() => {
-        if (!svgRef.current || !starsData || !constellationsData) return;
+        if (!svgRef.current) return;
+        if (posterType === 'starmap' && (!starsData || !constellationsData)) return;
 
         const svg = select(svgRef.current);
         const mapLayer = svg.select('#map-layer');
@@ -691,12 +692,12 @@ const VectorStarMap: React.FC = () => {
         }
 
         // Constellations — skip in street/colored map mode
-        if (showConstellations && constellationsData.features && posterType === 'starmap') {
+        if (posterType === 'starmap' && showConstellations && constellationsData?.features) {
             mapContent.append('g').selectAll('path').data(constellationsData.features as ConstellationFeature[]).enter().append('path').attr('d', path as any).attr('fill', 'none').attr('stroke', starColor).attr('stroke-width', debouncedLineWeight * 2).attr('stroke-opacity', 1.0);
         }
 
         // Stars — skip in street/colored map mode
-        if (starsData.features && posterType === 'starmap') {
+        if (posterType === 'starmap' && starsData?.features) {
             const magScale = scaleLinear().domain([-2, 6]).range([6 * debouncedStarScale, 0.8 * debouncedStarScale]).clamp(true);
             const features = starsData.features as StarFeature[];
             const brightStars = features.filter(d => d.properties.mag < 2.5);
