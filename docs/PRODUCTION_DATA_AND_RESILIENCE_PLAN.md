@@ -153,7 +153,8 @@ The server is a small EC2 instance with less than 1 GB RAM. It currently runs th
 - 300-DPI PNGs can be tens to hundreds of MB each while rendering, serializing, uploading, or serving.
 - The current durable render path is local disk through `orders.render_path`.
 - Download serving uses `res.sendFile(path.resolve(order.render_path))`, so a full disk or missing local render file directly breaks fulfillment.
-- The API currently has no object-storage abstraction, no lifecycle cleanup policy, and no production disk guard before accepting/rendering work.
+- The API currently has no object-storage abstraction and no lifecycle cleanup policy for durable paid renders.
+- Local rendering now has a preflight disk/memory guard, but local disk is still the durable render store until object storage is implemented.
 - If render concurrency increases above 1, memory pressure can spike quickly.
 - User-level caches under `/home/ubuntu/.local` and `/home/ubuntu/.cache` already consume more disk than the app itself.
 
@@ -164,6 +165,8 @@ Keep these in place until object storage and cleanup are implemented:
 - Keep render queue concurrency at 1.
 - Keep `ENABLE_LOCAL_RENDER=false` on production unless intentionally testing server-side rendering.
 - Prefer external/Lambda rendering over local Puppeteer on the EC2 host.
+- Keep `RENDER_MIN_FREE_DISK_MB` and `RENDER_MIN_FREE_MEM_MB` set so local renders defer instead of consuming queue attempts under resource pressure.
+- Keep `RENDER_VECTOR_MAPS=false` unless intentionally testing the experimental vector street map renderer in server-side renders.
 - Leave at least 5 GB free disk before running large render batches.
 - Check `npm run prod:health` before demos, releases, or high-volume test rendering.
 - Rotate or clean large non-app caches if root disk exceeds 85%.
@@ -178,6 +181,18 @@ MemoryMax=700M
 MemorySwapMax=1500M
 LimitNOFILE=4096
 ```
+
+Renderer environment guardrails:
+
+```bash
+ENABLE_LOCAL_RENDER=false
+RENDER_TIMEOUT_MS=90000
+RENDER_MIN_FREE_DISK_MB=512
+RENDER_MIN_FREE_MEM_MB=250
+RENDER_VECTOR_MAPS=false
+```
+
+If a queued local render hits the disk/memory guard, the queue leaves the job pending and does not consume a retry attempt. This is intentional backpressure to avoid a Chromium launch when the host is already under pressure.
 
 Recommended journald cap:
 

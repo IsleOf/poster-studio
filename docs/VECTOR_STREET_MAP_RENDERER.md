@@ -39,6 +39,14 @@ It can also be enabled at build time:
 VITE_VECTOR_MAP_RENDERER=true npm run build
 ```
 
+For the local Puppeteer server renderer only, vector mode can be enabled without changing customer browsers:
+
+```bash
+RENDER_VECTOR_MAPS=true ENABLE_LOCAL_RENDER=true npm run api
+```
+
+Keep `RENDER_VECTOR_MAPS=false` in production unless intentionally testing server-side vector renders.
+
 ## Scope
 
 Current prototype supports:
