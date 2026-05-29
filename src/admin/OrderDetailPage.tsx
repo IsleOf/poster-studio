@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
     Box, Heading, Text, VStack, HStack, Badge, Button, Select, Spinner, Divider, Textarea,
 } from '@chakra-ui/react';
-import { getOrder, updateOrderStatus, fulfillOrder, updateOrderNotes } from './adminApi';
+import { getOrder, updateOrderStatus, fulfillOrder, updateOrderNotes, resendOrderEmail } from './adminApi';
 
 const STATUS_COLORS: Record<string, string> = {
     pending: 'yellow', pending_manual: 'orange', rendering: 'blue',
@@ -25,6 +25,8 @@ const OrderDetailPage: React.FC = () => {
     const [notes, setNotes] = useState('');
     const [savedNotes, setSavedNotes] = useState('');
     const [savingNotes, setSavingNotes] = useState(false);
+    const [resending, setResending] = useState(false);
+    const [resendResult, setResendResult] = useState<string | null>(null);
 
     const fetchData = async () => {
         setLoading(true);
@@ -67,6 +69,19 @@ const OrderDetailPage: React.FC = () => {
         await fulfillOrder(order.id);
         await fetchData();
         setUpdating(false);
+    };
+
+    const handleResendEmail = async () => {
+        setResending(true);
+        setResendResult(null);
+        try {
+            await resendOrderEmail(order.id);
+            setResendResult('Sent');
+        } catch (err: any) {
+            setResendResult(err.message || 'Failed');
+        } finally {
+            setResending(false);
+        }
     };
 
     const handleSaveNotes = async () => {
@@ -130,7 +145,7 @@ const OrderDetailPage: React.FC = () => {
             {/* Actions */}
             <Box bg="white" p={5} borderRadius="lg" border="1px" borderColor="gray.200">
                 <Text fontSize="sm" fontWeight="600" mb={3}>Actions</Text>
-                <HStack spacing={2}>
+                <HStack spacing={2} flexWrap="wrap">
                     <Select size="sm" maxW="200px" value={newStatus} onChange={e => setNewStatus(e.target.value)}>
                         {['pending', 'pending_manual', 'rendering', 'rendered', 'sent', 'fulfilled', 'shipped', 'failed', 'refunded'].map(s => (
                             <option key={s} value={s}>{s}</option>
@@ -145,6 +160,19 @@ const OrderDetailPage: React.FC = () => {
                         isDisabled={!FULFILLABLE_STATUSES.includes(order.status)}>
                         {order.status === 'failed' ? 'Retry Fulfillment' : 'Fulfill Now'}
                     </Button>
+                    {order.etsy_buyer_email && (
+                        <>
+                            <Divider orientation="vertical" h="30px" />
+                            <Button size="sm" variant="outline" onClick={handleResendEmail} isLoading={resending}>
+                                Resend Email
+                            </Button>
+                            {resendResult && (
+                                <Text fontSize="xs" color={resendResult === 'Sent' ? 'green.600' : 'red.500'}>
+                                    {resendResult}
+                                </Text>
+                            )}
+                        </>
+                    )}
                 </HStack>
                 {order.status === 'failed' && (
                     <Text fontSize="xs" color="red.500" mt={2}>

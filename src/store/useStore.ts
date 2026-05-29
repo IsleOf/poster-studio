@@ -31,6 +31,7 @@ const DESIGN_FIELDS = [
     'mapColorPreset', 'mapStyleUrl',
     'mapBackgroundImage', 'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
     'showLocationPin', 'locationPinSize', 'locationPinOffsetX', 'locationPinOffsetY',
+    'backgroundImageUrl',
 ] as const;
 
 type DesignField = typeof DESIGN_FIELDS[number];
@@ -161,6 +162,7 @@ interface StoreState {
 
     // Print Size
     printSize: { label: string; width: number; height: number; ratio: string };
+    lockedPrintSize: { label: string; width: number; height: number; ratio: string } | null;
 
     // Map image pan offset and opacity
     mapImageOffsetX: number;
@@ -192,6 +194,7 @@ interface StoreState {
     // Template System
     selectedTemplate: string;
     mapBackgroundImage: string | null;
+    backgroundImageUrl: string | null; // custom poster background image (URL or data URI)
     borderStyle: 'simple' | 'double-offset' | 'dashed';
     templateSettings: Record<string, Partial<StoreState>>; // Store settings for each template
 
@@ -202,6 +205,7 @@ interface StoreState {
     // Setters
     setSelectedTemplate: (template: string) => void;
     setMapBackgroundImage: (url: string | null) => void;
+    setBackgroundImageUrl: (url: string | null) => void;
     setBorderStyle: (style: 'simple' | 'double-offset' | 'dashed') => void;
     saveTemplateSettings: (templateId: string) => void;
     restoreTemplateSettings: (templateId: string) => void;
@@ -235,6 +239,7 @@ interface StoreState {
     setStarColor: (starColor: string) => void;
     setMapInteriorColor: (color: string) => void;
     setPrintSize: (size: { label: string; width: number; height: number; ratio: string }) => void;
+    setLockedPrintSize: (size: { label: string; width: number; height: number; ratio: string } | null) => void;
     setCustomText: (key: keyof StoreState['customText'], value: string) => void;
     setCircleSize: (size: number) => void;
     setHeartSize: (size: number) => void;
@@ -472,6 +477,7 @@ export const useStore = create<StoreState>((set) => ({
 
     // Print Size - Default 8x10
     printSize: { label: '8x10"', width: 8, height: 10, ratio: '4/5' },
+    lockedPrintSize: null,
 
     // Map image pan offsets
     mapImageOffsetX: 0,
@@ -509,6 +515,7 @@ export const useStore = create<StoreState>((set) => ({
     // Template System - Default Values
     selectedTemplate: 'custom',
     mapBackgroundImage: null,
+    backgroundImageUrl: null,
     borderStyle: 'simple',
     templateSettings: {},
     captureHighResFn: null,
@@ -516,6 +523,7 @@ export const useStore = create<StoreState>((set) => ({
     // Setters Implementation
     setSelectedTemplate: (selectedTemplate) => set({ selectedTemplate }),
     setMapBackgroundImage: (mapBackgroundImage) => set({ mapBackgroundImage }),
+    setBackgroundImageUrl: (backgroundImageUrl) => set({ backgroundImageUrl }),
     setBorderStyle: (borderStyle) => set({ borderStyle }),
     setCaptureHighResFn: (captureHighResFn) => set({ captureHighResFn }),
     saveTemplateSettings: (templateId) => set((state) => {
@@ -547,6 +555,7 @@ export const useStore = create<StoreState>((set) => ({
             maskShape: state.maskShape,
             isLightMode: state.isLightMode,
             mapBackgroundImage: state.mapBackgroundImage,
+            backgroundImageUrl: state.backgroundImageUrl,
             borderStyle: state.borderStyle,
             showFrame: state.showFrame,
             frameInset: state.frameInset,
@@ -628,6 +637,7 @@ export const useStore = create<StoreState>((set) => ({
             maskShape: state.maskShape,
             isLightMode: state.isLightMode,
             mapBackgroundImage: state.mapBackgroundImage,
+            backgroundImageUrl: state.backgroundImageUrl,
             borderStyle: state.borderStyle,
             showFrame: state.showFrame,
             frameInset: state.frameInset,
@@ -713,13 +723,23 @@ export const useStore = create<StoreState>((set) => ({
     setShowLocation: (showLocation) => set({ showLocation }),
     setShowDate: (showDate) => set({ showDate }),
     setShowCoords: (showCoords) => set({ showCoords }),
-    // Keep mapBgColor in sync with posterColor so street-map background always
-    // matches the overall design palette when the user changes the poster color.
-    setPosterColor: (posterColor) => set({ posterColor, mapBgColor: posterColor }),
+    // Keep mapBgColor and mapInteriorColor in sync with posterColor.
+    // mapInteriorColor only follows when it hasn't been manually diverged from posterColor.
+    setPosterColor: (posterColor) => set((state) => ({
+        posterColor,
+        mapBgColor: posterColor,
+        mapInteriorColor: state.mapInteriorColor === state.posterColor ? posterColor : state.mapInteriorColor,
+    })),
     setTextColor: (textColor) => set({ textColor }),
     setStarColor: (starColor) => set({ starColor }),
     setMapInteriorColor: (mapInteriorColor) => set({ mapInteriorColor }),
-    setPrintSize: (printSize) => set(() => {
+    setLockedPrintSize: (lockedPrintSize) => set((state) => ({
+        lockedPrintSize,
+        // Snap the active size to the lock immediately
+        ...(lockedPrintSize ? { printSize: lockedPrintSize } : {}),
+    })),
+    setPrintSize: (printSize) => set((state) => {
+        if (state.lockedPrintSize) return {}; // silently ignore — size is locked to paid order
         // All formats share the same circle size (1.0) — the SVG coordinate system handles
         // the physical size difference. 8x10 and 16x20 are the same aspect ratio and thus
         // identical SVG dimensions (1200×1500), so their designs should look identical.

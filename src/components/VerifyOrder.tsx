@@ -25,6 +25,7 @@ interface VerifyResult {
     revisionsUsed?: number
     revisionsRemaining?: number
     revisionsExhausted?: boolean
+    printSize?: string | null
 }
 
 // ─── Silent download helper ───────────────────────────────────────────────────
@@ -136,7 +137,7 @@ export default function VerifyOrder() {
                 return
             }
             if (data.status === 'rendering' || data.status === 'pending' || data.status === 'pending_manual') {
-                setResult({ listingType: data.listingType || 'digital' })
+                setResult({ listingType: data.listingType || 'digital', printSize: data.printSize || null })
                 setStatus('rendering')
                 return
             }
@@ -267,9 +268,28 @@ export default function VerifyOrder() {
                             <Text color="gray.500" fontSize="sm" mb={4}>
                                 This takes about 30 seconds. We'll update automatically — no need to refresh.
                             </Text>
-                            <Text fontSize="xs" color="gray.400">
+                            <Text fontSize="xs" color="gray.400" mb={4}>
                                 Last checked {lastChecked}s ago
                             </Text>
+                            {/* If customer has a design token and a specific print size, let them
+                                preview the design at the correct size and adjust before we render */}
+                            {token.trim() && result?.printSize && result?.listingType === 'print' && (
+                                <Box mt={2} p={4} bg="blue.50" borderRadius="md" border="1px solid" borderColor="blue.200">
+                                    <Text fontSize="sm" color="blue.800" mb={2} fontWeight="600">
+                                        Your order is for a {result.printSize} print
+                                    </Text>
+                                    <Text fontSize="xs" color="blue.600" mb={3}>
+                                        Want to check how your design looks at this size before we finalise it?
+                                    </Text>
+                                    <Button
+                                        as="a"
+                                        href={`/d/${encodeURIComponent(token.trim())}?lockedSize=${encodeURIComponent(result.printSize)}`}
+                                        size="sm" colorScheme="blue" variant="solid"
+                                    >
+                                        Preview &amp; adjust at {result.printSize}
+                                    </Button>
+                                </Box>
+                            )}
                         </Box>
                     )}
 
@@ -303,11 +323,18 @@ export default function VerifyOrder() {
                                         Not happy with the result?
                                     </Text>
                                     <Button
-                                        as="a" href="/" size="sm" width="full" variant="outline"
+                                        as="a"
+                                        href={result?.printSize ? `/?lockedSize=${encodeURIComponent(result.printSize)}` : '/'}
+                                        size="sm" width="full" variant="outline"
                                         borderColor="gray.300" fontSize="xs" fontWeight="600"
                                     >
                                         Redesign → get new token → enter it below
                                     </Button>
+                                    {result?.printSize && (
+                                        <Text fontSize="xs" color="gray.400" mt={1} textAlign="center">
+                                            Your order size: {result.printSize} — the designer will be locked to this size
+                                        </Text>
+                                    )}
                                 </Box>
                             )}
 

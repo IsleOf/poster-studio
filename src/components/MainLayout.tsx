@@ -4,7 +4,7 @@ import {
     Text, VStack, HStack, Button, useToast, Tooltip,
 } from '@chakra-ui/react';
 import { renderPosterToBlob } from '../utils/renderPoster';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { AUTO_SAVE_KEY } from '../store/useStore';
 import { trackEvent } from '../utils/analytics';
@@ -12,6 +12,7 @@ import { fetchAndApplyTemplate } from '../utils/applyTemplate';
 import { isVectorStreetMapEnabled } from '../utils/vectorStreetMapRenderer';
 import VectorStarMap from './VectorStarMap';
 import SidebarControls from './SidebarControls';
+import EmailCaptureModal from './EmailCaptureModal';
 
 // Lazy-load MapLibre-powered capture component — only needed for street/colored map modes.
 // This keeps MapLibre GL JS (~200 KB gzipped) out of the initial bundle for star map users.
@@ -21,8 +22,22 @@ import type { DesignGroup } from '../types/listing';
 const API_URL = import.meta.env.VITE_API_URL || '';
 const TEMPLATE_BOOTSTRAP_TIMEOUT_MS = 4000;
 
+const LOCKED_SIZE_MAP: Record<string, { label: string; width: number; height: number; ratio: string }> = {
+    '5x7':   { label: '5x7"',   width: 5,   height: 7,   ratio: '5/7'    },
+    '8x10':  { label: '8x10"',  width: 8,   height: 10,  ratio: '4/5'    },
+    '11x14': { label: '11x14"', width: 11,  height: 14,  ratio: '11/14'  },
+    '12x16': { label: '12x16"', width: 12,  height: 16,  ratio: '3/4'    },
+    '16x20': { label: '16x20"', width: 16,  height: 20,  ratio: '4/5'    },
+    '18x24': { label: '18x24"', width: 18,  height: 24,  ratio: '3/4'    },
+    '24x36': { label: '24x36"', width: 24,  height: 36,  ratio: '2/3'    },
+    'A5':    { label: 'A5',     width: 148, height: 210, ratio: '148/210' },
+    'A4':    { label: 'A4',     width: 210, height: 297, ratio: '210/297' },
+    'A3':    { label: 'A3',     width: 297, height: 420, ratio: '297/420' },
+};
+
 const MainLayout: React.FC = () => {
-    const { templateId, slug, designSlug } = useParams<{ templateId?: string; slug?: string; designSlug?: string }>();
+    const { templateId, slug, designSlug, designToken } = useParams<{ templateId?: string; slug?: string; designSlug?: string; designToken?: string }>();
+    const [searchParams] = useSearchParams();
     const [designGroups, setDesignGroups] = useState<DesignGroup[]>([]);
     // Always start in loading state — even on /, we auto-load Design001 below.
     // This prevents the legacy default "My Star Map" from flickering before
@@ -36,6 +51,7 @@ const MainLayout: React.FC = () => {
         printSize,
         posterType,
         mapColorPreset,
+        setLockedPrintSize,
         setMapBackgroundImage,
         isInlineEditing,
     } = useStore();
@@ -70,6 +86,34 @@ const MainLayout: React.FC = () => {
         trackEvent('page_view', { path: window.location.pathname, template: templateId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Lock print size when ?lockedSize=8x10 is in the URL (set by verify page for revisions)
+    useEffect(() => {
+        const raw = searchParams.get('lockedSize');
+        if (!raw) return;
+        const size = LOCKED_SIZE_MAP[raw] ?? LOCKED_SIZE_MAP[raw.toLowerCase()];
+        if (size) setLockedPrintSize(size);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Load saved design from server when accessed via /d/:designToken
+    // This lets customers return to their design from any device (not just localStorage).
+    // If ?lockedSize is also present, the size lock effect above will fire after this loads.
+    useEffect(() => {
+        if (!designToken) return;
+        setTemplateLoading(true);
+        fetch(`${API_URL}/api/design/${encodeURIComponent(designToken)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(state => {
+                if (!state) return;
+                const patch: Record<string, unknown> = { ...state };
+                if (typeof patch.date === 'string') patch.date = new Date(patch.date as string);
+                useStore.setState(patch as unknown as Parameters<typeof useStore.setState>[0]);
+            })
+            .catch(() => {})
+            .finally(() => setTemplateLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [designToken]);
 
     // Auto-load Design001 (or the first available design for the default map type)
     // when the user lands on / with no template/listing URL. Without this, the page
@@ -465,7 +509,8 @@ const MainLayout: React.FC = () => {
         if (e.button === 0 && !isInlineEditingRef.current) {
             // Don't start poster pan when clicking on SVG text/interactive elements —
             // those have their own D3 drag handlers and should not also pan the poster.
-            if ((e.target as Element).closest('#text-layer')) return;
+            const target = e.target as Element;
+            if (target.closest('#text-layer') || target.closest('#map-layer')) return;
             setIsDragging(true);
             setDragStart({ x: e.clientX - previewPanX, y: e.clientY - previewPanY });
         }
@@ -510,6 +555,8 @@ const MainLayout: React.FC = () => {
             setTouchStartDist(getTouchDist(e.touches));
             setTouchStartZoom(previewZoom);
         } else if (e.touches.length === 1 && !isInlineEditingRef.current) {
+            const target = e.target as Element;
+            if (target.closest('#text-layer') || target.closest('#map-layer')) return;
             setIsDragging(true);
             setDragStart({
                 x: e.touches[0].clientX - previewPanX,
@@ -850,6 +897,11 @@ const MainLayout: React.FC = () => {
                 <SidebarControls designGroups={designGroups} />
             </Box>
             )}
+            <EmailCaptureModal
+                listingSlug={slug || undefined}
+                designGroupId={designSlug || null}
+                designLabel={designSlug ? `your ${designSlug}` : null}
+            />
         </Flex>
         </>
     );

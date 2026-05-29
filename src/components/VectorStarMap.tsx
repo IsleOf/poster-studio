@@ -72,7 +72,7 @@ const VectorStarMap: React.FC = () => {
         titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
         titleAllCaps, locationAllCaps,
         showNames,
-        mapBackgroundImage, borderStyle, selectedTemplate, starColor, mapInteriorColor,
+        mapBackgroundImage, backgroundImageUrl, borderStyle, selectedTemplate, starColor, mapInteriorColor,
         showDivider, dividerLength, dividerThickness,
         vertSepOffsetY, setVertSepOffsetY,
         showVertSep, vertSepHeight, vertSepThickness, setShowVertSep, setVertSepHeight, setVertSepThickness,
@@ -119,7 +119,7 @@ const VectorStarMap: React.FC = () => {
         titleKerning: s.titleKerning, subtitleKerning: s.subtitleKerning,
         detailsKerning: s.detailsKerning, dedicationKerning: s.dedicationKerning, namesKerning: s.namesKerning,
         titleAllCaps: s.titleAllCaps, locationAllCaps: s.locationAllCaps, showNames: s.showNames,
-        mapBackgroundImage: s.mapBackgroundImage, borderStyle: s.borderStyle,
+        mapBackgroundImage: s.mapBackgroundImage, backgroundImageUrl: s.backgroundImageUrl, borderStyle: s.borderStyle,
         selectedTemplate: s.selectedTemplate, starColor: s.starColor, mapInteriorColor: s.mapInteriorColor,
         showDivider: s.showDivider, dividerLength: s.dividerLength, dividerThickness: s.dividerThickness,
         vertSepOffsetY: s.vertSepOffsetY,
@@ -265,7 +265,6 @@ const VectorStarMap: React.FC = () => {
     }, [
         useVectorStreetMap, width, height, maskShape, debouncedCircleSize, debouncedHeartSize, debouncedHouseSize,
         debouncedShapeOffsetX, debouncedShapeOffsetY, mapCenterLng, mapCenterLat, mapZoom, mapBearing,
-        mapImageOffsetX, mapImageOffsetY,
     ]);
 
     // Fetch Data Effect (Runs once) — Cache API for offline support + faster repeat visits
@@ -310,12 +309,23 @@ const VectorStarMap: React.FC = () => {
 
         svg.attr('viewBox', `0 0 ${width} ${height}`);
 
-        // Background
+        // Background fill — solid color fallback always present
         let bgRect = svg.select('rect.background-rect') as any;
         if (bgRect.empty()) {
             bgRect = svg.insert('rect', ':first-child').attr('class', 'background-rect') as any;
         }
-        bgRect.attr('width', '100%').attr('height', '100%').attr('fill', posterColor);
+        bgRect.attr('width', '100%').attr('height', '100%').attr('fill', backgroundImageUrl ? 'none' : posterColor);
+
+        // Custom background image — covers the full poster behind all layers
+        svg.select('image.background-image').remove();
+        if (backgroundImageUrl) {
+            svg.insert('image', ':first-child')
+                .attr('class', 'background-image')
+                .attr('href', backgroundImageUrl)
+                .attr('x', 0).attr('y', 0)
+                .attr('width', '100%').attr('height', '100%')
+                .attr('preserveAspectRatio', 'xMidYMid slice');
+        }
 
         // Layers
         const layers = ['defs-layer', 'map-layer', 'frame-layer', 'text-layer'];
@@ -329,7 +339,7 @@ const VectorStarMap: React.FC = () => {
             }
         });
 
-    }, [width, height, posterColor]);
+    }, [width, height, posterColor, backgroundImageUrl]);
 
     // Map Rendering Effect (Heavy)
     useEffect(() => {
@@ -412,7 +422,9 @@ const VectorStarMap: React.FC = () => {
         const path = geoPath().projection(projection);
 
         // Draw Map Background (Clipped)
-        const mapContent = mapLayer.append('g').attr('clip-path', 'url(#map-clip)');
+        const mapContent = mapLayer.append('g')
+            .attr('clip-path', 'url(#map-clip)')
+            .style('pointer-events', 'none');
 
         // Mutable ref so the map-image drag handler can move the pin group in sync
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -431,7 +443,12 @@ const VectorStarMap: React.FC = () => {
             const imgSize = mapRadius * 3;
             let imgOffsetX = mapImageOffsetX;
             let imgOffsetY = mapImageOffsetY;
-            const vectorGroup = mapContent.append('g');
+            const vectorGroup = mapContent.append('g')
+                // The transparent hitGroup below owns all map drag events.
+                // Disabling path hit-testing here is critical with high-detail
+                // vector maps; otherwise pointer moves can traverse millions of
+                // SVG path commands.
+                .style('pointer-events', 'none');
 
             vectorGroup.append('rect')
                 .attr('x', center[0] - mapRadius * 1.5 + mapImageOffsetX)
@@ -453,22 +470,52 @@ const VectorStarMap: React.FC = () => {
                     .attr('fill', mapWaterColor || '#8f8f8f')
                     .attr('fill-rule', 'evenodd');
             }
+            if (vectorStreetMap.waterwayD) {
+                vectorGroup.append('path')
+                    .attr('d', vectorStreetMap.waterwayD)
+                    .attr('fill', 'none')
+                    .attr('stroke', mapWaterColor || '#8f8f8f')
+                    .attr('stroke-linecap', 'round')
+                    .attr('stroke-linejoin', 'round')
+                    .attr('stroke-width', vectorStreetMap.waterwayWidth);
+            }
 
             const roadGroup = vectorGroup.append('g')
                 .attr('fill', 'none')
                 .attr('stroke-linecap', 'round')
                 .attr('stroke-linejoin', 'round');
 
+            const minorRoadColor = !mapSmallRoadColor || mapSmallRoadColor === '#1a1a1a' ? '#666666' : mapSmallRoadColor;
+            const detailRoadColor = !mapDetailRoadColor || mapDetailRoadColor === '#2a2a2a' ? '#8a8a8a' : mapDetailRoadColor;
+
             if (vectorStreetMap.detailRoadD) {
                 roadGroup.append('path')
                     .attr('d', vectorStreetMap.detailRoadD)
-                    .attr('stroke', mapDetailRoadColor || '#8a8a8a')
+                    .attr('stroke', mapBgColor || '#ffffff')
+                    .attr('stroke-width', vectorStreetMap.detailRoadUnderlayWidth);
+            }
+            if (vectorStreetMap.smallRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.smallRoadD)
+                    .attr('stroke', mapBgColor || '#ffffff')
+                    .attr('stroke-width', vectorStreetMap.smallRoadUnderlayWidth);
+            }
+            if (vectorStreetMap.majorRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.majorRoadD)
+                    .attr('stroke', mapBgColor || '#ffffff')
+                    .attr('stroke-width', vectorStreetMap.majorRoadUnderlayWidth);
+            }
+            if (vectorStreetMap.detailRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.detailRoadD)
+                    .attr('stroke', detailRoadColor)
                     .attr('stroke-width', vectorStreetMap.detailRoadWidth);
             }
             if (vectorStreetMap.smallRoadD) {
                 roadGroup.append('path')
                     .attr('d', vectorStreetMap.smallRoadD)
-                    .attr('stroke', mapSmallRoadColor || '#666666')
+                    .attr('stroke', minorRoadColor)
                     .attr('stroke-width', vectorStreetMap.smallRoadWidth);
             }
             if (vectorStreetMap.majorRoadD) {
@@ -478,17 +525,19 @@ const VectorStarMap: React.FC = () => {
                     .attr('stroke-width', vectorStreetMap.majorRoadWidth);
             }
 
-            // Same map-pan behavior as the raster image path. During drag we
-            // translate the rendered SVG path group immediately, then persist the
-            // offset and geographic center on drag end so the next vector render
-            // fetches the correct tile coverage.
-            const hitGroup = mapLayer.append('g').style('cursor', 'grab');
+            // High-detail vector maps contain millions of SVG path characters.
+            // Keep pointer movement cheap: accumulate drag deltas during the
+            // gesture and move the full vectorGroup once on release.
+            const hitGroup = mapLayer.append('g')
+                .style('cursor', 'grab')
+                .style('pointer-events', 'all');
             hitGroupRef = hitGroup;
 
             if (maskShape === 'rect') {
                 hitGroup.append('rect')
                     .attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H)
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             } else if (maskShape === 'heart') {
                 const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
@@ -496,6 +545,7 @@ const VectorStarMap: React.FC = () => {
                     .attr('d', userHeartPath)
                     .attr('transform', getHeartTransform(insetScale))
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             } else if (maskShape === 'house') {
                 const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
@@ -503,6 +553,7 @@ const VectorStarMap: React.FC = () => {
                     .attr('d', userHousePath)
                     .attr('transform', getHouseTransform(insetScale))
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             } else {
                 hitGroup.append('circle')
@@ -510,49 +561,118 @@ const VectorStarMap: React.FC = () => {
                     .attr('cy', center[1])
                     .attr('r', Math.max(mapRadius - MAP_EDGE_ZONE, mapRadius * 0.5))
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             }
 
             let dragStartOffsetX = imgOffsetX;
             let dragStartOffsetY = imgOffsetY;
+            let vectorMapDragActive = false;
 
-            hitGroup.call(
-                drag<SVGGElement, unknown>()
-                    .on('start', (event) => {
-                        event.sourceEvent.stopPropagation();
-                        hitGroup.style('cursor', 'grabbing');
-                        dragStartOffsetX = imgOffsetX;
-                        dragStartOffsetY = imgOffsetY;
-                        useStore.getState().setIsDraggingMapImage(true);
-                    })
-                    .on('drag', (event) => {
-                        event.sourceEvent.stopPropagation();
-                        const zoom = useStore.getState().previewZoom;
-                        imgOffsetX += event.dx / zoom;
-                        imgOffsetY += event.dy / zoom;
-                        vectorGroup.attr('transform', `translate(${imgOffsetX - mapImageOffsetX}, ${imgOffsetY - mapImageOffsetY})`);
-                    })
-                    .on('end', () => {
-                        hitGroup.style('cursor', 'grab');
-                        const deltaX = imgOffsetX - dragStartOffsetX;
-                        const deltaY = imgOffsetY - dragStartOffsetY;
-                        if (deltaX !== 0 || deltaY !== 0) {
-                            const state = useStore.getState();
-                            state.setMapImageOffsetX(imgOffsetX);
-                            state.setMapImageOffsetY(imgOffsetY);
+            const finishVectorMapDrag = () => {
+                hitGroup.style('cursor', 'grab');
+                const deltaX = imgOffsetX - dragStartOffsetX;
+                const deltaY = imgOffsetY - dragStartOffsetY;
+                if (deltaX !== 0 || deltaY !== 0) {
+                    vectorGroup
+                        .attr('transform', `translate(${imgOffsetX - mapImageOffsetX}, ${imgOffsetY - mapImageOffsetY})`)
+                        .style('display', null);
+                    useStore.setState({
+                        mapImageOffsetX: imgOffsetX,
+                        mapImageOffsetY: imgOffsetY,
+                        isDraggingMapImage: false,
+                    });
+                    vectorMapDragActive = false;
+                    return;
+                }
+                vectorGroup.style('display', null);
+                useStore.setState({ isDraggingMapImage: false });
+                vectorMapDragActive = false;
+            };
 
-                            const svgToCanvas = 1200 / imgSize;
-                            const worldWidthPx = 512 * Math.pow(2, state.mapZoom);
-                            const degPerCanvasPx = 360 / worldWidthPx;
-                            const newLng = state.mapCenterLng - deltaX * svgToCanvas * degPerCanvasPx;
-                            const newLat = state.mapCenterLat + deltaY * svgToCanvas * degPerCanvasPx
-                                * Math.cos(state.mapCenterLat * Math.PI / 180);
-                            state.setMapCenterLng(newLng);
-                            state.setMapCenterLat(newLat);
-                        }
-                        useStore.getState().setIsDraggingMapImage(false);
-                    })
-            );
+            // D3 drag uses SVG pointer transforms internally. On high-detail
+            // vector maps that becomes visibly slow, so map panning uses raw
+            // client-pixel pointer deltas instead.
+            hitGroup.on('pointerdown', (event: PointerEvent) => {
+                if (vectorMapDragActive) return;
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                vectorMapDragActive = true;
+                event.stopPropagation();
+                event.preventDefault();
+
+                hitGroup.style('cursor', 'grabbing');
+                dragStartOffsetX = imgOffsetX;
+                dragStartOffsetY = imgOffsetY;
+                useStore.getState().setIsDraggingMapImage(true);
+
+                let lastClientX = event.clientX;
+                let lastClientY = event.clientY;
+                const pointerId = event.pointerId;
+                const hitNode = hitGroup.node() as SVGGElement | null;
+                hitNode?.setPointerCapture?.(pointerId);
+
+                const onPointerMove = (moveEvent: PointerEvent) => {
+                    if (moveEvent.pointerId !== pointerId) return;
+                    moveEvent.stopPropagation();
+                    moveEvent.preventDefault();
+                    const zoom = useStore.getState().previewZoom;
+                    imgOffsetX += (moveEvent.clientX - lastClientX) / zoom;
+                    imgOffsetY += (moveEvent.clientY - lastClientY) / zoom;
+                    lastClientX = moveEvent.clientX;
+                    lastClientY = moveEvent.clientY;
+                };
+
+                const onPointerUp = (upEvent: PointerEvent) => {
+                    if (upEvent.pointerId !== pointerId) return;
+                    upEvent.stopPropagation();
+                    upEvent.preventDefault();
+                    window.removeEventListener('pointermove', onPointerMove);
+                    window.removeEventListener('pointerup', onPointerUp);
+                    window.removeEventListener('pointercancel', onPointerUp);
+                    hitNode?.releasePointerCapture?.(pointerId);
+                    finishVectorMapDrag();
+                };
+
+                window.addEventListener('pointermove', onPointerMove, { passive: false });
+                window.addEventListener('pointerup', onPointerUp, { passive: false });
+                window.addEventListener('pointercancel', onPointerUp, { passive: false });
+            });
+
+            hitGroup.on('mousedown', (event: MouseEvent) => {
+                if (vectorMapDragActive || event.button !== 0) return;
+                vectorMapDragActive = true;
+                event.stopPropagation();
+                event.preventDefault();
+
+                    hitGroup.style('cursor', 'grabbing');
+                    dragStartOffsetX = imgOffsetX;
+                    dragStartOffsetY = imgOffsetY;
+                    useStore.getState().setIsDraggingMapImage(true);
+
+                    let lastClientX = event.clientX;
+                let lastClientY = event.clientY;
+
+                const onMouseMove = (moveEvent: MouseEvent) => {
+                    moveEvent.stopPropagation();
+                    moveEvent.preventDefault();
+                    const zoom = useStore.getState().previewZoom;
+                    imgOffsetX += (moveEvent.clientX - lastClientX) / zoom;
+                    imgOffsetY += (moveEvent.clientY - lastClientY) / zoom;
+                    lastClientX = moveEvent.clientX;
+                    lastClientY = moveEvent.clientY;
+                };
+
+                const onMouseUp = (upEvent: MouseEvent) => {
+                    upEvent.stopPropagation();
+                    upEvent.preventDefault();
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                    finishVectorMapDrag();
+                };
+
+                window.addEventListener('mousemove', onMouseMove, { passive: false });
+                window.addEventListener('mouseup', onMouseUp, { passive: false });
+            });
         } else if (mapBackgroundImage) {
             // Use 3x radius so there's plenty of room to drag the image within the shape
             const imgSize = mapRadius * 3;
@@ -570,13 +690,16 @@ const VectorStarMap: React.FC = () => {
 
             // Transparent drag hit area — inset by MAP_EDGE_ZONE so the outer ring
             // falls through to shapeInteract (shape drag) once .raise() puts this on top.
-            const hitGroup = mapLayer.append('g').style('cursor', 'grab');
+            const hitGroup = mapLayer.append('g')
+                .style('cursor', 'grab')
+                .style('pointer-events', 'all');
             hitGroupRef = hitGroup;
 
             if (maskShape === 'rect') {
                 hitGroup.append('rect')
                     .attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H)
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             } else if (maskShape === 'heart') {
                 const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
@@ -584,6 +707,7 @@ const VectorStarMap: React.FC = () => {
                     .attr('d', userHeartPath)
                     .attr('transform', getHeartTransform(insetScale))
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             } else if (maskShape === 'house') {
                 const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
@@ -591,6 +715,7 @@ const VectorStarMap: React.FC = () => {
                     .attr('d', userHousePath)
                     .attr('transform', getHouseTransform(insetScale))
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             } else {
                 hitGroup.append('circle')
@@ -598,6 +723,7 @@ const VectorStarMap: React.FC = () => {
                     .attr('cy', center[1])
                     .attr('r', Math.max(mapRadius - MAP_EDGE_ZONE, mapRadius * 0.5))
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             }
 
@@ -749,28 +875,88 @@ const VectorStarMap: React.FC = () => {
                 .style('pointer-events', 'all');
 
             let pinDx = 0, pinDy = 0;
-            pinGroup.call(
-                drag<SVGGElement, unknown>()
-                    .on('start', (event) => {
-                        event.sourceEvent.stopPropagation();
-                        pinDx = 0; pinDy = 0;
-                        pinGroup.style('cursor', 'grabbing');
-                    })
-                    .on('drag', (event) => {
-                        event.sourceEvent.stopPropagation();
-                        const zoom = useStore.getState().previewZoom;
-                        pinDx += event.dx / zoom;
-                        pinDy += event.dy / zoom;
+            let pinDragActive = false;
+            const startPinDrag = (
+                startEvent: PointerEvent | MouseEvent,
+                bindMove: (onMove: (event: PointerEvent | MouseEvent) => void, onEnd: (event: PointerEvent | MouseEvent) => void) => void,
+            ) => {
+                if (pinDragActive) return;
+                pinDragActive = true;
+                startEvent.stopPropagation();
+                startEvent.preventDefault();
+                pinDx = 0;
+                pinDy = 0;
+                pinGroup.style('cursor', 'grabbing');
+                let lastClientX = startEvent.clientX;
+                let lastClientY = startEvent.clientY;
+
+                const onMove = (moveEvent: PointerEvent | MouseEvent) => {
+                    moveEvent.stopPropagation();
+                    moveEvent.preventDefault();
+                    const zoom = useStore.getState().previewZoom;
+                    pinDx += (moveEvent.clientX - lastClientX) / zoom;
+                    pinDy += (moveEvent.clientY - lastClientY) / zoom;
+                    lastClientX = moveEvent.clientX;
+                    lastClientY = moveEvent.clientY;
+                };
+
+                const onEnd = (endEvent: PointerEvent | MouseEvent) => {
+                    endEvent.stopPropagation();
+                    endEvent.preventDefault();
+                    pinGroup.style('cursor', 'grab');
+                    if (pinDx !== 0 || pinDy !== 0) {
                         pinGroup.attr('transform', `translate(${pinX + pinDx}, ${pinY + pinDy})`);
-                    })
-                    .on('end', () => {
-                        pinGroup.style('cursor', 'grab');
-                        if (pinDx !== 0 || pinDy !== 0) {
-                            setLocationPinOffsetX(locationPinOffsetX + pinDx);
-                            setLocationPinOffsetY(locationPinOffsetY + pinDy);
-                        }
-                    })
-            );
+                        setLocationPinOffsetX(locationPinOffsetX + pinDx);
+                        setLocationPinOffsetY(locationPinOffsetY + pinDy);
+                    }
+                    pinDragActive = false;
+                };
+
+                bindMove(onMove, onEnd);
+            };
+
+            pinGroup.on('pointerdown', (event: PointerEvent) => {
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                const pointerId = event.pointerId;
+                const pinNode = pinGroup.node() as SVGGElement | null;
+                pinNode?.setPointerCapture?.(pointerId);
+                startPinDrag(
+                    event,
+                    (onMove, onEnd) => {
+                        const onPointerMove = (moveEvent: PointerEvent) => {
+                            if (moveEvent.pointerId === pointerId) onMove(moveEvent);
+                        };
+                        const onPointerUp = (upEvent: PointerEvent) => {
+                            if (upEvent.pointerId !== pointerId) return;
+                            window.removeEventListener('pointermove', onPointerMove);
+                            window.removeEventListener('pointerup', onPointerUp);
+                            window.removeEventListener('pointercancel', onPointerUp);
+                            pinNode?.releasePointerCapture?.(pointerId);
+                            onEnd(upEvent);
+                        };
+                        window.addEventListener('pointermove', onPointerMove, { passive: false });
+                        window.addEventListener('pointerup', onPointerUp, { passive: false });
+                        window.addEventListener('pointercancel', onPointerUp, { passive: false });
+                    },
+                );
+            });
+
+            pinGroup.on('mousedown', (event: MouseEvent) => {
+                if (event.button !== 0) return;
+                startPinDrag(
+                    event,
+                    (onMove, onEnd) => {
+                        const onMouseMove = (moveEvent: MouseEvent) => onMove(moveEvent);
+                        const onMouseUp = (upEvent: MouseEvent) => {
+                            window.removeEventListener('mousemove', onMouseMove);
+                            window.removeEventListener('mouseup', onMouseUp);
+                            onEnd(upEvent);
+                        };
+                        window.addEventListener('mousemove', onMouseMove, { passive: false });
+                        window.addEventListener('mouseup', onMouseUp, { passive: false });
+                    },
+                );
+            });
         }
 
         // Border Rendering Logic
@@ -1032,7 +1218,7 @@ const VectorStarMap: React.FC = () => {
         posterColor, textColor, starColor, mapInteriorColor, mapStreetColor, width, height, // Colors & Dims
         useVectorStreetMap, vectorStreetMap, mapBgColor, mapWaterColor, mapLandColor,
         mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
-        mapBackgroundImage, mapImageOffsetX, mapImageOffsetY, mapImageOpacity, borderStyle, posterType, // New Props
+        mapBackgroundImage, mapImageOpacity, borderStyle, posterType, // New Props
         showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY, // Location pin
         showInnerRing, innerRingWidth, innerRingInset,
         showOuterRing, outerRingWidth, outerRingGap, // Inner ring

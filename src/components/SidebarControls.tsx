@@ -71,7 +71,7 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
         showLocation, setShowLocation,
         showDate, setShowDate,
         showCoords, setShowCoords,
-        printSize, setPrintSize,
+        printSize, setPrintSize, lockedPrintSize,
         customText, setCustomText,
         circleSize, setCircleSize,
         heartSize, setHeartSize,
@@ -300,7 +300,11 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                             return (
                                                 <Button
                                                     key={sz.id}
-                                                    onClick={() => fetchAndApplyTemplate(sz.id, { preserveText: true, designGroupId: activeGroupId })}
+                                                    onClick={() => fetchAndApplyTemplate(sz.id, {
+                                                        preserveText: true,
+                                                        preserveMapPlacement: true,
+                                                        designGroupId: activeGroupId,
+                                                    })}
                                                     {...toggleButtonStyles(isActive)}
                                                     flexDirection="column"
                                                     h="auto"
@@ -515,6 +519,12 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                             </AccordionButton>
                         </h2>
                         <AccordionPanel pb={6} px={6}>
+                            {lockedPrintSize && (
+                                <Text fontSize="xs" color="orange.600" bg="orange.50" borderRadius="md"
+                                    px={3} py={2} mb={3} border="1px solid" borderColor="orange.200">
+                                    Locked to <strong>{lockedPrintSize.label}</strong> — this matches your order size and cannot be changed.
+                                </Text>
+                            )}
                             <Grid templateColumns="repeat(2, 1fr)" gap={3}>
                                 {[
                                     { label: '8x10"', width: 8, height: 10, ratio: '4/5' },
@@ -526,6 +536,7 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                     <Button
                                         key={size.label}
                                         onClick={() => setPrintSize(size)}
+                                        isDisabled={!!lockedPrintSize}
                                         {...toggleButtonStyles(printSize.label === size.label)}
                                     >
                                         {size.label}

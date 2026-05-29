@@ -54,6 +54,7 @@ const TEMPLATE_FIELD_DEFAULTS: Record<string, unknown> = {
     showHeartDecor: false, heartDecorOffsetY: 0,
     showLocationPin: true, locationPinSize: 70, locationPinOffsetX: 0, locationPinOffsetY: 0,
     mapCity: '', mapCenterLat: 48.8566, mapCenterLng: 2.3522, mapZoom: 14, mapBearing: 0,
+    mapImageOffsetX: 0, mapImageOffsetY: 0, mapImageOpacity: 1,
     mapStyleUrl: null, mapColorPreset: 'midnight', mapBgColor: '#1a1a2e', mapStreetColor: '#3d5a80',
     mapWaterColor: '#8f8f8f', mapLandColor: '#b6b6b6',
     mapMainRoadColor: '#111111', mapSmallRoadColor: '#1a1a1a', mapDetailRoadColor: '#2a2a2a',
@@ -83,6 +84,7 @@ const TEMPLATE_FIELDS = [
     'showHeartDecor', 'heartDecorOffsetY',
     'showLocationPin', 'locationPinSize', 'locationPinOffsetX', 'locationPinOffsetY',
     'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
+    'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
     'mapStyleUrl', 'mapColorPreset', 'mapBgColor', 'mapStreetColor',
     'mapWaterColor', 'mapLandColor', 'mapMainRoadColor', 'mapSmallRoadColor', 'mapDetailRoadColor',
     'showLocation', 'showDate', 'showCoords',
@@ -90,20 +92,40 @@ const TEMPLATE_FIELDS = [
     'titleAllCaps', 'locationAllCaps',
     'finelineWidth', 'printSize',
     'title', 'subtitle', 'selectedTemplate',
+    'backgroundImageUrl',
 ] as const;
 
 // Text-only fields — skip when switching sizes to preserve user's entered text
 const TEXT_FIELDS = new Set(['title', 'subtitle', 'dedication', 'location', 'lat', 'lng']);
 
+// Customer-selected map placement must survive size switches. Different sizes
+// need their layout values, but not a reset of the selected place/zoom/pan.
+const MAP_PLACEMENT_FIELDS = new Set([
+    'mapCity',
+    'mapCenterLat',
+    'mapCenterLng',
+    'mapZoom',
+    'mapBearing',
+    'mapImageOffsetX',
+    'mapImageOffsetY',
+    'mapImageOpacity',
+    'locationPinOffsetX',
+    'locationPinOffsetY',
+]);
+
 // Fields stored in template JSON that map to customText sub-fields
 const CUSTOM_TEXT_KEYS = ['dedication', 'names'] as const;
 
-export function applyTemplate(settings: TemplateSettings, { preserveText = false } = {}): void {
+export function applyTemplate(
+    settings: TemplateSettings,
+    { preserveText = false, preserveMapPlacement = false } = {}
+): void {
     const store = useStore.getState();
     const updates: Record<string, unknown> = {};
 
     for (const key of TEMPLATE_FIELDS) {
         if (preserveText && TEXT_FIELDS.has(key)) continue;
+        if (preserveMapPlacement && MAP_PLACEMENT_FIELDS.has(key)) continue;
         // Use template value if present, else fall back to store default.
         // This prevents stale values from a previously-loaded template bleeding through
         // when loading an older template that was saved before a field existed.
@@ -198,7 +220,11 @@ export function captureCurrentSettings(): Record<string, unknown> {
 
 export async function fetchAndApplyTemplate(
     templateId: string,
-    { preserveText = false, designGroupId }: { preserveText?: boolean; designGroupId?: string } = {}
+    {
+        preserveText = false,
+        preserveMapPlacement = false,
+        designGroupId,
+    }: { preserveText?: boolean; preserveMapPlacement?: boolean; designGroupId?: string } = {}
 ): Promise<boolean> {
     try {
         const API_URL = import.meta.env.VITE_API_URL || '';
@@ -215,7 +241,7 @@ export async function fetchAndApplyTemplate(
             setActiveDesignGroupId(designGroupId);
         }
         if (data.settings) {
-            applyTemplate(data.settings, { preserveText });
+            applyTemplate(data.settings, { preserveText, preserveMapPlacement });
             return true;
         }
         return false;

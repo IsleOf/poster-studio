@@ -17,26 +17,38 @@ git show renderer-raster-maplibre-fallback-2026-05-12
 git checkout renderer-raster-maplibre-fallback-2026-05-12 -- src/components/VectorStarMap.tsx src/components/StreetMapCapture.tsx src/utils/renderPoster.ts
 ```
 
-## Enable Locally
+## Runtime Controls
 
-The vector renderer is disabled by default. Enable it in the browser:
+The vector renderer is enabled by default for monochrome street maps:
+
+- `posterType === "streetmap"`
+- `mapColorPreset === "design2"`
+
+Force-enable it in a browser:
 
 ```js
 localStorage.setItem('posterStudio.vectorMapRenderer', '1');
 location.reload();
 ```
 
-Disable it:
+Force-disable it for raster comparison:
+
+```js
+localStorage.setItem('posterStudio.vectorMapRenderer', '0');
+location.reload();
+```
+
+Clear the override:
 
 ```js
 localStorage.removeItem('posterStudio.vectorMapRenderer');
 location.reload();
 ```
 
-It can also be enabled at build time:
+It can also be disabled at build time:
 
 ```bash
-VITE_VECTOR_MAP_RENDERER=true npm run build
+VITE_VECTOR_MAP_RENDERER=false npm run build
 ```
 
 For the local Puppeteer server renderer only, vector mode can be enabled without changing customer browsers:
@@ -45,7 +57,7 @@ For the local Puppeteer server renderer only, vector mode can be enabled without
 RENDER_VECTOR_MAPS=true ENABLE_LOCAL_RENDER=true npm run api
 ```
 
-Keep `RENDER_VECTOR_MAPS=false` in production unless intentionally testing server-side vector renders.
+Production order/demo renders should use `RENDER_VECTOR_MAPS=true` once the deployed frontend has the parity renderer. Keep `RENDER_VECTOR_MAPS=false` only when deliberately falling back to the raster MapLibre capture.
 
 ## Scope
 
@@ -54,6 +66,7 @@ Current prototype supports:
 - `posterType === "streetmap"`
 - monochrome `mapColorPreset === "design2"`
 - vector roads, water, and selected landuse polygons
+- raster-style monochrome road casing: white underlays, gray minor roads, black major roads
 - in-browser preview and demo PNG export from vector SVG paths
 - headless `/render?token=...` PNG export when the flag is enabled
 - map panning in vector mode
@@ -81,20 +94,22 @@ The renderer also clips off-canvas geometry and removes near-duplicate points. T
 
 ## Test Check
 
-With the flag enabled, the map layer should contain SVG paths and no map image:
+With vector enabled, the map layer should contain SVG paths and no map image:
 
 ```js
 const svg = document.querySelector('#poster-preview svg');
 ({
   images: svg.querySelectorAll('#map-layer image').length,
   paths: svg.querySelectorAll('#map-layer path').length,
+  pathChars: [...svg.querySelectorAll('#map-layer path')]
+    .reduce((n, p) => n + (p.getAttribute('d') || '').length, 0),
 });
 ```
 
 Expected:
 
 ```js
-{ images: 0, paths: 5 }
+{ images: 0, paths: 8, pathChars: 1200000 }
 ```
 
 ## Smoke Results
@@ -105,7 +120,7 @@ Local checks after clipping/readiness changes:
 - Headless `/render`, `8x10`: 5 vector map paths, 0 map images, completed in ~3.5s.
 - Headless `/render`, `24x36`: 6 vector map paths, 0 map images, ~1.08M path chars, completed in ~8.5s.
 
-These are smoke tests, not load tests. Before enabling vector mode globally, run concurrent render tests for `24x36` and `A1` on production-sized hardware.
+These are smoke tests, not load tests. Before increasing production concurrency, run concurrent render tests for `24x36` and `A1` on production-sized hardware.
 
 ## Stress Test Harness
 

@@ -113,6 +113,45 @@ describe('applyTemplate', () => {
         expect(state.title).not.toBe('New Title');
     });
 
+    it('preserves map placement when switching sizes', () => {
+        useStore.setState({
+            mapCity: 'Paris',
+            mapCenterLat: 48.8637,
+            mapCenterLng: 2.3431,
+            mapZoom: 15.8,
+            mapBearing: 7,
+            mapImageOffsetX: 12,
+            mapImageOffsetY: -9,
+            locationPinOffsetX: 4,
+            locationPinOffsetY: -3,
+        } as Parameters<typeof useStore.setState>[0]);
+
+        applyTemplate({
+            printSize: '24x36',
+            mapCity: 'Default',
+            mapCenterLat: 0,
+            mapCenterLng: 0,
+            mapZoom: 14,
+            mapBearing: 0,
+            mapImageOffsetX: 0,
+            mapImageOffsetY: 0,
+            locationPinOffsetX: 0,
+            locationPinOffsetY: 0,
+        }, { preserveMapPlacement: true });
+
+        const state = getState();
+        expect((state.printSize as { label: string }).label).toBe('24x36"');
+        expect(state.mapCity).toBe('Paris');
+        expect(state.mapCenterLat).toBe(48.8637);
+        expect(state.mapCenterLng).toBe(2.3431);
+        expect(state.mapZoom).toBe(15.8);
+        expect(state.mapBearing).toBe(7);
+        expect(state.mapImageOffsetX).toBe(12);
+        expect(state.mapImageOffsetY).toBe(-9);
+        expect(state.locationPinOffsetX).toBe(4);
+        expect(state.locationPinOffsetY).toBe(-3);
+    });
+
     it('sets customText fields from template settings', () => {
         applyTemplate({ title: 'Star Night', subtitle: 'Summer Solstice', dedication: 'For you' });
         const ct = getState().customText as Record<string, string>;
@@ -202,6 +241,8 @@ describe('captureCurrentSettings', () => {
             mapCenterLng: -81.4635,
             mapZoom: 16,
             mapBearing: 12,
+            mapImageOffsetX: 20,
+            mapImageOffsetY: -15,
         });
         const settings = captureCurrentSettings();
         expect(settings.mapCity).toBe('Jacksonville');
@@ -209,6 +250,8 @@ describe('captureCurrentSettings', () => {
         expect(settings.mapCenterLng).toBe(-81.4635);
         expect(settings.mapZoom).toBe(16);
         expect(settings.mapBearing).toBe(12);
+        expect(settings.mapImageOffsetX).toBe(20);
+        expect(settings.mapImageOffsetY).toBe(-15);
     });
 
     it('captures location all-caps setting with text settings', () => {
