@@ -55,7 +55,7 @@ const TEMPLATE_FIELD_DEFAULTS: Record<string, unknown> = {
     showLocationPin: true, locationPinSize: 70, locationPinOffsetX: 0, locationPinOffsetY: 0,
     mapCity: '', mapCenterLat: 48.8566, mapCenterLng: 2.3522, mapZoom: 14, mapBearing: 0,
     mapImageOffsetX: 0, mapImageOffsetY: 0, mapImageOpacity: 1,
-    mapStyleUrl: null, mapColorPreset: 'midnight', mapBgColor: '#1a1a2e', mapStreetColor: '#3d5a80',
+    mapStyleUrl: null, mapColorPreset: 'midnight', mapLabelScale: 1, mapBgColor: '#1a1a2e', mapStreetColor: '#3d5a80',
     mapWaterColor: '#8f8f8f', mapLandColor: '#b6b6b6',
     mapMainRoadColor: '#111111', mapSmallRoadColor: '#1a1a1a', mapDetailRoadColor: '#2a2a2a',
     showLocation: true, showDate: true, showCoords: true,
@@ -85,7 +85,7 @@ const TEMPLATE_FIELDS = [
     'showLocationPin', 'locationPinSize', 'locationPinOffsetX', 'locationPinOffsetY',
     'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
     'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
-    'mapStyleUrl', 'mapColorPreset', 'mapBgColor', 'mapStreetColor',
+    'mapStyleUrl', 'mapColorPreset', 'mapLabelScale', 'mapBgColor', 'mapStreetColor',
     'mapWaterColor', 'mapLandColor', 'mapMainRoadColor', 'mapSmallRoadColor', 'mapDetailRoadColor',
     'showLocation', 'showDate', 'showCoords',
     'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
@@ -234,9 +234,12 @@ export async function fetchAndApplyTemplate(
         const res = await fetch(url.toString(), { cache: 'no-store' });
         if (!res.ok) return false;
         const data = await res.json();
-        // Store the Etsy listing URL so DownloadButton can show the right CTA
-        const { setSelectedTemplateEtsyUrl, setActiveDesignGroupId } = useStore.getState();
+        // Store Etsy metadata so the order UI can show the right CTA, size, and variant
+        const { setSelectedTemplateEtsyUrl, setSelectedTemplateEtsyVariantName, setSelectedTemplateFulfillmentSize, setSelectedTemplateListingSlug, setActiveDesignGroupId } = useStore.getState();
         setSelectedTemplateEtsyUrl(data.etsy_listing_url || null);
+        setSelectedTemplateEtsyVariantName(data.etsy_variant_name || null);
+        setSelectedTemplateFulfillmentSize(data.fulfillment_size || null);
+        setSelectedTemplateListingSlug(data.listing_slug || null);
         if (designGroupId !== undefined) {
             setActiveDesignGroupId(designGroupId);
         }

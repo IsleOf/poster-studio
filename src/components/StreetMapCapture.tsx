@@ -364,6 +364,83 @@ function applyColoredMapPOICleanup(map: maplibregl.Map): void {
     cleanupState.__coloredMapPOICleanupApplied = true;
 }
 
+/**
+ * Scale label text size on the prebuilt (colored) style. Captures each symbol layer's
+ * base text-size once, then sets text-size = base × scale. Because labels are vector
+ * text re-rendered at full print resolution, larger labels stay crisp at 300 DPI.
+ */
+function applyColoredMapLabelScale(map: maplibregl.Map, scale: number): void {
+    if (!map.isStyleLoaded()) return;
+    const state = map as maplibregl.Map & { __labelBaseSizes?: Record<string, unknown> };
+    if (!state.__labelBaseSizes) state.__labelBaseSizes = {};
+    const base = state.__labelBaseSizes;
+    for (const layer of map.getStyle().layers ?? []) {
+        if (layer.type !== 'symbol') continue;
+        const hasText = (layer as { layout?: { 'text-field'?: unknown } }).layout?.['text-field'];
+        if (!hasText || !map.getLayer(layer.id)) continue;
+        if (!(layer.id in base)) {
+            const cur = map.getLayoutProperty(layer.id, 'text-size');
+            base[layer.id] = cur === undefined ? 16 : cur;
+        }
+        try {
+            map.setLayoutProperty(
+                layer.id, 'text-size',
+                scale === 1 ? base[layer.id] : ['*', base[layer.id], scale] as unknown,
+            );
+        } catch { /* layer without text-size — ignore */ }
+    }
+}
+
+/**
+ * Reserve a collision box at the heart-pin location so the colored style's street/place
+ * labels avoid the pin. Uses an invisible (opacity 0) icon symbol with `icon-allow-overlap:
+ * true` (always placed) + `icon-ignore-placement: false` (other labels collide with it).
+ */
+function applyPinLabelDeclutter(
+    map: maplibregl.Map,
+    opts: { lng: number; lat: number; sizePx: number; enabled: boolean },
+): void {
+    if (!map.isStyleLoaded()) return;
+    const SRC = '__pin_collision';
+    const LYR = '__pin_collision';
+    const IMG = '__pin_collision_img';
+
+    if (!opts.enabled) {
+        if (map.getLayer(LYR)) map.removeLayer(LYR);
+        if (map.getSource(SRC)) map.removeSource(SRC);
+        return;
+    }
+
+    if (!map.hasImage(IMG)) {
+        const px = 16;
+        map.addImage(IMG, { width: px, height: px, data: new Uint8Array(px * px * 4) }); // transparent
+    }
+    const geo = {
+        type: 'FeatureCollection',
+        features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [opts.lng, opts.lat] }, properties: {} }],
+    } as GeoJSON.FeatureCollection;
+    const src = map.getSource(SRC) as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(geo);
+    else map.addSource(SRC, { type: 'geojson', data: geo });
+
+    const iconSize = Math.max(0.5, opts.sizePx / 16);
+    if (!map.getLayer(LYR)) {
+        map.addLayer({
+            id: LYR, type: 'symbol', source: SRC,
+            layout: {
+                'icon-image': IMG,
+                'icon-size': iconSize,
+                'icon-allow-overlap': true,     // the (invisible) marker is always placed…
+                'icon-ignore-placement': false, // …and other labels collide with / avoid it
+                'symbol-sort-key': 0,           // placed first → reserves its box before labels
+            },
+            paint: { 'icon-opacity': 0 },
+        });
+    } else {
+        map.setLayoutProperty(LYR, 'icon-size', iconSize);
+    }
+}
+
 function waitForNextMapRender(map: maplibregl.Map, timeoutMs = 500): Promise<void> {
     return new Promise(resolve => {
         let done = false;
@@ -399,6 +476,7 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
     const captureVersionRef = useRef(0);
     const colorDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const stitchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const labelDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const didSkipInitialStyleEffectRef = useRef(false);
 
     const {
@@ -406,7 +484,8 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         mapBgColor, mapStreetColor, mapWaterColor, mapLandColor,
         mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
         printSize, maskShape, circleSize, heartSize, houseSize,
-        mapStyleUrl, mapColorPreset, setCaptureHighResFn,
+        mapStyleUrl, mapColorPreset, mapLabelScale, setCaptureHighResFn,
+        showLocationPin, locationPinSize,
     } = useStore();
     const activePreset = MAP_COLOR_PRESETS_FULL.find(p => p.id === mapColorPreset);
     const getActiveStyle = () => {
@@ -494,6 +573,8 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             });
             if (mapStyleUrl && tempMap.isStyleLoaded()) {
                 applyColoredMapPOICleanup(tempMap);
+                applyColoredMapLabelScale(tempMap, useStore.getState().mapLabelScale);
+                applyPinLabelDeclutter(tempMap, { lng, lat, sizePx: useStore.getState().locationPinSize * 1.4, enabled: useStore.getState().showLocationPin });
                 await waitForNextMapRender(tempMap);
             }
 
@@ -538,6 +619,8 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
         isCapturingRef.current = true;
         pendingCaptureRef.current = false;
+        // Signal the UI to show the "Updating map…" overlay while this capture runs.
+        useStore.getState().setStreetMapRendering(true);
         // Snapshot the current version — if it changes before we finish, the result is stale
         const startVersion = captureVersionRef.current;
         // Non-null cast: we already returned above if map was null.
@@ -574,6 +657,8 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
 
             if (mapStyleUrl && m.isStyleLoaded()) {
                 applyColoredMapPOICleanup(m);
+                applyColoredMapLabelScale(m, useStore.getState().mapLabelScale);
+                applyPinLabelDeclutter(m, { lng, lat, sizePx: useStore.getState().locationPinSize * 1.4, enabled: useStore.getState().showLocationPin });
                 await waitForNextMapRender(m);
             }
 
@@ -606,7 +691,9 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
             isCapturingRef.current = false;
             if (pendingCaptureRef.current) {
                 pendingCaptureRef.current = false;
-                captureStitched();
+                captureStitched(); // re-sets the rendering flag immediately
+            } else {
+                useStore.getState().setStreetMapRendering(false);
             }
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -774,6 +861,19 @@ const StreetMapCapture: React.FC<StreetMapCaptureProps> = ({ onCapture }) => {
         mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
         mapStyleUrl, mapColorPreset, captureStitched,
     ]);
+
+    // ── Colored-map label size + pin de-clutter — apply to the prebuilt style, recapture ──
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || mapStyleUrl === null) return; // colored (prebuilt style) only
+        if (map.isStyleLoaded()) {
+            applyColoredMapLabelScale(map, mapLabelScale);
+            const { mapCenterLng: lng, mapCenterLat: lat } = storeRef.current;
+            applyPinLabelDeclutter(map, { lng, lat, sizePx: locationPinSize * 1.4, enabled: showLocationPin });
+        }
+        if (labelDebounceRef.current) clearTimeout(labelDebounceRef.current);
+        labelDebounceRef.current = setTimeout(() => captureStitched(), 250);
+    }, [mapLabelScale, showLocationPin, locationPinSize, mapStyleUrl, captureStitched]);
 
     // ── Synchronous version increment via Zustand subscription ───────────────
     // React useEffects run *after* the render, so there is a window where an

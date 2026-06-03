@@ -53,9 +53,16 @@ const MainLayout: React.FC = () => {
         mapColorPreset,
         setLockedPrintSize,
         setMapBackgroundImage,
+        mapBackgroundImage,
         isInlineEditing,
+        streetMapRendering,
     } = useStore();
     const useVectorStreetMap = posterType === 'streetmap' && mapColorPreset === 'design2' && isVectorStreetMapEnabled();
+    const isMapMode = posterType === 'streetmap' || posterType === 'coloredmap';
+    const isMapLoading = isMapMode && !useVectorStreetMap && !mapBackgroundImage;
+    // Any map mode (vector street, raster street, or colored) is fetching tiles /
+    // rasterising / recapturing a new view — gray out + spinner over the old map.
+    const isMapUpdating = isMapMode && streetMapRendering;
 
     const { canUndo, canRedo, undo, redo } = useStore();
     const toast = useToast();
@@ -139,14 +146,19 @@ const MainLayout: React.FC = () => {
         templatesUrl.searchParams.set('ts', `${Date.now()}`);
         fetch(templatesUrl.toString(), { signal: controller.signal, cache: 'no-store' })
             .then(r => r.ok ? r.json() : [])
-            .then(async (rows: Array<{ id: string; design_group_id: string | null; posterType?: string }>) => {
-                if (!Array.isArray(rows) || rows.length === 0) {
-                    return;
-                }
+            .then(async (rows: Array<{ id: string; design_group_id: string | null; posterType?: string; listing_slug?: string }>) => {
+                if (!Array.isArray(rows) || rows.length === 0) return;
                 const starmaps = rows.filter(r => r.design_group_id && (r.posterType ?? 'starmap') === 'starmap');
                 const design001 = starmaps.find(r => /-design001$/i.test(r.design_group_id || '')) || starmaps[0];
-                if (design001) {
-                    await withTimeout(fetchAndApplyTemplate(design001.id, { designGroupId: design001.design_group_id || undefined }));
+                if (!design001) return;
+                await withTimeout(fetchAndApplyTemplate(design001.id, { designGroupId: design001.design_group_id || undefined }));
+
+                // Load the listing's design groups so homepage shows the same
+                // size/design picker as /l/:slug (matches admin panel config).
+                const listingSlug = design001.listing_slug;
+                if (listingSlug && !cancelled) {
+                    const groups = await loadListingDesignGroups(listingSlug);
+                    if (groups.length && !cancelled) setDesignGroups(groups);
                 }
             })
             .catch(() => {})
@@ -225,6 +237,37 @@ const MainLayout: React.FC = () => {
         return useStore.subscribe((state) => {
             isInlineEditingRef.current = state.isInlineEditing;
         });
+    }, []);
+
+    // Helper: fetch a listing by slug and return its design groups.
+    // Used by the homepage auto-load AND the /t/:templateId route so the size picker
+    // always reflects what's configured in the admin panel.
+    const loadListingDesignGroups = useCallback(async (listingSlug: string): Promise<DesignGroup[]> => {
+        try {
+            const url = new URL(`${API_URL}/api/listings/${listingSlug}`, window.location.origin);
+            url.searchParams.set('ts', `${Date.now()}`);
+            const resp = await fetch(url.toString(), { cache: 'no-store' });
+            if (!resp.ok) return [];
+            const listing = await resp.json();
+            if (!listing?.templates?.length) return [];
+            const groupMap = new Map<string, DesignGroup>();
+            for (const t of listing.templates) {
+                const groupId: string = t.design_group_id || t.id;
+                const nameParts = (t.name as string).split(' — ');
+                const groupName = nameParts.length > 1 ? nameParts.slice(0, -1).join(' — ') : t.name;
+                const sizeLabel = nameParts.length > 1 ? nameParts[nameParts.length - 1] : t.fulfillment_size || t.name;
+                if (!groupMap.has(groupId)) {
+                    groupMap.set(groupId, { id: groupId, name: groupName, sizes: [] });
+                }
+                groupMap.get(groupId)!.sizes.push({
+                    id: t.id, name: sizeLabel,
+                    thumbnail_path: t.thumbnail_path,
+                    fulfillment_size: t.fulfillment_size,
+                    sell_price_cents: t.sell_price_cents,
+                });
+            }
+            return Array.from(groupMap.values());
+        } catch { return []; }
     }, []);
 
     // ── Load template from URL ──────────────────────────────────────────────
@@ -364,7 +407,17 @@ const MainLayout: React.FC = () => {
             }
         }
         if (!encoded && templateId) {
-            fetchAndApplyTemplate(templateId).finally(() => setTemplateLoading(false));
+            fetchAndApplyTemplate(templateId)
+                .then(async () => {
+                    // After template loads, fetch its listing so the size picker shows
+                    // the same sizes configured in the admin panel (not the hardcoded generic list).
+                    const listingSlug = useStore.getState().selectedTemplateListingSlug;
+                    if (listingSlug) {
+                        const groups = await loadListingDesignGroups(listingSlug);
+                        if (groups.length) setDesignGroups(groups);
+                    }
+                })
+                .finally(() => setTemplateLoading(false));
             trackEvent('template_load', { templateId });
         }
         if (slug) {
@@ -440,7 +493,7 @@ const MainLayout: React.FC = () => {
                 })
                 .catch(() => setTemplateLoading(false));
         }
-    }, [templateId, slug, designSlug]);
+    }, [templateId, slug, designSlug, loadListingDesignGroups]);
 
     // ── Street map capture ───────────────────────────────────────────────────
     const handleMapCapture = useCallback((dataUrl: string) => {
@@ -817,6 +870,31 @@ const MainLayout: React.FC = () => {
                             <Box as="div" w="24px" h="24px" border="2px solid" borderColor="gray.300" borderTopColor="gray.600" borderRadius="full"
                                 animation="spin 0.6s linear infinite" />
                             <Text fontSize="xs" color="gray.400">Loading design...</Text>
+                        </VStack>
+                    </Box>
+                )}
+
+                {/* First-load map overlay — opaque, shown until the very first capture arrives
+                    and no active render is in progress. */}
+                {!templateLoading && isMapLoading && !isMapUpdating && (
+                    <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" zIndex={100} bg="white" borderRadius="sm">
+                        <VStack spacing={3}>
+                            <Box as="div" w="24px" h="24px" border="2px solid" borderColor="gray.200" borderTopColor="gray.500" borderRadius="full"
+                                animation="spin 0.6s linear infinite" />
+                            <Text fontSize="xs" color="gray.400">Loading map...</Text>
+                        </VStack>
+                    </Box>
+                )}
+
+                {/* Map updating (any mode) — semi-transparent so the old map stays visible,
+                    grayed out, with a spinner indicating the new view is still loading. */}
+                {!templateLoading && isMapUpdating && (
+                    <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" zIndex={100}
+                        bg="whiteAlpha.700" borderRadius="sm" pointerEvents="none">
+                        <VStack spacing={3} bg="white" px={5} py={4} borderRadius="lg" boxShadow="md" border="1px solid" borderColor="gray.100">
+                            <Box as="div" w="24px" h="24px" border="2px solid" borderColor="gray.200" borderTopColor="gray.600" borderRadius="full"
+                                animation="spin 0.6s linear infinite" />
+                            <Text fontSize="xs" color="gray.500" fontWeight="500">Updating map…</Text>
                         </VStack>
                     </Box>
                 )}

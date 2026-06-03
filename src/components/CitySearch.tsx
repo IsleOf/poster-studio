@@ -3,7 +3,7 @@ import {
     Box, Input, InputGroup, InputRightElement, Spinner,
     List, ListItem, Text, VStack, IconButton, HStack, Divider,
 } from '@chakra-ui/react';
-import { searchCities, reverseGeocode } from '../utils/geocode';
+import { searchCities, reverseGeocode, parseCoordinateInput } from '../utils/geocode';
 import type { GeoResult } from '../utils/geocode';
 
 const RECENT_KEY = 'city_search_recent';
@@ -74,6 +74,27 @@ const CitySearch: React.FC<CitySearchProps> = ({
         const t = setTimeout(async () => {
             setLoading(true);
             try {
+                // If the input is pasted coordinates or a map URL, resolve directly to a
+                // point (works for any location, incl. new builds the geocoder lacks).
+                const coord = parseCoordinateInput(query);
+                if (coord) {
+                    const coordText = `${coord.lat.toFixed(5)}, ${coord.lng.toFixed(5)}`;
+                    // Show the coordinate result immediately — never block the dropdown on a
+                    // reverse-geocode (which can be slow / unavailable). Keep the EXACT coords.
+                    const base: GeoResult = { name: `📍 ${coordText}`, displayName: `📍 ${coordText}`, lat: coord.lat, lng: coord.lng, country: '' };
+                    setResults([base]);
+                    setOpen(true);
+                    setActiveIdx(-1);
+                    // Enrich with a friendly place name in the background, if available.
+                    reverseGeocode(coord.lat, coord.lng)
+                        .then((rev) => {
+                            if (rev?.name) {
+                                setResults([{ ...base, name: rev.name, displayName: `${rev.name} · ${coordText}`, country: rev.country, state: rev.state }]);
+                            }
+                        })
+                        .catch(() => { /* keep the raw coordinate result */ });
+                    return;
+                }
                 const r = await searchCities(query);
                 setResults(r);
                 setOpen(true);

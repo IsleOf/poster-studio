@@ -155,6 +155,11 @@ cd /home/dev/poster-studio && npm run build && rsync -avz --delete --exclude='de
 | Fix DB inconsistencies | `node scripts/sync-listing-state.cjs` |
 | Verify thumbnails look correct | `node scripts/verify-listing.cjs` |
 | Test font rendering in downloads | `node scripts/test-font-render.cjs` |
+| Change Prodigi SKUs / framed / quotes | `server/services/prodigi.js` |
+| Change fee model / margin floor | `server/services/profitability.js` (+ `settings` keys) |
+| Build/adjust Etsy shipping profiles | `server/scripts/build-shipping-profiles.js` (see Profitability Guard section) |
+| Check Prodigi costs per country | `node server/scripts/quote-matrix.js` (read-only) |
+| Change shipping method per country | `shippingMethodFor()` in `server/services/prodigi.js` |
 
 ## Adding a Custom Font
 
@@ -366,6 +371,44 @@ All tests use `setupMockApi(page)` from `tests/fixtures/mockApi.ts` which:
 
 ## Recent Features
 
+### Vector Street Map + Raster Preview
+High-detail 2-colour street maps (`mapColorPreset === 'design2'`) are rendered as **vector
+SVG paths** for crisp 300 DPI export, but the **editor preview rasterises them to a JPEG
+bitmap** so panning/zooming stays fast even with thousands of streets. See
+`src/utils/vectorStreetMapRenderer.ts` and the raster effect in `VectorStarMap.tsx`.
+- `VectorStarMap.tsx` takes a `forceVector` prop — `PosterRenderPage` passes `true` so
+  exports use crisp vectors; the editor uses the raster path.
+- **Gotchas (do not regress):** the raster canvas must `fillRect` the full background first
+  (JPEG has no alpha → transparent becomes **black** otherwise); water/landuse fills use
+  `fill-rule="nonzero"` (evenodd cancels vector-tile buffer overlaps into a **square grid**).
+- **Drag-to-pan in raster mode:** the drag handler uses `svg.getScreenCTM().inverse()` for
+  exact SVG-unit deltas and recentres lat/lng on pointer-up; the pan offset persists until
+  the new raster loads (prevents snap-back). Tests: `tests/street-map-raster.test.ts`.
+
+### "Updating map…" Loading Flag
+`useStore` has `streetMapRendering` (+ `setStreetMapRendering`). Capture paths set it true
+on start and clear it when the raster/capture lands. `MainLayout.tsx` shows a translucent
+"Updating map…" overlay (`isMapUpdating = isMapMode && streetMapRendering`) for both vector
+raster and colored-map captures — distinct from the opaque first-load "Loading map…".
+
+### Coordinate Paste & Geocode Proxy
+Location search/reverse-geocode is proxied through the server (`server/routes/geocode.js`:
+`/api/geocode/search`, `/api/geocode/reverse`) — Google Places when `GOOGLE_MAPS_API_KEY`
+is set, else Nominatim, normalised to one shape. `parseCoordinateInput()` in
+`src/utils/geocode.ts` detects pasted decimal/DMS coords and Google/Apple/OSM map URLs;
+`CitySearch.tsx` resolves them straight to a pin (exact coords kept) and enriches the name
+in the background. This is the fix for "new builds not in geocoders" — paste a pin from any
+map app. ⚠️ Google ToS risk on a non-Google base map (see `geocode.js` header comment).
+
+### Colored Map Label Size + Pin Declutter
+`mapLabelScale` (store) scales colored-map symbol text-size live via
+`applyColoredMapLabelScale()` in `StreetMapCapture.tsx` (slider in `MapControlsPanel.tsx`,
+colored-map only). `applyPinLabelDeclutter()` drops an invisible collision symbol at the
+location pin so street labels avoid clashing with the heart pin. Export stays 300 DPI.
+
+### Map Rotation
+`mapBearing` (0–360°) rotates street/colored maps; slider in `MapControlsPanel.tsx`.
+
 ### Rectangle Template
 The "Rectangle" template preset in the sidebar applies `maskShape: 'rect'` which renders the star/map
 without a circular clip — the entire poster rectangle is the map area. Text and decorations still render
@@ -455,8 +498,11 @@ independently.
 1. Etsy poll (every 2 min) detects new paid receipt
 2. Design token extracted from buyer's personalization note
 3. Render job enqueued → Puppeteer generates 300 DPI PNG
-4. Digital: signed download link (7-day expiry, 3 revisions)
-5. Print: PNG uploaded to fulfillment provider → shipped
+4. Digital: signed download link (30-day expiry). Edits/revisions allowed for 30 days
+   (`digital_edit_window_days` setting / env `DIGITAL_EDIT_WINDOW_DAYS`, default 30), capped
+   at 3 revised renders (`max_revisions`). Past the window, `/api/verify-order` returns
+   `editWindowClosed` and points the buyer to studio@ (verify.js revision branch).
+5. Print/Framed: PNG sent to Prodigi → produced → shipped
 
 ### Key Files
 | Task | File |
@@ -469,6 +515,302 @@ independently.
 
 ### Gotcha: x-api-key Format
 Etsy API v3 requires `x-api-key: keystring:shared_secret` (colon-separated). OAuth `client_id` uses keystring only. See `etsyHeaders()` in `server/services/etsy.js`.
+
+---
+
+## Fulfillment & Print Products (platform-agnostic)
+
+The customer's product choice (Digital / Printed / Framed + frame color) is captured
+**in the app and saved into the design's `state_json`** — NOT inferred from the sales
+channel. This is deliberate: the same flow works for Etsy today and Amazon Custom /
+TikTok Shop later. Treat the design state as the source of truth.
+
+### Where the choice lives
+| Layer | Field |
+|-------|-------|
+| UI (`SidebarControls.tsx` OrderSection) | 3 product cards → `orderType: 'digital'\|'print'\|'framed'`; `frameColor` swatch picker (default `black`) when framed |
+| Saved design | `saveDesign(type)` writes `orderType` + (`frameColor` if framed) into the design state |
+| Server (`server/routes/verify.js`) | `getListingType(receipt, designState)` reads `designState.orderType` FIRST; Etsy listing-ID env mapping is fallback-only. `getPrintSize(receipt, designState)` prefers `designState.printSize`. |
+| Fulfillment (`server/services/prodigi.js`) | `createOrder()` reads `order.listing_type` (`framed`→`getFramedSku()`, else `getSku()`) and the saved `frameColor`; framed orders add `attributes: [{ name:'color', value:<frameColor> }]` |
+
+⚠️ Do NOT reintroduce "select the frame color on Etsy" messaging. The frame is locked
+into the personalisation code; the customer never re-picks it at checkout. (Etsy listing
+variants still exist for discoverability, but the saved design overrides them.)
+
+### Prodigi SKU tables (`server/services/prodigi.js`, verified against API v4.0)
+| Product | SKU prefix | Notes |
+|---------|-----------|-------|
+| Fine Art Print (premium) | `GLOBAL-FAP-{size}` | Enhanced Matte Art giclée. **More expensive.** Default `getSku()` tier. |
+| Budget Art Paper (standard) | `ART-FAP-BAP-{size}` | ~40–50% cheaper than FAP (from ~£2.23/8×10). `BAP_SKUS`. Wire up for a "Standard Print" tier. |
+| Classic Frame Premium Matte | `GLOBAL-CFPM-{size}` | Framed FAP. `getFramedSku()`. Requires `color` attribute. |
+| Classic Frame Print | `GLOBAL-CFP-{size}` | Alt framed profile. |
+| Budget Frame Print | `GLOBAL-BFP-CFPM-{size}` | Cheaper framing. Verify pricing in Prodigi dashboard. |
+
+**Valid frame colors** (Prodigi API validation): `black, white, natural, light grey,
+dark grey, brown, gold, silver`. The UI exposes black/white/natural/light grey/dark grey
+(`FRAME_COLORS` in `SidebarControls.tsx`).
+
+**Overrides:** any SKU can be overridden per size via admin `settings` key
+`prodigi_sku_{size}` / `prodigi_framed_sku_{size}`, or env `PRODIGI_SKU_{SIZE}` /
+`PRODIGI_FRAMED_SKU_{SIZE}`. cm sizes map to nearest inch SKU (FAP/CFPM are inch + A-series only).
+
+**Two-step fulfillment:** `submitPrintOrder()` creates the order *paused* (visible in
+Prodigi but not produced); `releasePrintOrder()` sends it to production once Etsy funds
+clear. Requires "Pause indefinitely" in Prodigi Preferences. `fulfillPrintOrder()` is the
+legacy combined helper for manual admin fulfillment.
+
+### Adding a new sales channel (Amazon Custom / TikTok Shop)
+1. Map the channel's incoming order → a design token (however that channel passes it).
+2. Look up the design; read `orderType` + `frameColor` + `printSize` from `state_json`.
+3. Persist `revenue_cents` (item + shipping the customer paid, ex tax) + `currency` +
+   `ship_address_json` (with `country_iso`) on the order — the profitability gate needs them.
+4. Call `submitPrintOrder()` / `releasePrintOrder()` — no Prodigi changes needed.
+The fulfillment layer is already channel-independent; only the order-ingestion adapter is new.
+
+---
+
+## Profitability Guard (never pay Prodigi more than the customer paid)
+
+**The problem it solves:** Prodigi item + shipping cost varies by destination country.
+A misrouted order, a wrong Etsy shipping profile, or a customer in an expensive-to-ship
+country could cost us more than they paid — silently, at our expense. The guard makes that
+impossible without an explicit override.
+
+### How it works
+- **Single chokepoint:** every release path (`releasePrintOrder()` in
+  `server/services/prodigi.js`) runs the gate. Paths that funnel through it: the Etsy
+  ledger-settled auto-release (`etsy.js checkLedgerAndRelease`), the scheduled Prodigi
+  worker (`renderQueue.js submitDuePrintOrders`), and admin "fulfill now"
+  (`renderQueue.js submitOrderNow`). There is no way to reach Prodigi production around it.
+- **Quote, don't guess:** `getQuote(order)` calls Prodigi's **Quotes API** (`POST /v4.0/quotes`)
+  with the exact SKU + frame attributes, the buyer's **destination country**, and the order's
+  **currency** → returns item + shipping cost. Stored on the order at submit time so the
+  projected margin is visible in admin *before* release.
+- **The math** (`server/services/profitability.js → assessProfit`), all in the order's currency:
+  `revenue (item+shipping ex-tax) − EtsyFees − ProdigiTotal = margin`. PASS only if
+  `margin ≥ min_margin_cents` AND `margin ≥ revenue × min_margin_pct`.
+- **On fail:** order is set to `status = 'needs_review'` and **NOT charged**; the full
+  breakdown is saved to `orders.profit_json` (+ `profit_status`, `margin_cents`,
+  `prodigi_cost_cents`). If the quote or revenue is unknown, it also holds (`status:'unknown'`)
+  — fail-safe, never fail-open.
+- **Override:** admin `POST /api/admin/orders/:id/fulfill` with body `{ "force": true }`
+  bypasses the gate (deliberate loss-leader / sample). `POST /api/admin/orders/:id/assess`
+  re-quotes without releasing. Held orders surface in the order detail (`profit_status`).
+
+### Tunable settings (admin `settings` table or env, no deploy needed)
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `etsy_fee_pct` | `0.115` | Transaction (6.5%) + payment processing (~4%) combined |
+| `etsy_fee_flat_cents` | `50` | Per-order flat (processing flat + amortised listing fee) |
+| `etsy_offsite_ads_pct` | `0` | Buffer for the 12–15% Offsite Ads fee (raise if many orders come via ads) |
+| `min_margin_cents` | `0` | Absolute profit floor (must at least break even after fees) |
+| `min_margin_pct` | `0` | Optional % margin floor (e.g. `0.15` = require 15%) |
+
+Defaults intentionally **overestimate fees** so borderline orders hold rather than ship at a loss.
+
+### Markets, products & shipping policy (confirmed config)
+- **Product tier:** Budget Art Paper (BAP, `ART-FAP-BAP-*`) — 180gsm Giclée pigment archival
+  (genuine fine art, lighter than the ~200gsm Enhanced Matte premium FAP). Used as the standard print.
+- **Markets:** US (main), UK, Canada, Australia, EU. Everything else **excluded** (no shipping
+  destination → can't check out → no surprise-loss orders).
+- **Shipping presentation:** **US = FREE** (cost baked into the item price; Etsy SEO + conversion).
+  **UK/CA/AU/EU = charged** (sized from a live Prodigi quote, grossed up for the Etsy fee on shipping).
+- **Prodigi shipping method per destination** — set in `shippingMethodFor()` (prodigi.js) and mirrored
+  in the builder REGIONS; must stay in sync:
+  | Destination | Method | Why |
+  |---|---|---|
+  | US, CA, AU | **Budget** | Cheapest; US is tracked even on Budget; Standard to CA/AU is punishingly pricey (~$18+) |
+  | GB, EU | **Standard** | Tracked + reasonable cost → Etsy Purchase Protection / Star Seller |
+  Override per country via settings/env `prodigi_shipping_<ISO>` (e.g. `PRODIGI_SHIPPING_CA=Standard`).
+- **Recommended US list prices** (Budget, $8 floor): 8x10 $24.50 · 11x14 $26 · 16x20 $28 · 18x24 $29 · 24x36 $43.50.
+- **Customer copy** lives in **listing descriptions** + **Shop Announcement** (Etsy removed the free-text
+  shipping-policy field — see [[reference_etsy_shipping_policy_ui]]).
+
+### Shipping-profile builder (`server/scripts/build-shipping-profiles.js`)
+Creates one profitable Etsy shipping profile **per BAP size** for the markets above.
+- Quotes Prodigi live per region via `quoteSku()`/`bapSku()`, computes the free-US list price +
+  per-region intl charges, targets the **$8 floor** (`--margin <cents>` to override).
+- **Run on PROD** (keys/tokens live there). **Dry-run by default**; `--apply` writes live;
+  `--only-size 8x10` validates one profile in the Etsy UI before doing all.
+- Requires the Etsy token to have **`shops_w`** scope (granted; scope set in `server/routes/auth.js`:
+  `transactions_r shops_r email_r shops_w listings_w`). `origin_postal_code` is required by Etsy —
+  set via `ETSY_ORIGIN_ZIP` (default `10001`).
+- Stores each profile id in `settings` as `shipping_profile_bap_<size>`; attach to listings next.
+- EU is a normal market here (shop is **Estonia-based**, so the seller is their own EU GPSR economic
+  operator — no third-party representative needed).
+
+### Etsy compliance checklist (one-time shop setup)
+- **Production partner:** add **Prodigi (Pwinty/Prodigi Ltd)** manually in Shop Manager → Settings →
+  Production partners (no create API; only `getShopProductionPartners` read exists). Role: "They do
+  everything for me"; design role: "I design everything myself". Attach it to every physical listing.
+- **Returns policy:** custom **"No returns or exchanges"** (personalized/made-to-order exemption).
+  **Cancellations:** accept within **24h** (pairs with the paused-Prodigi release window → cancel free).
+- **EU GPSR:** economic-operator field = the shop's **own Estonian business details**
+  (name/address/`support@themappedmoment.com`). Personalized goods are exempt from the EU 14-day right
+  of withdrawal (CRD Art.16(c)) — the withdrawal form/T&C declares this; ODR-platform box ticked.
+  Add product safety info to EU listings using Prodigi's GPSR technical-file template.
+- **Digital** listings need none of the above (no partner, no shipping, no GPSR).
+
+### Shop email addresses & inbound automation
+| Address | Use |
+|---|---|
+| `studio@themappedmoment.com` | General inbound — wired to Resend inbound → `/api/webhooks/email-inbound` → forwards to `EMAIL_FORWARD_TO` |
+| `returns@themappedmoment.com` | EU withdrawal-form / returns contact (in listing T&C) |
+| `support@themappedmoment.com` | EU economic-operator contact email |
+
+Resend inbound is **catch-all by default** — every address `@themappedmoment.com` (studio@, returns@,
+support@, …) routes to `/api/webhooks/email-inbound` with no per-address config (confirmed live
+2026-06-01). The webhook ([webhooks.js](server/routes/webhooks.js)) forwards to `EMAIL_FORWARD_TO`.
+Resend delivers a **Svix-wrapped event**: fields live under `payload.data` (not top-level) —
+`{ from, to, cc, bcc, subject, attachments, email_id, message_id, created_at }`. Note there's **no
+inline `text`/`html` body** in the payload — to forward the body you must fetch the full message via
+the Resend API using `email_id`. `attachments` ARE included, which is the hook for **auto
+dispute-routing to Prodigi** (a customer who emails photos to returns@ → attachments → forward to
+`support@prodigi.com`). Buyer photos sent via an *Etsy* case still sit behind an Etsy link, not email.
+
+### Why free US / charged intl (refund reasoning)
+Etsy taxes shipping inside the 6.5% fee and refunds fees proportionally on seller refunds, so
+free-vs-charged is **fee-neutral on refunds**. Free US wins on SEO + conversion; charged intl recovers
+the higher intl shipping and allows item-only partial refunds on higher-transit-risk orders.
+**Prodigi covers its own faults** (lost in transit / damaged / misprint → free reship within the claim
+window); customer change-of-mind is non-refundable under the personalized policy, so there's nothing to
+recover and nothing paid out. Only mandatory exception: faulty/lost → **free replacement** (Prodigi pays).
+
+## Modular architecture (swap providers via config, no code changes)
+
+Built to be swapped out cleanly as the business grows:
+
+### LLM provider — `server/services/llm.js`
+One interface `extractJson(system, user)`; provider chosen by setting `llm_provider` / env
+`LLM_PROVIDER`. **ACTIVE PROVIDER: `openrouter`** (prod setting, since 2026-06-02).
+- **openrouter** (ACTIVE) — model **`openai/gpt-oss-120b:free`** (tested most reliable free model:
+  3/3 messy-note extractions with free headroom while popular models 429'd; OpenAI open-weight → sticky).
+  Fallback model `openrouter/free` (Free Models Router) if the slug ever disappears. Needs
+  `OPENROUTER_API_KEY` (`sk-or-v1-…`) in the server `.env`. Settings: `openrouter_model`,
+  `openrouter_api_key`. Re-test free models: `node --env-file=.env server/scripts/openrouter-model-test.js`.
+  Free tier rate-limited (~20/min, ~50–1000/day) — fine for low-volume recovery.
+- **bedrock** (fallback, NOT in use) — Amazon Bedrock via EC2 role `EC2BedrockRole` (IMDS, no keys).
+  ⚠️ In ap-southeast-2: 3.5 Haiku doesn't exist; **Claude 3 Haiku is Legacy-blocked** for new
+  accounts; current models (3.5 Sonnet, Sonnet 4) require **cross-region inference profiles**
+  (`apac.anthropic.claude-3-5-sonnet-20241022-v2:0`) whose IAM needs BOTH `foundation-model/...` and
+  `inference-profile/apac...` ARNs. `bedrock_model` setting is pre-set to the APAC Sonnet profile;
+  to use it, flip `llm_provider=bedrock` and attach the inference-profile IAM policy (see
+  docs/BROWSER_AGENT_PROMPTS.md). This is why we moved to OpenRouter.
+- Add a provider: implement `async (system,user)=>string` and register in `PROVIDERS`.
+
+### Poster line — `posterSku()` in `server/services/prodigi.js`
+The standard "print" product's paper line is config-driven: `prodigi_poster_line` / env
+`PRODIGI_POSTER_LINE` (default **BLP** = Budget Poster `GLOBAL-BLP-*`, 170gsm, cheapest, covers all
+12 sizes incl A-series). Options: BLP, BAP (`ART-FAP-BAP-*` 180gsm giclée), FAP (`GLOBAL-FAP-*`
+premium). Per-size override `prodigi_sku_<size>`. `resolveItem()` routes non-framed orders here.
+(Was previously defaulting to FAP via `getSku` — an overpay; now BLP.)
+
+### Size handling & size-confirm — `server/services/sizeAdapt.js`
+Orders fulfil at the **purchased** size (Etsy variation), normalised via `normSize()`
+("16x20 Inch"→"16x20", "A4 (UK)"→"A4"). ⚠️ This normalisation is required — the raw value
+breaks `getSku()` (falls back to default 18x24) and the `lockedSize` editor link. If the buyer
+ordered a **different size than they designed** (`needsSizeConfirm`), the order is **held**
+(`status='awaiting_size_confirm'`) and they're pointed to `/d/<token>?lockedSize=<size>` to
+review/confirm the design re-laid-out at the ordered size (MainLayout `LOCKED_SIZE_MAP` does the
+re-layout) instead of auto-shipping an unseen layout. Gated by `enable_size_confirm` (default ON).
+Wired in `verify.js` (returns `needsSizeConfirm` JSON) + `etsy.js` poll. ⚠️ `LOCKED_SIZE_MAP` lacks
+A1/A2/20x28/cm — those can't be locked yet (add to MainLayout to support).
+
+### Order Confirm Mode
+When a buyer opens `/d/:designToken` and their order's `status` is `awaiting_size_confirm`,
+`OrderSection` (in `SidebarControls.tsx`) hides the shopping UI and shows a confirm panel instead.
+On mount it calls `GET /api/order-status/:token`; if `confirmRequired` is true it records the
+`orderId`, `listingType`, and `printSize`. The panel shows the ordered product/size, lets the buyer
+edit the design, then on "Confirm & send to production" it calls `POST /api/confirm-order {token, state}`.
+That endpoint saves the edited `state_json`, sets `status='pending'`, clears `render_path`, and enqueues
+a fresh render via `enqueueRender()` — re-entering the normal profitability-gated pipeline (no Prodigi
+bypass). Both new endpoints are in `server/routes/verify.js` and use the existing `publicLimiter`.
+
+### Framing line — `getFramedSku()` in `server/services/prodigi.js`
+Config `prodigi_frame_line` / env `PRODIGI_FRAME_LINE` (default **CFP** = Classic Frame Print,
+cheapest ready-to-hang black+white). Options: CFP, CFPM (premium, +$5–10). Avoid BFP (white/natural
+only, self-assembly, erratic shipping). Per-size override `prodigi_framed_sku_<size>`. Frame colour
+resolves: design state → **Etsy variation** (`frameColorFromVariation`, e.g. "Framed Print (White)") →
+black. To move framing to Printify/Gelato later, swap `getFramedSku` + the createOrder item assembly.
+
+### Bad-order recovery — `server/services/orderRecovery.js` (+ `personalizationParser.js`)
+When a buyer types details into Etsy's Personalization box instead of using the designer (no design
+code), the Etsy poll prefills the **listing's default template** (Design001 fonts/style) with the
+parsed details so they get a near-finished design to approve — instead of a refund. Flow:
+`extractNote` → `parsePersonalization` (**deterministic first** for the labeled format, **LLM gap-fill**
+via llm.js for messy free-text) → `applyParsedToState` onto the default → normal render+email pipeline
+delivers the editable link + digital file. **Gated by `enable_order_recovery` setting / env
+`ENABLE_ORDER_RECOVERY` — currently ON in prod).** LLM gap-fill via OpenRouter `openai/gpt-oss-120b:free`.
+**Foreign languages confirmed** (ES/DE/FR/PT messy notes → correct fields, ISO dates). Unit tests:
+`personalizationParser.test.js`, `orderRecovery.test.js`. Test live: `test-recovery.js` (English),
+`test-recovery-intl.js` (foreign).
+
+### Short links — `themappedmoment.com/go/<code>` (guarded creator)
+For driving Etsy buyers straight to a design's editor page. `short_links` table (db.js) +
+`server/services/shortLinks.js` + `GET /go/:code` route (index.js) + an nginx `location /go/`
+proxy block. **Create safely:** `node --env-file=.env server/scripts/create-short-link.js <code> /l/<slug>`
+(also `--list`, `--seed`, `--force`). The creator **refuses to re-point an existing code**, **refuses
+codes whose `/l/<slug>` target isn't a real listing** (wrong-product guard), and codes are unique (PK).
+`/go/` prefix means codes never collide with app routes. Each listing description starts with a
+"✦ DESIGN & PREVIEW YOURS FREE…→ /go/<code>" CTA (set via `scripts/update-design-links.js`, idempotent).
+Live: /go/star, /go/street, /go/home, /go/heart.
+
+### Creating Etsy listings via API — COMPLETE PLAYBOOK (don't re-learn the hard way)
+Scripts: `create-listing.js` (fresh draft), `update-listing-mimic.js` (apply the winning structure),
+`research-listing.js <id>` (read ANY listing's title/tags/desc/variations via API), `etsy-listings.js`
+(list shop listings). All run on prod with `node --env-file=.env scripts/<x>.js`.
+
+**Listing structure (mimics the proven competitor model — listing 1029301545 / PaperEmporiumCo):**
+- ONE **physical** listing per design with two variation axes: **Product Type** (`Digital File`,
+  `Printed Poster`, `Framed Print (Black)`, `Framed Print (White)`) × **Size** (12 sizes). 48 offerings.
+- **Digital is a *variation*, not a separate download listing.** Etsy won't mix a true `type=download`
+  with physical, so "Digital File" is a named variation on the physical listing, fulfilled MANUALLY
+  (we email the file). Set it as the **cheapest price (~$4.50)** → search shows "from $4.50" = the
+  traffic hook → buyers upsell to Poster/Framed. Base `price` = the digital price.
+- **Variation→fulfillment routing** (CRITICAL so a $4.50 digital sale isn't sent to Prodigi as a print):
+  `variationProductType()` in etsy.js + the same parse in verify.js `getListingType` read the Product
+  Type variation FIRST (`/frame/`→framed, `/digital/`→digital, `/poster|print/`→print), then design
+  `orderType`, then listing-ID. `sizeFromVariations()` finds the size axis (not always variations[0]).
+- ⚠️ Caveat: digital buyers go through the physical checkout (enter address) and the listing's shipping
+  profile applies — US digital = free (fine); intl digital is charged shipping (matches competitor; most
+  digital buyers are US). Accept it for the single-listing hook, or split digital into its own listing.
+
+**Etsy v3 gotchas (all solved):**
+- Physical listings require a **`readiness_state_id`** ("processing profile"). None exist by default —
+  create: `POST /shops/{id}/readiness-state-definitions` with `readiness_state=made_to_order,
+  min_processing_time, max_processing_time, processing_time_unit=days` (NOT business_days). Current id
+  **1491562486439** (1–3 days). EACH inventory **offering** also needs `readiness_state_id`.
+- Inline personalization fields are **deprecated**. Enable via `POST /shops/{id}/listings/{id}/personalization`
+  with `{ personalization_questions: [{ question_text:"Personalization", question_type:"text_input",
+  required:false, max_allowed_characters:256, instructions:"…" }] }` (question_text MUST be
+  "Personalization"; type MUST be "text_input" during migration).
+- `createDraftListing`/`updateListing` = form-encoded; `updateListingInventory` = JSON; image upload =
+  multipart (NO json content-type, use FormData). Custom variations use `property_id` 513 & 514.
+- `taxonomy_id` for star-map wall art = **1029** (competitor uses it; NOT 1332).
+- Reading listings needs `listings_r`; creating/updating needs `listings_w` (both granted).
+- Etsy max **13 tags**, ≤20 chars each. ⚠️ Send tags (and other array fields: materials,
+  production_partner_ids) as ONE **comma-separated string** (`tags=a,b,c`) — NOT repeated params
+  (`tags=a&tags=b` makes Etsy keep only one). Tag ORDER doesn't affect Etsy search; reorder freely.
+  SEO title = comma-separated keyword phrases.
+- **Live template:** listing **4514771222** (Star Map; from $4.50, 48 variations, personalization on,
+  16x20 profile, Prodigi partner 5671331). Owner adds real mockups + publishes; replicate per design.
+
+### Helper scripts (`server/scripts/`)
+| Script | Purpose | Safe? |
+|---|---|---|
+| `build-shipping-profiles.js` | Build per-size Etsy shipping profiles (US free + UK/CA/AU/EU charged) | dry-run default; `--apply` writes |
+| `quote-matrix.js` | Read-only Prodigi quote matrix across destinations × sizes (`--method Budget\|Standard`) | read-only |
+| `verify-etsy-write.js` | Verify Etsy `shops_w` by creating + immediately deleting a test profile | self-cleaning |
+| `pricing-table.js` | Recommended Digital/Poster/Framed prices per size vs competitor (Prodigi quotes) | read-only |
+| `frame-probe.js` | Compare Prodigi frame lines (CFP/CFPM/BFP) cost | read-only |
+| `express-probe.js` | Express vs baseline shipping cost per market (size the US Express upgrade) | read-only |
+| `bedrock-probe.js` | Probe which Bedrock model IDs are invocable in the region | read-only |
+| `openrouter-model-test.js` | Test free OpenRouter models for extraction reliability | read-only |
+| `research-listing.js <id>` | Read any Etsy listing's title/tags/desc/variations via API | read-only |
+| `etsy-listings.js` | List the shop's listings (all states) | read-only |
+| `create-listing.js` | Create a fresh draft physical listing (variations+price+image+profile+partner) | writes a draft |
+| `update-listing-mimic.js [id]` | Apply the winning structure (digital hook + SEO title/tags + personalization) | writes |
+| `test-recovery.js` / `test-recovery-intl.js` | Test bad-order recovery (English / foreign) | read-only |
 
 ---
 
@@ -493,6 +835,17 @@ ssh ubuntu@3.107.34.169 "cd /home/ubuntu/poster-studio/server && npm install --p
 
 ### Database
 SQLite with WAL mode at `server/data/db.sqlite`. Schema in `server/db.js`. Key tables: `designs`, `orders`, `templates`, `render_queue`, `settings`, `listings`, `events`.
+
+**Order money/profit columns** (added for the profitability guard, via `db.js` ALTER migrations):
+`currency`, `revenue_cents` (item+shipping ex-tax), `shipping_paid_cents`, `tax_cents`,
+`prodigi_cost_cents`, `prodigi_ship_cents`, `margin_cents`, `profit_status` (`ok`|`review`|`unknown`),
+`profit_json` (full breakdown). **Order statuses** include `needs_review` — set when the profitability
+gate holds an order (would lose money / unverifiable) instead of releasing it to Prodigi.
+
+**Relevant `settings` keys:** `etsy_fee_pct` (0.115), `etsy_fee_flat_cents` (50), `etsy_offsite_ads_pct`
+(0), `min_margin_cents` (0), `min_margin_pct` (0); `prodigi_shipping_<ISO>` (per-country method override);
+`prodigi_sku_<size>` / `prodigi_framed_sku_<size>` (SKU overrides); `shipping_profile_bap_<size>`
+(built profile ids).
 
 ---
 

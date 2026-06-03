@@ -293,6 +293,11 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                     </AccordionButton>
                                 </h2>
                                 <AccordionPanel pb={4} px={6}>
+                                    {lockedPrintSize && (
+                                        <Text fontSize="xs" color="gray.500" mb={3} bg="gray.50" p={2} borderRadius="md">
+                                            Locked to <strong>{lockedPrintSize.label}</strong> — this matches your order and can't be changed.
+                                        </Text>
+                                    )}
                                     <Grid templateColumns="repeat(2, 1fr)" gap={3}>
                                         {activeGroup.sizes.map((sz) => {
                                             const sizeObj = PRINT_SIZE_MAP[sz.fulfillment_size || ''] || PRINT_SIZE_MAP['8x10'];
@@ -300,6 +305,7 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                             return (
                                                 <Button
                                                     key={sz.id}
+                                                    isDisabled={!!lockedPrintSize}
                                                     onClick={() => fetchAndApplyTemplate(sz.id, {
                                                         preserveText: true,
                                                         preserveMapPlacement: true,
@@ -598,56 +604,120 @@ function blobToBase64(blob: Blob): Promise<string> {
     });
 }
 
+// Available frame colors from Prodigi's CFPM product line.
+// Attribute name: "color". Valid values verified via Prodigi API v4.0.
+const FRAME_COLORS = [
+    { id: 'black',      label: 'Black',      bg: '#1a1a1a', border: '#555' },
+    { id: 'white',      label: 'White',      bg: '#f5f5f5', border: '#ccc' },
+    { id: 'natural',    label: 'Natural',    bg: '#c8a06e', border: '#a07840' },
+    { id: 'light grey', label: 'Light Grey', bg: '#c0c0c0', border: '#999' },
+    { id: 'dark grey',  label: 'Dark Grey',  bg: '#555555', border: '#333' },
+] as const;
+type FrameColor = typeof FRAME_COLORS[number]['id'];
+
 const OrderSection: React.FC = () => {
     const store = useStore();
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [orderType, setOrderType] = useState<'digital' | 'print' | null>(null);
+    const [orderType, setOrderType] = useState<'digital' | 'print' | 'framed' | null>(null);
+    const [frameColor, setFrameColor] = useState<FrameColor>('black');
     const [copied, setCopied] = useState(false);
     const toast = useToast();
 
-    const saveDesign = useCallback(async (type: 'digital' | 'print') => {
+    // Route token — present when the editor is opened via /d/:designToken
+    const { designToken: routeToken } = useParams<{ designToken?: string }>();
+
+    // Confirm mode state — set when the order is awaiting size confirmation
+    const [confirmInfo, setConfirmInfo] = useState<{ orderId: number; listingType: string; printSize: string } | null>(null);
+    const [confirmState, setConfirmState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
+
+    // Size + variant info for post-save instructions
+    const displaySize = store.selectedTemplateFulfillmentSize || store.printSize?.label || '';
+    const etsy_variant = store.selectedTemplateEtsyVariantName;
+    // Format size for display: "8x10" → "8×10""
+    const sizeLabel = displaySize.replace('x', '×').replace(/"$/, '') + '"';
+
+    // Extract store snapshot into a reusable helper so both saveDesign and confirmOrder
+    // can reference the same set of fields.
+    const buildSnapshot = useCallback((type: 'digital' | 'print' | 'framed') => ({
+        title: store.title, subtitle: store.subtitle,
+        date: store.date, time: store.time,
+        location: store.location, lat: store.lat, lng: store.lng,
+        posterColor: store.posterColor, textColor: store.textColor,
+        starColor: store.starColor, mapInteriorColor: store.mapInteriorColor,
+        mapStreetColor: store.mapStreetColor, mapBgColor: store.mapBgColor,
+        mapWaterColor: store.mapWaterColor, mapLandColor: store.mapLandColor,
+        mapMainRoadColor: store.mapMainRoadColor, mapSmallRoadColor: store.mapSmallRoadColor,
+        mapDetailRoadColor: store.mapDetailRoadColor,
+        mapColorPreset: store.mapColorPreset, mapStyleUrl: store.mapStyleUrl,
+        posterType: store.posterType, maskShape: store.maskShape,
+        designStyle: store.designStyle, printSize: store.printSize,
+        titleFont: store.titleFont, subtitleFont: store.subtitleFont,
+        detailsFont: store.detailsFont, dedicationFont: store.dedicationFont,
+        titleFontSize: store.titleFontSize, subtitleFontSize: store.subtitleFontSize,
+        detailsFontSize: store.detailsFontSize,
+        customText: store.customText,
+        titleAllCaps: store.titleAllCaps, locationAllCaps: store.locationAllCaps,
+        showBorder: store.showBorder, showFrame: store.showFrame,
+        borderStyle: store.borderStyle, circleSize: store.circleSize,
+        showConstellations: store.showConstellations, showGrid: store.showGrid,
+        mapCenterLat: store.mapCenterLat, mapCenterLng: store.mapCenterLng,
+        mapZoom: store.mapZoom, mapCity: store.mapCity,
+        // Order metadata — used by the server at fulfillment time.
+        // orderType drives the Prodigi product (FAP=print, CFPM=framed).
+        // frameColor is the Prodigi 'color' attribute (black, white, natural, etc.).
+        orderType: type,
+        frameColor: type === 'framed' ? frameColor : undefined,
+    }), [store, frameColor]);
+
+    // When the editor is opened via /d/:designToken, check if the order is awaiting
+    // size confirmation and switch to confirm mode if so.
+    useEffect(() => {
+        if (!routeToken) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(`/api/order-status/${encodeURIComponent(routeToken)}`);
+                if (!res.ok || cancelled) return;
+                const json = await res.json();
+                if (!cancelled && json.confirmRequired) {
+                    setConfirmInfo({ orderId: json.orderId, listingType: json.listingType, printSize: json.printSize });
+                }
+            } catch {
+                // silent — confirm mode is opt-in; normal shopping UI shown on failure
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [routeToken]);
+
+    // Confirm the design at the ordered size and re-enter the production pipeline.
+    const confirmOrder = useCallback(async () => {
+        if (!routeToken || !confirmInfo) return;
+        setConfirmState('submitting');
+        try {
+            const res = await fetch('/api/confirm-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: routeToken, state: buildSnapshot((confirmInfo.listingType as 'digital' | 'print' | 'framed') || 'print') }),
+            });
+            if (!res.ok) throw new Error('Server error');
+            setConfirmState('done');
+        } catch {
+            setConfirmState('error');
+        }
+    }, [routeToken, confirmInfo, buildSnapshot]);
+
+    const saveDesign = useCallback(async (type: 'digital' | 'print' | 'framed') => {
         setLoading(true);
         setOrderType(type);
         try {
             // Capture a clean snapshot of store state (no functions, no DOM refs)
-            const state = {
-                title: store.title, subtitle: store.subtitle,
-                date: store.date, time: store.time,
-                location: store.location, lat: store.lat, lng: store.lng,
-                posterColor: store.posterColor, textColor: store.textColor,
-                starColor: store.starColor, mapInteriorColor: store.mapInteriorColor,
-                mapStreetColor: store.mapStreetColor, mapBgColor: store.mapBgColor,
-                mapWaterColor: store.mapWaterColor, mapLandColor: store.mapLandColor,
-                mapMainRoadColor: store.mapMainRoadColor, mapSmallRoadColor: store.mapSmallRoadColor,
-                mapDetailRoadColor: store.mapDetailRoadColor,
-                mapColorPreset: store.mapColorPreset, mapStyleUrl: store.mapStyleUrl,
-                posterType: store.posterType, maskShape: store.maskShape,
-                designStyle: store.designStyle, printSize: store.printSize,
-                titleFont: store.titleFont, subtitleFont: store.subtitleFont,
-                detailsFont: store.detailsFont, dedicationFont: store.dedicationFont,
-                titleFontSize: store.titleFontSize, subtitleFontSize: store.subtitleFontSize,
-                detailsFontSize: store.detailsFontSize,
-                customText: store.customText,
-                titleAllCaps: store.titleAllCaps, locationAllCaps: store.locationAllCaps,
-                showBorder: store.showBorder, showFrame: store.showFrame,
-                borderStyle: store.borderStyle, circleSize: store.circleSize,
-                showConstellations: store.showConstellations, showGrid: store.showGrid,
-                mapCenterLat: store.mapCenterLat, mapCenterLng: store.mapCenterLng,
-                mapZoom: store.mapZoom, mapCity: store.mapCity,
-            };
+            const state = buildSnapshot(type);
 
-            // Render the poster to PNG (300 DPI, no watermark) and include in save request
-            let renderedPng: string | undefined;
-            try {
-                const svgEl = document.getElementById('poster-preview')?.querySelector('svg') as SVGSVGElement | null;
-                if (svgEl) {
-                    const blob = await renderPosterToBlob(svgEl, store.printSize.width, store.printSize.height, 300, false);
-                    renderedPng = await blobToBase64(blob);
-                }
-            } catch (renderErr) {
-                console.warn('Pre-render failed (non-fatal):', renderErr);
-            }
+            // Client-side pre-render removed: large canvases (300 DPI street/star maps)
+            // overflow browser limits and exceed the 2 MB body limit.
+            // Server renders at full 300 DPI via Puppeteer on fulfillment.
+            const renderedPng: string | undefined = undefined;
 
             const res = await fetch(`${API_BASE}/api/save-design`, {
                 method: 'POST',
@@ -662,7 +732,7 @@ const OrderSection: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [store]);
+    }, [buildSnapshot]);
 
     const copyToken = () => {
         if (!token) return;
@@ -672,9 +742,9 @@ const OrderSection: React.FC = () => {
     };
 
     const openEtsy = () => {
-        // Prefer the specific template listing URL if we arrived via a template link
+        // Prefer the specific template listing URL; framed + print both use the print listing.
         const url = store.selectedTemplateEtsyUrl
-            || (orderType === 'print' ? ETSY_PRINT_URL : ETSY_DIGITAL_URL);
+            || (orderType === 'digital' ? ETSY_DIGITAL_URL : ETSY_PRINT_URL);
         window.open(url, '_blank');
     };
 
@@ -766,6 +836,58 @@ const OrderSection: React.FC = () => {
         });
     };
 
+    // Confirm mode — shown instead of the shopping UI when the order is awaiting size confirmation
+    if (confirmInfo) {
+        const productLabel = confirmInfo.listingType === 'framed'
+            ? 'Framed Print'
+            : confirmInfo.listingType === 'print'
+                ? 'Printed Poster'
+                : 'order';
+        const formattedSize = confirmInfo.printSize.replace('x', '×');
+
+        return (
+            <Box p={6} borderTop="1px" borderColor="gray.200">
+                <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={5}>
+                    <Text fontWeight="700" fontSize="md" color="gray.900" mb={3}>
+                        Confirm your order
+                    </Text>
+                    <Text fontSize="sm" color="gray.600" mb={4}>
+                        You ordered a {formattedSize} {productLabel}. We&apos;ve laid your design out
+                        at {formattedSize} — edit anything above, then confirm and it goes straight
+                        to production. No extra charge.
+                    </Text>
+
+                    {confirmState === 'done' ? (
+                        <Box bg="green.50" border="1px solid" borderColor="green.200"
+                            borderRadius="md" p={4} textAlign="center">
+                            <Text fontWeight="700" color="green.700" fontSize="sm">
+                                ✓ Confirmed! Your order is now in production. We&apos;ll email you when it ships.
+                            </Text>
+                        </Box>
+                    ) : (
+                        <VStack spacing={3}>
+                            {confirmState === 'error' && (
+                                <Text fontSize="xs" color="red.500" textAlign="center">
+                                    Something went wrong — please try again or email studio@themappedmoment.com.
+                                </Text>
+                            )}
+                            <Button
+                                onClick={confirmOrder}
+                                isLoading={confirmState === 'submitting'}
+                                loadingText="Confirming…"
+                                size="md" width="full" borderRadius="md"
+                                bg="gray.900" color="white" fontWeight="600" fontSize="sm"
+                                _hover={{ bg: 'gray.700' }}
+                            >
+                                ✓ Confirm &amp; send to production
+                            </Button>
+                        </VStack>
+                    )}
+                </Box>
+            </Box>
+        );
+    }
+
     return (
         <Box p={6} borderTop="1px" borderColor="gray.200">
             <DownloadButton />
@@ -781,31 +903,108 @@ const OrderSection: React.FC = () => {
             </Text>
 
             {!token ? (
-                <>
-                    <VStack spacing={2}>
-                        <Button
-                            onClick={() => saveDesign('digital')}
-                            isLoading={loading && orderType === 'digital'}
-                            loadingText="Saving design…"
-                            size="md" width="full" borderRadius="md"
-                            bg="gray.900" color="white" fontWeight="600" fontSize="sm"
-                            _hover={{ bg: 'gray.700' }}
-                        >
-                            Order Digital File — 300 DPI PNG
-                        </Button>
-                        <Button
-                            onClick={() => saveDesign('print')}
-                            isLoading={loading && orderType === 'print'}
-                            loadingText="Saving design…"
-                            size="md" width="full" borderRadius="md"
-                            variant="outline" borderColor="gray.300"
-                            fontWeight="600" fontSize="sm" color="gray.700"
-                            _hover={{ bg: 'gray.50' }}
-                        >
-                            Order Printed Poster
-                        </Button>
-                    </VStack>
-                </>
+                <VStack spacing={3}>
+                    {/* Product type cards */}
+                    {([
+                        { type: 'digital' as const,  icon: '📄', title: 'Digital File',    sub: '300 DPI PNG, instant download' },
+                        { type: 'print'   as const,  icon: '🖼',  title: 'Printed Poster', sub: 'Fine Art Print, unframed' },
+                        { type: 'framed'  as const,  icon: '🪟',  title: 'Framed Poster',  sub: 'Fine Art Print + frame' },
+                    ]).map(({ type, icon, title, sub }) => {
+                        const isActive = orderType === type || (!orderType && type === 'digital');
+                        return (
+                            <Box
+                                key={type}
+                                as="button"
+                                w="full"
+                                onClick={() => !loading && setOrderType(type)}
+                                border="2px solid"
+                                borderColor={isActive ? 'gray.900' : 'gray.200'}
+                                borderRadius="lg"
+                                bg={isActive ? 'gray.900' : 'white'}
+                                color={isActive ? 'white' : 'gray.700'}
+                                px={4} py={3}
+                                textAlign="left"
+                                _hover={{ borderColor: isActive ? 'gray.900' : 'gray.400' }}
+                                transition="all 0.15s"
+                                cursor={loading ? 'not-allowed' : 'pointer'}
+                            >
+                                <HStack spacing={3}>
+                                    <Text fontSize="xl">{icon}</Text>
+                                    <Box>
+                                        <Text fontWeight="700" fontSize="sm">{title}</Text>
+                                        <Text fontSize="11px" opacity={0.7}>{sub}</Text>
+                                    </Box>
+                                    <Box ml="auto" w="18px" h="18px" borderRadius="full"
+                                        border="2px solid" borderColor={isActive ? 'white' : 'gray.300'}
+                                        bg={isActive ? 'white' : 'transparent'}
+                                        display="flex" alignItems="center" justifyContent="center">
+                                        {isActive && <Box w="8px" h="8px" borderRadius="full" bg="gray.900" />}
+                                    </Box>
+                                </HStack>
+                            </Box>
+                        );
+                    })}
+
+                    {/* Frame color picker — shown when 'framed' is selected */}
+                    {orderType === 'framed' && (
+                        <Box w="full" bg="gray.50" borderRadius="md" p={3} border="1px solid" borderColor="gray.200">
+                            <Text fontSize="xs" fontWeight="600" color="gray.600" mb={2}>Frame color</Text>
+                            <HStack spacing={2} flexWrap="wrap">
+                                {FRAME_COLORS.map(fc => (
+                                    <Box
+                                        key={fc.id}
+                                        as="button"
+                                        onClick={() => setFrameColor(fc.id)}
+                                        border="2px solid"
+                                        borderColor={frameColor === fc.id ? 'gray.900' : fc.border}
+                                        borderRadius="md"
+                                        bg={fc.bg}
+                                        w="32px" h="32px"
+                                        cursor="pointer"
+                                        title={fc.label}
+                                        position="relative"
+                                        flexShrink={0}
+                                        _hover={{ borderColor: 'gray.900' }}
+                                        transition="border-color 0.1s"
+                                    >
+                                        {frameColor === fc.id && (
+                                            <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center">
+                                                <Text fontSize="14px" lineHeight="1">{['white','light grey'].includes(fc.id) ? '✓' : '✓'}</Text>
+                                            </Box>
+                                        )}
+                                    </Box>
+                                ))}
+                            </HStack>
+                            <Text fontSize="10px" color="gray.500" mt={2}>
+                                {FRAME_COLORS.find(f => f.id === frameColor)?.label} frame selected
+                                · saved with your design — no need to choose again at checkout
+                            </Text>
+                        </Box>
+                    )}
+
+                    <Button
+                        onClick={() => saveDesign(orderType ?? 'digital')}
+                        isLoading={loading}
+                        loadingText="Saving design…"
+                        size="md" width="full" borderRadius="md"
+                        bg="gray.900" color="white" fontWeight="600" fontSize="sm"
+                        _hover={{ bg: 'gray.700' }}
+                        mt={1}
+                    >
+                        Save Design &amp; Continue →
+                    </Button>
+
+                    {store.selectedTemplateEtsyUrl && (
+                        <Text fontSize="xs" color="gray.400" textAlign="center">
+                            or{' '}
+                            <Box as="a" href={store.selectedTemplateEtsyUrl} target="_blank"
+                                color="orange.500" fontWeight="600" textDecoration="underline"
+                                _hover={{ color: 'orange.600' }}>
+                                view listing on Etsy ↗
+                            </Box>
+                        </Text>
+                    )}
+                </VStack>
             ) : token === 'ERROR' ? (
                 <Box textAlign="center">
                     <Text fontSize="sm" color="red.500" mb={2}>Could not save design. Try again.</Text>
@@ -813,30 +1012,65 @@ const OrderSection: React.FC = () => {
                 </Box>
             ) : (
                 <Box bg="gray.50" borderRadius="lg" p={4} border="1px solid" borderColor="gray.200">
-                    <Text fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase"
-                        letterSpacing="0.08em" mb={3}>
-                        Your design is saved!
+                    <Text fontSize="xs" fontWeight="700" color="green.600" textTransform="uppercase"
+                        letterSpacing="0.08em" mb={4}>
+                        ✓ Design saved — 2 steps to complete your order
                     </Text>
 
-                    <HStack justify="space-between" align="center" mb={1}>
-                        <Text fontSize="xs" color="gray.500">Your design token:</Text>
-                        <Button size="xs" variant="ghost" color="gray.500" onClick={copyToken}>
-                            {copied ? '✓ Copied' : 'Copy'}
-                        </Button>
-                    </HStack>
+                    {/* Step 1 — Copy code */}
+                    <Text fontSize="xs" fontWeight="700" color="gray.600" mb={1}>
+                        Step 1 — Copy your personalisation code
+                    </Text>
                     <Box bg="white" border="2px solid" borderColor="gray.900" borderRadius="md"
-                        p={3} mb={4} textAlign="center" cursor="pointer" onClick={copyToken}>
+                        p={3} mb={1} textAlign="center" cursor="pointer" onClick={copyToken}
+                        _hover={{ borderColor: 'gray.600' }}>
                         <Text fontSize="2xl" fontWeight="800" letterSpacing="0.2em" color="gray.900">
                             {token}
                         </Text>
                     </Box>
+                    <Button size="xs" width="full" variant="outline" borderColor="gray.300"
+                        color="gray.600" mb={4} onClick={copyToken}>
+                        {copied ? '✓ Copied to clipboard' : 'Copy code'}
+                    </Button>
 
-                    <Box bg="blue.50" borderRadius="md" p={3} mb={4} border="1px solid" borderColor="blue.100">
-                        <Text fontSize="xs" color="blue.700" lineHeight="1.6">
-                            <strong>On Etsy:</strong> paste <strong>{token}</strong> in the
-                            "personalisation" field when ordering. Your poster will be automatically
-                            prepared and sent to you.
-                        </Text>
+                    {/* Step 2 — Order instructions */}
+                    <Text fontSize="xs" fontWeight="700" color="gray.600" mb={2}>
+                        Step 2 — Order on Etsy
+                    </Text>
+                    <Box bg="white" border="1px solid" borderColor="gray.200" borderRadius="md" p={3} mb={4}>
+                        <VStack align="start" spacing={1}>
+                            {sizeLabel && (
+                                <Text fontSize="xs" color="gray.700">
+                                    📐 Select size: <strong>{sizeLabel}</strong>
+                                </Text>
+                            )}
+                            {etsy_variant ? (
+                                <Text fontSize="xs" color="gray.700">
+                                    🖼 Select product: <strong>{etsy_variant}</strong>
+                                </Text>
+                            ) : orderType === 'framed' ? (
+                                <Text fontSize="xs" color="gray.700">
+                                    🖼 Select: <strong>Framed Poster</strong>
+                                </Text>
+                            ) : (
+                                <Text fontSize="xs" color="gray.700">
+                                    🖼 Select: <strong>{orderType === 'digital' ? 'Digital Download' : 'Printed Poster'}</strong>
+                                </Text>
+                            )}
+                            {orderType === 'framed' && (
+                                <Text fontSize="xs" color="gray.700">
+                                    🎨 Frame color: <strong>{FRAME_COLORS.find(f => f.id === frameColor)?.label ?? 'Black'}</strong>
+                                    {' '}<Box as="span" display="inline-block" w="10px" h="10px" borderRadius="2px"
+                                        bg={FRAME_COLORS.find(f => f.id === frameColor)?.bg}
+                                        border="1px solid" borderColor="gray.300"
+                                        verticalAlign="middle" ml="1" />
+                                    {' '}<Box as="span" color="gray.400">(locked into your code)</Box>
+                                </Text>
+                            )}
+                            <Text fontSize="xs" color="gray.700">
+                                📋 Paste your code in <strong>"Personalisation"</strong> at checkout
+                            </Text>
+                        </VStack>
                     </Box>
 
                     <VStack spacing={2}>
@@ -846,10 +1080,10 @@ const OrderSection: React.FC = () => {
                             bg="orange.400" color="white" fontWeight="700" fontSize="sm"
                             _hover={{ bg: 'orange.500' }}
                         >
-                            Continue to Etsy →
+                            Buy on Etsy →
                         </Button>
                         <Button size="xs" variant="ghost" color="gray.400" onClick={reset}>
-                            ← Back
+                            ← Start over
                         </Button>
                     </VStack>
                 </Box>

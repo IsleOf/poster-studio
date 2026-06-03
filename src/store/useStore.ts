@@ -170,6 +170,8 @@ interface StoreState {
     mapImageOpacity: number; // 0.1–1.0, controls map fade intensity
     /** True while the user is actively dragging the map image in the poster preview */
     isDraggingMapImage: boolean;
+    /** True while the vector street map is fetching tiles / rasterising a new view */
+    streetMapRendering: boolean;
 
     // Poster Type
     posterType: 'starmap' | 'streetmap' | 'coloredmap';
@@ -189,6 +191,8 @@ interface StoreState {
     mapDetailRoadColor: string;
     mapColorPreset: string;
     mapStyleUrl: string | null; // null = custom 2-color style; URL = use prebuilt style (e.g. realistic)
+    /** Multiplier for street/place label text size on the colored map (1 = style default). */
+    mapLabelScale: number;
 
     // Setters
     // Template System
@@ -314,10 +318,12 @@ interface StoreState {
     setMapDetailRoadColor: (color: string) => void;
     setMapColorPreset: (preset: string) => void;
     setMapStyleUrl: (url: string | null) => void;
+    setMapLabelScale: (v: number) => void;
     setMapImageOffsetX: (x: number) => void;
     setMapImageOffsetY: (y: number) => void;
     setMapImageOpacity: (opacity: number) => void;
     setIsDraggingMapImage: (v: boolean) => void;
+    setStreetMapRendering: (v: boolean) => void;
 
     // Active typography field (set when user clicks a text element in the poster)
     activeTypoField: 'title' | 'subtitle' | 'details' | 'dedication' | 'names' | null;
@@ -344,10 +350,16 @@ interface StoreState {
 
     // Template-link ordering flow
     selectedTemplateEtsyUrl: string | null;
+    selectedTemplateEtsyVariantName: string | null;
+    selectedTemplateFulfillmentSize: string | null;
+    selectedTemplateListingSlug: string | null;
     savedDesignToken: string | null;
     selectedEtsyListingId: string | null;
     selectedEtsyVariant: string | null;
     setSelectedTemplateEtsyUrl: (url: string | null) => void;
+    setSelectedTemplateEtsyVariantName: (name: string | null) => void;
+    setSelectedTemplateFulfillmentSize: (size: string | null) => void;
+    setSelectedTemplateListingSlug: (slug: string | null) => void;
     setSavedDesignToken: (token: string | null) => void;
     setSelectedEtsyListingId: (id: string | null) => void;
     setSelectedEtsyVariant: (variant: string | null) => void;
@@ -484,6 +496,7 @@ export const useStore = create<StoreState>((set) => ({
     mapImageOffsetY: 0,
     mapImageOpacity: 1,
     isDraggingMapImage: false,
+    streetMapRendering: false,
     activeTypoField: null,
     typoFieldVersion: 0,
     pendingGlyphForInlineEdit: null,
@@ -510,6 +523,7 @@ export const useStore = create<StoreState>((set) => ({
     mapDetailRoadColor: '#2a2a2a',
     mapColorPreset: 'midnight',
     mapStyleUrl: null,
+    mapLabelScale: 1,
 
     // Setters
     // Template System - Default Values
@@ -845,7 +859,7 @@ export const useStore = create<StoreState>((set) => ({
             ? 'https://tiles.openfreemap.org/styles/bright'
             : null,
     }),
-    setMapCity: (mapCity) => set({ mapCity, mapImageOffsetX: 0, mapImageOffsetY: 0, locationPinOffsetX: 0, locationPinOffsetY: 0 }),
+    setMapCity: (mapCity) => set({ mapCity, mapBackgroundImage: null, mapImageOffsetX: 0, mapImageOffsetY: 0, locationPinOffsetX: 0, locationPinOffsetY: 0 }),
     setMapCenterLat: (mapCenterLat) => set({ mapCenterLat }),
     setMapCenterLng: (mapCenterLng) => set({ mapCenterLng }),
     setMapZoom: (mapZoom) => set({ mapZoom }),
@@ -859,10 +873,12 @@ export const useStore = create<StoreState>((set) => ({
     setMapDetailRoadColor: (mapDetailRoadColor) => set({ mapDetailRoadColor }),
     setMapColorPreset: (mapColorPreset) => set({ mapColorPreset }),
     setMapStyleUrl: (mapStyleUrl) => set({ mapStyleUrl }),
+    setMapLabelScale: (mapLabelScale) => set({ mapLabelScale }),
     setMapImageOffsetX: (mapImageOffsetX) => set({ mapImageOffsetX }),
     setMapImageOffsetY: (mapImageOffsetY) => set({ mapImageOffsetY }),
     setMapImageOpacity: (mapImageOpacity) => set({ mapImageOpacity }),
     setIsDraggingMapImage: (isDraggingMapImage) => set({ isDraggingMapImage }),
+    setStreetMapRendering: (streetMapRendering) => set({ streetMapRendering }),
     setActiveTypoField: (activeTypoField) => set((s) => ({ activeTypoField, typoFieldVersion: s.typoFieldVersion + 1 })),
     setPendingGlyphForInlineEdit: (pendingGlyphForInlineEdit) => set({ pendingGlyphForInlineEdit }),
     setShowLocationPin: (showLocationPin) => set({ showLocationPin }),
@@ -876,10 +892,16 @@ export const useStore = create<StoreState>((set) => ({
 
     // Template-link ordering flow
     selectedTemplateEtsyUrl: null,
+    selectedTemplateEtsyVariantName: null,
+    selectedTemplateFulfillmentSize: null,
+    selectedTemplateListingSlug: null,
     savedDesignToken: null,
     selectedEtsyListingId: null,
     selectedEtsyVariant: null,
     setSelectedTemplateEtsyUrl: (selectedTemplateEtsyUrl) => set({ selectedTemplateEtsyUrl }),
+    setSelectedTemplateEtsyVariantName: (selectedTemplateEtsyVariantName) => set({ selectedTemplateEtsyVariantName }),
+    setSelectedTemplateFulfillmentSize: (selectedTemplateFulfillmentSize) => set({ selectedTemplateFulfillmentSize }),
+    setSelectedTemplateListingSlug: (selectedTemplateListingSlug) => set({ selectedTemplateListingSlug }),
     setSavedDesignToken: (savedDesignToken) => set({ savedDesignToken }),
     setSelectedEtsyListingId: (selectedEtsyListingId) => set({ selectedEtsyListingId }),
     setSelectedEtsyVariant: (selectedEtsyVariant) => set({ selectedEtsyVariant }),

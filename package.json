@@ -30,6 +30,7 @@
     "test:report": "npx playwright show-report tests/report"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.726.0",
     "@chakra-ui/react": "^2.8.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",

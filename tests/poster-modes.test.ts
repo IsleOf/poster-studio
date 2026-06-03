@@ -178,7 +178,7 @@ test.describe('Street Map mode', () => {
     test('map color presets section is visible in street map mode', async ({ page }) => {
         test.setTimeout(30000);
         await openDesignerWithMode(page, 'streetmap');
-        const colorSection = page.getByText(/Map Colors/i).first();
+        const colorSection = page.getByText(/Map Style Presets/i).first();
         await expect(colorSection).toBeVisible();
     });
 

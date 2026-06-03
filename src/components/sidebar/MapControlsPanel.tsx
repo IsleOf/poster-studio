@@ -23,6 +23,7 @@ const MapControlsPanel: React.FC = () => {
         mapCenterLng, setMapCenterLng,
         mapZoom, setMapZoom,
         mapBearing, setMapBearing,
+        mapLabelScale, setMapLabelScale,
         mapColorPreset, setMapColorPreset,
         mapBgColor, setMapBgColor,
         mapStreetColor, setMapStreetColor,
@@ -235,6 +236,22 @@ const MapControlsPanel: React.FC = () => {
                                     <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="1px" />
                                 </Slider>
                             </FormControl>
+
+                            {/* Label size — colored map only (the 2-colour styles hide all labels).
+                                Scales the vector text size in the style, re-rendered at full print
+                                resolution, so larger labels stay crisp at 300 DPI. */}
+                            {posterType === 'coloredmap' && (
+                                <FormControl>
+                                    <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>
+                                        Label size: {Math.round(mapLabelScale * 100)}%
+                                    </FormLabel>
+                                    <Slider value={mapLabelScale} min={0.7} max={2.2} step={0.1} onChange={setMapLabelScale} aria-label="map-label-size">
+                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
+                                        <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="1px" />
+                                    </Slider>
+                                    <Text fontSize="10px" color="gray.400" mt={1}>Bigger labels may show fewer names (they need more room).</Text>
+                                </FormControl>
+                            )}
 
                             <HStack justify="space-between">
                                 <Text fontSize="xs" fontWeight="600" color="gray.700">Location Pin</Text>

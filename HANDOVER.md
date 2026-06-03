@@ -5,6 +5,11 @@
 
 Read this file before touching anything. The bugs in here have already cost hours — read the "Known Failure Modes" section before you make assumptions.
 
+> **Latest session handoff:** [docs/HANDOVER-2026-06-04-shop.md](docs/HANDOVER-2026-06-04-shop.md) —
+> size-lock fix, digital size-unlock, order confirm-mode, 30-day edit window, inbound message triage,
+> listing-copy audit + Etsy push, and the remaining user actions (Gmail forward, publish drafts, delete
+> stray listing). Changes are deployed to prod but mostly uncommitted in git.
+
 ---
 
 ## 1. What This Project Is
@@ -615,3 +620,72 @@ ls /var/www/poster-studio/designs/
 **Target Etsy pricing:**
 - Digital download: $12.99-19.99 (89% margin)
 - Physical 18x24: $39.99 (64% margin at Prodigi rates)
+
+---
+
+## 19. Fulfillment, Profitability & Shipping (2026-06 build)
+
+> Full detail in **CLAUDE.md** sections "Fulfillment & Print Products", "Profitability Guard",
+> "Markets/products/shipping", and "Modular architecture". This is the handover summary.
+
+### Platform-agnostic fulfillment
+Product type (`digital`/`print`/`framed`) comes from the saved design `orderType` first
+(`server/routes/verify.js` `getListingType`, `server/services/etsy.js` `resolveListingType`),
+not the sales channel — so Amazon Custom / TikTok can be added by writing an ingestion adapter
+that sets `orderType`+`printSize`+`revenue_cents`+`currency` on the order, then calling
+`submitPrintOrder`/`releasePrintOrder`. Prodigi is the fulfiller (`server/services/prodigi.js`).
+
+### Profitability guard (never pay Prodigi > customer paid)
+`releasePrintOrder()` is the single chokepoint for ALL release paths. It re-quotes Prodigi live
+(per destination country/currency) and holds the order in `needs_review` if
+`revenue − Etsy fees − Prodigi cost < floor`. Config in `server/services/profitability.js`
+(+ `settings`: `etsy_fee_pct`, `etsy_fee_flat_cents`, `min_margin_cents`, `min_margin_pct`).
+New `orders` columns: `currency, revenue_cents, shipping_paid_cents, tax_cents, prodigi_cost_cents,
+prodigi_ship_cents, margin_cents, profit_status, profit_json`. Admin override:
+`POST /api/admin/orders/:id/fulfill {force:true}`; re-quote: `POST /api/admin/orders/:id/assess`.
+
+### Shipping & markets
+Markets: **US (free shipping) + Canada + UK + Australia + EU**, all clear $8 floor. Per-country
+Prodigi method in `shippingMethodFor()`: US/CA/AU=Budget, GB/EU=Standard (`prodigi_shipping_<ISO>`
+to override). **12 live Etsy shipping profiles** (one per size; IDs in prod
+`settings.shipping_profile_bap_<size>`), built by `server/scripts/build-shipping-profiles.js`
+(dry-run default; `--apply`, `--replace`, `--only-size`, `--no-express`). Each: US free +
+CA/GB/AU/EU charged + US-domestic Express upgrade. Paper: BAP (`ART-FAP-BAP-*`) for 10 sizes;
+FAP for 5x7 & A5 (BAP not offered). Framing line config `prodigi_frame_line` (default **CFP**).
+⚠️ **Etsy shipping profile is per-LISTING, not per-variation** — see "open question" below.
+
+### Modular swap points (config-driven, no code change)
+- **LLM** — `server/services/llm.js`, `llm_provider` (openrouter|bedrock|disabled). **ACTIVE =
+  openrouter**, model `openrouter/free` (Free Models Router; needs `OPENROUTER_API_KEY` in `.env`).
+  Bedrock is a documented fallback that's NOT viable in ap-southeast-2 without cross-region inference
+  profiles (3.5 Haiku absent, Claude 3 Haiku Legacy-blocked) — that's why we use OpenRouter.
+- **Framing** — `getFramedSku()` in prodigi.js.
+- **Fulfiller** — replace prodigi.js (Printify/Gelato have pricing APIs + 30-day reship like Prodigi;
+  need monthly sub for cheap rates — revisit at volume).
+
+### Bad-order recovery (`server/services/orderRecovery.js` + `personalizationParser.js`)
+When a buyer types details into Etsy's Personalization box (no design code), the Etsy poll prefills
+the listing's default template (Design001) with parsed fields → near-finished design to approve.
+Deterministic parse + LLM (Haiku) gap-fill. Gated `enable_order_recovery` / `ENABLE_ORDER_RECOVERY`
+(default OFF). Tested deterministic live on prod.
+
+### Etsy specifics
+- OAuth scopes now include `shops_w listings_w` (`server/routes/auth.js`); re-auth done.
+- Production partner "Prodigi" added manually (no create API). Returns policy = "no returns";
+  cancellations 24h. EU GPSR: shop is Estonia-based = own economic operator; personalized goods
+  exempt from 14-day withdrawal (declared in T&C). Outbound Etsy messages NOT API-able (v3 killed
+  messaging) → browser agent only. Inbound email is catch-all → `/api/webhooks/email-inbound`.
+- Customer-facing copy: **`LISTING_COPY.md`** (canonical, reusable).
+
+### Helper scripts added (`server/scripts/`)
+`build-shipping-profiles.js`, `quote-matrix.js`, `verify-etsy-write.js`, `pricing-table.js`,
+`frame-probe.js`, `express-probe.js`, `bedrock-probe.js`. Run on PROD (keys via IMDS/.env).
+
+### OPEN QUESTION for next agent — listing structure vs per-size shipping profiles
+We built **one shipping profile per size**, but Etsy attaches **one profile per LISTING** (not per
+variation). If listings use **Size as a variation** (one listing, many sizes), a listing can only
+carry ONE profile → it can't be size-accurate on the *charged intl* line. This is OK because US is
+free (cost baked into each size's price) and intl carries a big margin cushion + the profit guard
+backstops — but decide: (a) one listing per size (precise shipping), or (b) size-as-variation with a
+single representative profile per listing. Attaching profiles via API = `updateListing` with
+`shipping_profile_id` (needs the Etsy listing IDs + this decision).

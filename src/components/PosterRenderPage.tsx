@@ -48,6 +48,23 @@ function applyDesignState(state: Record<string, unknown>) {
     useStore.setState(patch as Partial<ReturnType<typeof useStore.getState>>);
 }
 
+// Wait until the star map has painted at least MIN_STARS circles into the SVG.
+// Replaces the fixed 3500ms timer — prevents blank renders when the GitHub CDN is slow.
+async function waitForStarMap(svgEl: SVGSVGElement, minStars = 50, timeoutMs = 20000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const circles = svgEl.querySelectorAll('#map-layer circle');
+        if (circles.length >= minStars) {
+            // One extra rAF so D3 finishes any in-progress paint
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    // Timeout is non-fatal — render whatever is there rather than failing the order
+    console.warn(`[PosterRenderPage] Star wait timed out after ${timeoutMs}ms (${svgEl.querySelectorAll('#map-layer circle').length} circles found)`);
+}
+
 async function waitForVectorStreetMap(svgEl: SVGSVGElement): Promise<void> {
     const deadline = Date.now() + 60000;
     while (Date.now() < deadline) {
@@ -95,6 +112,13 @@ const PosterRenderPage: React.FC = () => {
             })
             .then(state => {
                 applyDesignState(state);
+                // Migrate designs saved before the mapInteriorColor sync fix:
+                // if mapInteriorColor is still the old default but posterColor differs,
+                // sync them so the server render matches the live browser preview.
+                if (state.posterColor && state.mapInteriorColor === '#1B2735'
+                    && state.mapInteriorColor !== state.posterColor) {
+                    useStore.setState({ mapInteriorColor: state.posterColor });
+                }
                 setReady(true);
             })
             .catch(err => {
@@ -170,7 +194,12 @@ const PosterRenderPage: React.FC = () => {
             try {
                 const svgEl = document.querySelector('#poster-render svg') as SVGSVGElement | null;
                 if (!svgEl) throw new Error('SVG element not found');
-                if (useVectorStreetMap) {
+
+                if (posterType === 'starmap') {
+                    // Wait for star circles to actually paint — avoids blank renders
+                    // when the GitHub CDN is slow to deliver the star JSON
+                    await waitForStarMap(svgEl);
+                } else if (useVectorStreetMap) {
                     await waitForVectorStreetMap(svgEl);
                 }
 
@@ -195,7 +224,7 @@ const PosterRenderPage: React.FC = () => {
                 console.error('[PosterRenderPage] Export failed:', msg);
                 document.body.setAttribute('data-render-error', msg);
             }
-        }, posterType === 'starmap' ? 3500 : 500); // maps are explicitly prepared above
+        }, posterType === 'starmap' ? 500 : 500); // initial settle; star wait now uses DOM polling
 
         return () => clearTimeout(timer);
     }, [ready, mapReady, printSize, posterType, useVectorStreetMap]);
@@ -255,7 +284,7 @@ const PosterRenderPage: React.FC = () => {
             }}
         >
             {hiddenMapCapture}
-            <VectorStarMap />
+            <VectorStarMap forceVector={true} />
         </div>
     );
 };

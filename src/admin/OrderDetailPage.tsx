@@ -133,6 +133,15 @@ const OrderDetailPage: React.FC = () => {
                             </HStack>
                         )]] : []),
                         ['Revisions Used', `${order.revisions_used}/3`],
+                        ...(order.prodigi_submit_after && order.status === 'rendered' ? [[
+                            'Prodigi Submission',
+                            <Text fontSize="sm" color="orange.600" fontWeight="500">
+                                Scheduled {formatDate(order.prodigi_submit_after)}
+                            </Text>
+                        ]] : []),
+                        ...(order.prodigi_order_id ? [['Prodigi Order ID',
+                            <Text fontSize="sm" fontFamily="mono">{order.prodigi_order_id}</Text>
+                        ]] : []),
                     ].map(([label, value]) => (
                         <HStack key={String(label)} justify="space-between">
                             <Text fontSize="sm" color="gray.500">{label}</Text>
@@ -158,7 +167,11 @@ const OrderDetailPage: React.FC = () => {
                     <Divider orientation="vertical" h="30px" />
                     <Button size="sm" colorScheme="green" onClick={handleFulfill} isLoading={updating}
                         isDisabled={!FULFILLABLE_STATUSES.includes(order.status)}>
-                        {order.status === 'failed' ? 'Retry Fulfillment' : 'Fulfill Now'}
+                        {order.listing_type === 'print' && order.status === 'rendered'
+                            ? 'Submit to Prodigi Now'
+                            : order.status === 'failed'
+                            ? 'Retry Fulfillment'
+                            : 'Fulfill Now'}
                     </Button>
                     {order.etsy_buyer_email && (
                         <>
@@ -174,6 +187,12 @@ const OrderDetailPage: React.FC = () => {
                         </>
                     )}
                 </HStack>
+                {order.listing_type === 'print' && order.status === 'rendered' && order.prodigi_submit_after && (
+                    <Text fontSize="xs" color="orange.500" mt={2}>
+                        Prodigi submission is scheduled for when your Etsy payout clears.
+                        Click "Submit to Prodigi Now" if your card is already funded.
+                    </Text>
+                )}
                 {order.status === 'failed' && (
                     <Text fontSize="xs" color="red.500" mt={2}>
                         This order failed. Click "Retry Fulfillment" to attempt again.

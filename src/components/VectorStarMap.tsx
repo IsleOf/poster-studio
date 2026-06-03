@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { geoStereographic, geoPath, geoGraticule } from 'd3-geo';
 import { select } from 'd3-selection';
@@ -38,12 +38,16 @@ interface ConstellationFeature {
     };
 }
 
-const VectorStarMap: React.FC = () => {
+const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = false }) => {
     const svgRef = useRef<SVGSVGElement>(null);
     const inlineEditInputRef = useRef<HTMLInputElement>(null);
     const [starsData, setStarsData] = useState<any>(null);
     const [constellationsData, setConstellationsData] = useState<any>(null);
     const [vectorStreetMap, setVectorStreetMap] = useState<VectorStreetMapRender | null>(null);
+    // Rasterised bitmap of the vector map for fast interactive preview.
+    // Replaced with a single <image> element so dragging sliders doesn't
+    // force the browser to re-rasterise millions of SVG path commands.
+    const [vectorStreetMapRaster, setVectorStreetMapRaster] = useState<string | null>(null);
 
     // Snap guide line visibility (shown while dragging shape near vertical center)
     const [snapGuideX, setSnapGuideX] = useState(false);
@@ -224,10 +228,15 @@ const VectorStarMap: React.FC = () => {
     useEffect(() => {
         if (!useVectorStreetMap) {
             setVectorStreetMap(null);
+            // Only clear the flag for star maps. For colored / raster street maps,
+            // StreetMapCapture owns the flag — clearing it here would race its captures.
+            if (posterType === 'starmap') useStore.getState().setStreetMapRendering(false);
             return;
         }
 
         let cancelled = false;
+        // Signal "rendering" so the UI can gray out + show a spinner until the new raster is ready.
+        useStore.getState().setStreetMapRendering(true);
         const RECT_MAP_H = height * 0.74;
         const RECT_MAP_PAD = width * 0.0625;
         const RECT_MAP_INNER_W = width - 2 * RECT_MAP_PAD;
@@ -247,8 +256,10 @@ const VectorStarMap: React.FC = () => {
             lat: mapCenterLat,
             zoom: mapZoom,
             bearing: mapBearing,
-            x: center[0] - imgSize / 2 + mapImageOffsetX,
-            y: center[1] - imgSize / 2 + mapImageOffsetY,
+            // Offset=0 baseline — pan is applied as a display-time transform on the
+            // rendered image, so the geometry never needs re-fetching just to pan.
+            x: center[0] - imgSize / 2,
+            y: center[1] - imgSize / 2,
             size: imgSize,
         })
             .then(result => { if (!cancelled) setVectorStreetMap(result); })
@@ -265,6 +276,108 @@ const VectorStarMap: React.FC = () => {
     }, [
         useVectorStreetMap, width, height, maskShape, debouncedCircleSize, debouncedHeartSize, debouncedHouseSize,
         debouncedShapeOffsetX, debouncedShapeOffsetY, mapCenterLng, mapCenterLat, mapZoom, mapBearing,
+    ]);
+
+    // Raster-preview effect: converts vector paths → offscreen canvas → JPEG data URL.
+    // Runs only when the map data or colors change (not on text/layout slider interactions).
+    // The /render page uses forceVector=true so Puppeteer always gets full SVG vectors.
+    const mapGeomForRaster = useMemo(() => {
+        const RECT_MAP_H = height * 0.74;
+        const RECT_MAP_PAD = width * 0.0625;
+        const RECT_MAP_INNER_W = width - 2 * RECT_MAP_PAD;
+        const RECT_MAP_INNER_H = RECT_MAP_H - 2 * RECT_MAP_PAD;
+        const baseR = Math.min(width, height) * 0.4;
+        const mapRadius = maskShape === 'rect' ? RECT_MAP_INNER_W / 2 : baseR * (
+            maskShape === 'circle' ? debouncedCircleSize :
+            maskShape === 'heart'  ? debouncedHeartSize  :
+                                     debouncedHouseSize
+        );
+        const center: [number, number] = maskShape === 'rect'
+            ? [width / 2, RECT_MAP_PAD + RECT_MAP_INNER_H / 2]
+            : [width / 2 + debouncedShapeOffsetX, (height * 0.45) + debouncedShapeOffsetY];
+        return { mapRadius, center, imgSize: mapRadius * 3 };
+    }, [width, height, maskShape, debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetX, debouncedShapeOffsetY]);
+
+    useEffect(() => {
+        if (forceVector) {
+            setVectorStreetMapRaster(null);
+            return;
+        }
+        if (!vectorStreetMap) {
+            // Tile fetch failed or not ready — clear the loading state so the spinner doesn't hang.
+            setVectorStreetMapRaster(null);
+            useStore.getState().setStreetMapRendering(false);
+            return;
+        }
+        let cancelled = false;
+        const { center, mapRadius, imgSize } = mapGeomForRaster;
+        const bg     = mapBgColor   || '#ffffff';
+        const water  = mapWaterColor || '#8f8f8f';
+        const land   = mapLandColor  || '#b6b6b6';
+        const major  = mapMainRoadColor || mapStreetColor || '#111111';
+        const minor  = (!mapSmallRoadColor  || mapSmallRoadColor  === '#1a1a1a') ? '#666666' : mapSmallRoadColor;
+        const detail = (!mapDetailRoadColor || mapDetailRoadColor === '#2a2a2a') ? '#8a8a8a' : mapDetailRoadColor;
+        // Offset=0 baseline — the bg rect is positioned without offset; panning is a
+        // display-time transform on the <image>, not a regeneration of this raster.
+        const bx = (center[0] - mapRadius * 1.5).toFixed(1);
+        const by = (center[1] - mapRadius * 1.5).toFixed(1);
+        const sz = imgSize.toFixed(1);
+        const svgH = Math.round(height);
+        const { detailRoadD, smallRoadD, majorRoadD, waterD, waterwayD, landuseD,
+                majorRoadWidth: mrw, smallRoadWidth: srw, detailRoadWidth: drw, waterwayWidth: wwrw,
+                majorRoadUnderlayWidth: mruw, smallRoadUnderlayWidth: sruw, detailRoadUnderlayWidth: druw } = vectorStreetMap;
+        const rc = `stroke-linecap="round" stroke-linejoin="round"`;
+        const svgStr = [
+            `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${svgH}">`,
+            // Full-canvas bg fill prevents black areas (JPEG has no alpha — transparent → black).
+            `<rect x="0" y="0" width="${width}" height="${svgH}" fill="${bg}"/>`,
+            `<rect x="${bx}" y="${by}" width="${sz}" height="${sz}" fill="${bg}"/>`,
+            // nonzero (not evenodd): vector-tile polygons have a buffer overrun, so adjacent
+            // water/landuse tiles overlap — evenodd cancels the overlaps and leaves a grid of seams.
+            landuseD  ? `<path d="${landuseD}" fill="${land}" fill-rule="nonzero" opacity="0.82"/>` : '',
+            waterD    ? `<path d="${waterD}" fill="${water}" fill-rule="nonzero"/>` : '',
+            waterwayD ? `<path d="${waterwayD}" fill="none" stroke="${water}" ${rc} stroke-width="${wwrw.toFixed(2)}"/>` : '',
+            detailRoadD ? `<path d="${detailRoadD}" fill="none" stroke="${bg}" ${rc} stroke-width="${druw.toFixed(2)}"/>` : '',
+            smallRoadD  ? `<path d="${smallRoadD}"  fill="none" stroke="${bg}" ${rc} stroke-width="${sruw.toFixed(2)}"/>` : '',
+            majorRoadD  ? `<path d="${majorRoadD}"  fill="none" stroke="${bg}" ${rc} stroke-width="${mruw.toFixed(2)}"/>` : '',
+            detailRoadD ? `<path d="${detailRoadD}" fill="none" stroke="${detail}" ${rc} stroke-width="${drw.toFixed(2)}"/>` : '',
+            smallRoadD  ? `<path d="${smallRoadD}"  fill="none" stroke="${minor}"  ${rc} stroke-width="${srw.toFixed(2)}"/>` : '',
+            majorRoadD  ? `<path d="${majorRoadD}"  fill="none" stroke="${major}"  ${rc} stroke-width="${mrw.toFixed(2)}"/>` : '',
+            `</svg>`,
+        ].join('');
+        const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            if (cancelled) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = svgH;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.fillStyle = bg;
+                ctx.fillRect(0, 0, width, svgH);
+                ctx.drawImage(img, 0, 0);
+                // New view is ready: reset the transient pan offset to 0 (the new raster is
+                // centred on the recentred geography) and clear the loading state. Batched into
+                // one render so the redraw shows centred new content with no intermediate snap.
+                useStore.setState({ mapImageOffsetX: 0, mapImageOffsetY: 0, streetMapRendering: false });
+                setVectorStreetMapRaster(canvas.toDataURL('image/jpeg', 0.92));
+            }
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            if (!cancelled) useStore.getState().setStreetMapRendering(false);
+        };
+        img.src = url;
+        return () => { cancelled = true; };
+    }, [
+        // NOTE: mapImageOffsetX/Y intentionally excluded — panning is a display-time
+        // transform on the <image>; regenerating the raster on pan caused the snap-back.
+        vectorStreetMap, forceVector, mapGeomForRaster,
+        mapBgColor, mapLandColor, mapWaterColor, mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor, mapStreetColor,
+        width, height,
     ]);
 
     // Fetch Data Effect (Runs once) — Cache API for offline support + faster repeat visits
@@ -439,7 +552,129 @@ const VectorStarMap: React.FC = () => {
         const MAP_EDGE_ZONE = 44; // px ring at shape boundary reserved for shape-drag
 
         // Background Image or Color
-        if (useVectorStreetMap && vectorStreetMap) {
+        if (useVectorStreetMap && (vectorStreetMapRaster || vectorStreetMap)) {
+            if (!forceVector && vectorStreetMapRaster) {
+                // Fast preview: render the pre-rasterised bitmap instead of live vector paths.
+                // Background rect (in map bg colour) sits behind the image so panning beyond
+                // the rendered area never reveals transparency/black.
+                mapContent.append('rect')
+                    .attr('x', 0).attr('y', 0)
+                    .attr('width', width).attr('height', Math.round(height))
+                    .attr('fill', mapBgColor || '#ffffff')
+                    .style('pointer-events', 'none');
+
+                // The image lives in a group whose transform IS the pan offset. Panning only
+                // moves this group — the raster bitmap is never regenerated for a pan, so there
+                // is no async reload and no snap-back.
+                const rasterGroup = mapContent.append('g')
+                    .attr('transform', `translate(${mapImageOffsetX},${mapImageOffsetY})`)
+                    .style('pointer-events', 'none');
+                rasterGroup.append('image')
+                    .attr('href', vectorStreetMapRaster)
+                    .attr('x', 0)
+                    .attr('y', 0)
+                    .attr('width', width)
+                    .attr('height', Math.round(height));
+
+                // Drag hit area — transparent overlay captures pointer events so dragging the
+                // map doesn't fall through to the poster-pan handler in MainLayout.
+                const rasterHitGroup = mapLayer.append('g')
+                    .style('cursor', 'grab')
+                    .style('pointer-events', 'all');
+                hitGroupRef = rasterHitGroup;
+
+                if (maskShape === 'rect') {
+                    rasterHitGroup.append('rect')
+                        .attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y)
+                        .attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H)
+                        .attr('fill', 'transparent');
+                } else if (maskShape === 'heart') {
+                    rasterHitGroup.append('path')
+                        .attr('d', userHeartPath)
+                        .attr('transform', getHeartTransform(Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5)))
+                        .attr('fill', 'transparent');
+                } else if (maskShape === 'house') {
+                    rasterHitGroup.append('path')
+                        .attr('d', userHousePath)
+                        .attr('transform', getHouseTransform(Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5)))
+                        .attr('fill', 'transparent');
+                } else {
+                    rasterHitGroup.append('circle')
+                        .attr('cx', center[0]).attr('cy', center[1])
+                        .attr('r', Math.max(mapRadius - MAP_EDGE_ZONE, mapRadius * 0.5))
+                        .attr('fill', 'transparent');
+                }
+
+                // Drag-to-pan with recentre on release: the image follows the finger live
+                // (in exact SVG units via the screen CTM), and on release the pixel delta is
+                // converted to a new geographic centre so genuinely new map area loads. The
+                // dragged image is kept in place (offset persisted) until the new raster is
+                // ready, and the loading overlay covers the swap — so there's no snap-back.
+                rasterHitGroup.on('pointerdown', (event: PointerEvent) => {
+                    if (event.pointerType === 'mouse' && event.button !== 0) return;
+                    event.stopPropagation();
+                    event.preventDefault();
+                    rasterHitGroup.style('cursor', 'grabbing');
+
+                    const svgNode = svgRef.current;
+                    const ctm = svgNode?.getScreenCTM();
+                    // Convert a client (screen) point to SVG user units so the pan matches the
+                    // cursor 1:1 regardless of preview zoom or how the SVG is scaled to fit.
+                    const toSvg = (cx: number, cy: number) => {
+                        if (!svgNode || !ctm) return { x: cx, y: cy };
+                        const pt = svgNode.createSVGPoint();
+                        pt.x = cx; pt.y = cy;
+                        return pt.matrixTransform(ctm.inverse());
+                    };
+                    const start = toSvg(event.clientX, event.clientY);
+                    let dx = 0, dy = 0;
+                    const hitNode = rasterHitGroup.node() as SVGGElement | null;
+                    hitNode?.setPointerCapture?.(event.pointerId);
+                    useStore.getState().setIsDraggingMapImage(true);
+
+                    const onMove = (ev: PointerEvent) => {
+                        if (ev.pointerId !== event.pointerId) return;
+                        ev.stopPropagation(); ev.preventDefault();
+                        const cur = toSvg(ev.clientX, ev.clientY);
+                        dx = cur.x - start.x;
+                        dy = cur.y - start.y;
+                        rasterGroup.attr('transform', `translate(${dx.toFixed(1)},${dy.toFixed(1)})`);
+                    };
+                    const onUp = (ev: PointerEvent) => {
+                        if (ev.pointerId !== event.pointerId) return;
+                        window.removeEventListener('pointermove', onMove);
+                        window.removeEventListener('pointerup', onUp);
+                        hitNode?.releasePointerCapture?.(event.pointerId);
+                        rasterHitGroup.style('cursor', 'grab');
+
+                        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+                            useStore.setState({ isDraggingMapImage: false });
+                            return;
+                        }
+                        // Convert the SVG-unit drag delta to a geographic centre shift, using the
+                        // same render-zoom scale the tile renderer uses (size = mapRadius*3).
+                        const cur = useStore.getState();
+                        const renderZoom = Math.min(cur.mapZoom + Math.log2((mapRadius * 3) / 1200), 20);
+                        const scale = 512 * Math.pow(2, renderZoom);
+                        const latRad = cur.mapCenterLat * Math.PI / 180;
+                        const newLng = cur.mapCenterLng - (dx * 360) / scale;
+                        const newLat = Math.max(-85, Math.min(85,
+                            cur.mapCenterLat + (dy * 360 * Math.cos(latRad)) / scale));
+                        // Keep the dragged image in place (persist offset) so it doesn't snap back
+                        // before the new tiles arrive. The tile fetch sets streetMapRendering=true,
+                        // and the raster onload resets offset→0 + clears the loading state.
+                        useStore.setState({
+                            mapImageOffsetX: dx,
+                            mapImageOffsetY: dy,
+                            mapCenterLng: newLng,
+                            mapCenterLat: newLat,
+                            isDraggingMapImage: false,
+                        });
+                    };
+                    window.addEventListener('pointermove', onMove, { passive: false });
+                    window.addEventListener('pointerup', onUp, { passive: false });
+                });
+            } else if (vectorStreetMap) {
             const imgSize = mapRadius * 3;
             let imgOffsetX = mapImageOffsetX;
             let imgOffsetY = mapImageOffsetY;
@@ -461,14 +696,16 @@ const VectorStarMap: React.FC = () => {
                 vectorGroup.append('path')
                     .attr('d', vectorStreetMap.landuseD)
                     .attr('fill', mapLandColor || '#b6b6b6')
-                    .attr('fill-rule', 'evenodd')
+                    // nonzero (not evenodd): vector-tile buffer overrun makes adjacent
+                    // tile polygons overlap; evenodd cancels overlaps → grid of seams.
+                    .attr('fill-rule', 'nonzero')
                     .attr('opacity', 0.82);
             }
             if (vectorStreetMap.waterD) {
                 vectorGroup.append('path')
                     .attr('d', vectorStreetMap.waterD)
                     .attr('fill', mapWaterColor || '#8f8f8f')
-                    .attr('fill-rule', 'evenodd');
+                    .attr('fill-rule', 'nonzero');
             }
             if (vectorStreetMap.waterwayD) {
                 vectorGroup.append('path')
@@ -673,6 +910,7 @@ const VectorStarMap: React.FC = () => {
                 window.addEventListener('mousemove', onMouseMove, { passive: false });
                 window.addEventListener('mouseup', onMouseUp, { passive: false });
             });
+            } // end else if (vectorStreetMap) — vector render mode
         } else if (mapBackgroundImage) {
             // Use 3x radius so there's plenty of room to drag the image within the shape
             const imgSize = mapRadius * 3;
@@ -848,7 +1086,7 @@ const VectorStarMap: React.FC = () => {
         }
 
         // Location Pin — small red heart, draggable
-        if (showLocationPin && posterType !== 'starmap' && (mapBackgroundImage || (useVectorStreetMap && vectorStreetMap))) {
+        if (showLocationPin && posterType !== 'starmap' && (mapBackgroundImage || (useVectorStreetMap && (vectorStreetMap || vectorStreetMapRaster)))) {
             const pinScale = locationPinSize / heartOrigWidth;
             const pinX = center[0] + locationPinOffsetX;
             const pinY = center[1] + locationPinOffsetY;
@@ -1203,7 +1441,7 @@ const VectorStarMap: React.FC = () => {
             // In map mode, raise hitGroup and pinGroup above shapeInteract in Z-order.
             // This makes them win the hit-test in the interior and over the pin,
             // leaving the uncovered edge ring to fall through to shapeInteract (shape drag).
-            if (mapBackgroundImage || (useVectorStreetMap && vectorStreetMap)) {
+            if (mapBackgroundImage || (useVectorStreetMap && (vectorStreetMap || vectorStreetMapRaster))) {
                 if (hitGroupRef) hitGroupRef.raise();
                 if (pinGroupRef) pinGroupRef.raise();
             }
@@ -1216,7 +1454,8 @@ const VectorStarMap: React.FC = () => {
         showBorder, showConstellations, showGrid, designStyle, maskShape, isLightMode, // Toggles
         debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetY, debouncedShapeOffsetX, debouncedShapeOutlineWidth, // Shape
         posterColor, textColor, starColor, mapInteriorColor, mapStreetColor, width, height, // Colors & Dims
-        useVectorStreetMap, vectorStreetMap, mapBgColor, mapWaterColor, mapLandColor,
+        useVectorStreetMap, vectorStreetMap, vectorStreetMapRaster, forceVector,
+        mapBgColor, mapWaterColor, mapLandColor,
         mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
         mapBackgroundImage, mapImageOpacity, borderStyle, posterType, // New Props
         showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY, // Location pin
