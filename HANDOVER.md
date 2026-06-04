@@ -23,7 +23,7 @@ Read this file before touching anything. The bugs in here have already cost hour
 - For digital: customer gets 300 DPI PNG download (link valid 7 days, 3 free revisions)
 - For prints: system uploads to Printify → ships to customer
 
-**Revenue so far:** $0 — shop is connected, first listings exist but are not yet live on Etsy.
+**Revenue so far:** $0 — shop is connected; catalog is now 4 draft listings (Star Map, Couple Map, Heart Map, Home/Street Map) across 9 design groups, pending mockup images and publish.
 
 ---
 
