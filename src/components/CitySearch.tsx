@@ -9,6 +9,18 @@ import type { GeoResult } from '../utils/geocode';
 const RECENT_KEY = 'city_search_recent';
 const MAX_RECENT = 5;
 
+// Hardcoded popular places — no geocoding round-trip on selection.
+const POPULAR_PLACES: GeoResult[] = [
+    { name: 'Paris',     displayName: 'Paris, Île-de-France, France',         state: 'Île-de-France', country: 'France',         lat: 48.8566,  lng:   2.3522 },
+    { name: 'New York',  displayName: 'New York, New York, United States',    state: 'New York',      country: 'United States',  lat: 40.7128,  lng: -74.0060 },
+    { name: 'London',    displayName: 'London, England, United Kingdom',      state: 'England',       country: 'United Kingdom', lat: 51.5074,  lng:  -0.1278 },
+    { name: 'Tokyo',     displayName: 'Tokyo, Tokyo, Japan',                  state: 'Tokyo',         country: 'Japan',          lat: 35.6762,  lng: 139.6503 },
+    { name: 'Stockholm', displayName: 'Stockholm, Stockholm, Sweden',         state: 'Stockholm',     country: 'Sweden',         lat: 59.3293,  lng:  18.0686 },
+    { name: 'Rome',      displayName: 'Rome, Lazio, Italy',                   state: 'Lazio',         country: 'Italy',          lat: 41.9028,  lng:  12.4964 },
+    { name: 'Sydney',    displayName: 'Sydney, New South Wales, Australia',   state: 'New South Wales', country: 'Australia',    lat: -33.8688, lng: 151.2093 },
+    { name: 'Barcelona', displayName: 'Barcelona, Catalonia, Spain',          state: 'Catalonia',     country: 'Spain',          lat: 41.3851,  lng:   2.1734 },
+];
+
 function loadRecent(): GeoResult[] {
     try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; }
 }
@@ -46,10 +58,13 @@ const CitySearch: React.FC<CitySearchProps> = ({
     const skipNextSearch = useRef(false);
     const listboxId = useId();
 
-    // Recentx shown when query is empty and input focused
+    // Recent + popular shown when query is empty and input focused
     const [showRecent, setShowRecent] = useState(false);
     const recent = loadRecent();
 
+    // The inline list shows recent results when the input is focused and empty.
+    // For keyboard navigation we only attach visible search results (popular places
+    // have their own click handler and are not part of the ARIA listbox scroll).
     const visibleItems: GeoResult[] = open
         ? results
         : showRecent && recent.length > 0
@@ -57,6 +72,8 @@ const CitySearch: React.FC<CitySearchProps> = ({
             : [];
 
     const isShowingRecent = !open && showRecent && recent.length > 0;
+    // Show popular places panel whenever query is empty and input is focused
+    const isShowingPopular = !open && showRecent;
 
     // Debounced search
     useEffect(() => {
@@ -187,7 +204,7 @@ const CitySearch: React.FC<CitySearchProps> = ({
         );
     };
 
-    const dropdownOpen = (open && (results.length > 0 || (!loading && query.length >= 2))) || isShowingRecent;
+    const dropdownOpen = (open && (results.length > 0 || (!loading && query.length >= 2))) || isShowingRecent || isShowingPopular;
     const activeItemId = activeIdx >= 0 ? `${listboxId}-item-${activeIdx}` : undefined;
 
     return (
@@ -204,7 +221,7 @@ const CitySearch: React.FC<CitySearchProps> = ({
                             setShowRecent(false);
                         }}
                         onFocus={() => {
-                            if (query.length < 2 && recent.length > 0) setShowRecent(true);
+                            if (query.length < 2) setShowRecent(true);
                         }}
                         onKeyDown={handleKeyDown}
                         placeholder={placeholder}
@@ -308,6 +325,37 @@ const CitySearch: React.FC<CitySearchProps> = ({
                                 No results for "{query}"
                             </Text>
                         )
+                    )}
+
+                    {isShowingPopular && (
+                        <>
+                            {isShowingRecent && <Divider borderColor="gray.200" mt={1} />}
+                            <Text fontSize="10px" fontWeight="600" color="gray.500" px={3} pt={2} pb={1} textTransform="uppercase" letterSpacing="0.08em">
+                                Popular places
+                            </Text>
+                            <Divider borderColor="gray.200" />
+                            <Box px={3} py={2}>
+                                {POPULAR_PLACES.map((place) => (
+                                    <Text
+                                        key={`${place.lat},${place.lng}`}
+                                        as="button"
+                                        display="block"
+                                        width="100%"
+                                        textAlign="left"
+                                        fontSize="sm"
+                                        color="gray.700"
+                                        py="3px"
+                                        _hover={{ color: 'blue.600', textDecoration: 'underline' }}
+                                        onMouseDown={(e) => { e.preventDefault(); handleSelect(place); }}
+                                    >
+                                        {place.name}
+                                        <Text as="span" fontSize="xs" color="gray.400" ml={1}>
+                                            {place.country}
+                                        </Text>
+                                    </Text>
+                                ))}
+                            </Box>
+                        </>
                     )}
                 </Box>
             )}
