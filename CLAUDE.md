@@ -1,5 +1,20 @@
 # Poster Studio — Claude Code Instructions
 
+## Project Knowledge Base — read first
+
+On this dev machine, durable cross-session context for this project lives in the local
+Obsidian **second-brain** vault (outside the repo, sanitized — no secrets):
+
+`/mnt/c/Agents/hermes-local/projects/second-brain/`
+- `ai-chats/the-mapped-moment/` — summaries of past agent sessions (what was done, decisions,
+  outcomes) + `_index.md` (start here) and `earlier-session.md` / dated notes.
+- `codebases/the-mapped-moment/file-map.md` — annotated repo map.
+
+**Skim `ai-chats/the-mapped-moment/_index.md` + the file-map at the start of work** for a fast
+overview before diving into source. When you finish meaningful work, add/update a short summary
+note there and append a line to `agent-operations/status.md`. Never write secrets to the vault
+(it feeds an ingestion pipeline).
+
 ## What This Is
 
 A print-quality poster designer combining:

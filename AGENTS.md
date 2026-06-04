@@ -3,6 +3,13 @@
 > Token-lean semantic index for AI agents (Hermes, Claude Code, Cursor, etc.).
 > Read this before reading any source file. Use it to locate exactly what you need.
 
+> **Knowledge base (read first):** durable cross-session context lives in the local Obsidian
+> second-brain vault on this dev machine (sanitized, no secrets):
+> `/mnt/c/Agents/hermes-local/projects/second-brain/` — start at
+> `ai-chats/the-mapped-moment/_index.md` (past-session summaries) and
+> `codebases/the-mapped-moment/file-map.md` (annotated repo map). After meaningful work, add a
+> summary note there + a line in `agent-operations/status.md`. Never write secrets to the vault.
+
 ---
 
 ## 1. System Overview
