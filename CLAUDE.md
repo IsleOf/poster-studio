@@ -10,10 +10,23 @@ Obsidian **second-brain** vault (outside the repo, sanitized — no secrets):
   outcomes) + `_index.md` (start here) and `earlier-session.md` / dated notes.
 - `codebases/the-mapped-moment/file-map.md` — annotated repo map.
 
-**Skim `ai-chats/the-mapped-moment/_index.md` + the file-map at the start of work** for a fast
-overview before diving into source. When you finish meaningful work, add/update a short summary
-note there and append a line to `agent-operations/status.md`. Never write secrets to the vault
-(it feeds an ingestion pipeline).
+### At the START of a session — READ
+Skim `ai-chats/the-mapped-moment/_index.md` + `codebases/the-mapped-moment/file-map.md` for a fast
+overview before diving into source.
+
+### At the END of a session (or after a meaningful milestone) — WRITE
+This is a standing requirement: keep the second brain current so the next agent inherits context.
+Append a dated note `ai-chats/the-mapped-moment/<source>-YYYY-MM-DD.md` (source = `claude`/`codex`/…)
+using `ai-chats/the-mapped-moment/_session-template.md`, covering:
+- **Done** — what was completed + verified (with file/endpoint refs)
+- **Working / in progress** — what's partially done or deployed-not-verified
+- **Subagents used** — each delegated task: model (sonnet/haiku), what it did, outcome
+- **Next / blockers** — and any user actions outstanding
+
+Then add the note to the `_index.md` table and append one line to `agent-operations/status.md`.
+
+**Never write secrets to the vault** (no tokens/keys/.env values/IPs/shop IDs — it feeds an
+ingestion pipeline). Summaries only; redact anything sensitive as `[REDACTED]`.
 
 ## What This Is
 

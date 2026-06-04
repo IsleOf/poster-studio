@@ -7,8 +7,10 @@
 > second-brain vault on this dev machine (sanitized, no secrets):
 > `/mnt/c/Agents/hermes-local/projects/second-brain/` — start at
 > `ai-chats/the-mapped-moment/_index.md` (past-session summaries) and
-> `codebases/the-mapped-moment/file-map.md` (annotated repo map). After meaningful work, add a
-> summary note there + a line in `agent-operations/status.md`. Never write secrets to the vault.
+> `codebases/the-mapped-moment/file-map.md` (annotated repo map). **At session end** append a dated
+> note `ai-chats/the-mapped-moment/<source>-YYYY-MM-DD.md` (use `_session-template.md`) covering
+> **Done / Working / Subagents used (model+task+outcome) / Next**, add it to `_index.md`, and a line
+> in `agent-operations/status.md`. Never write secrets to the vault.
 
 ---
 
