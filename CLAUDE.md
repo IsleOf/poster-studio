@@ -650,6 +650,16 @@ Defaults intentionally **overestimate fees** so borderline orders hold rather th
   | US, CA, AU | **Budget** | Cheapest; US is tracked even on Budget; Standard to CA/AU is punishingly pricey (~$18+) |
   | GB, EU | **Standard** | Tracked + reasonable cost → Etsy Purchase Protection / Star Seller |
   Override per country via settings/env `prodigi_shipping_<ISO>` (e.g. `PRODIGI_SHIPPING_CA=Standard`).
+- ⚠️ **Tracked shipping is MANDATORY on Amazon + TikTok Shop** (Etsy: tracking strongly recommended for
+  Star Seller / Purchase Protection). **Amazon** enforces Valid Tracking Rate ≥95% (FBM) *and* DD+7 holds
+  funds until *confirmed delivery*; **TikTok** requires a valid tracking number and only starts settlement
+  at carrier-confirmed delivery. Untracked = metric failure + no payout. **US Budget IS tracked** (our
+  main market on these channels — TikTok POD + Amazon Custom are US-centric), so US orders are fine. But
+  Budget to **CA/AU may be untracked** — verify per destination. **When the channel adapters are built,
+  `shippingMethodFor()` must take the channel into account and force a *tracked* method for any
+  Amazon/TikTok order** (cheapest tracked option per destination), regardless of the cost-optimised default
+  used for Etsy. This also makes tracking-push-back-to-channel (TikTok Logistics API / Amazon SP-API) a
+  hard requirement — the chosen method must return a tracking number.
 - **Recommended US list prices** (Budget, $8 floor): 8x10 $24.50 · 11x14 $26 · 16x20 $28 · 18x24 $29 · 24x36 $43.50.
 - **Customer copy** lives in **listing descriptions** + **Shop Announcement** (Etsy removed the free-text
   shipping-policy field — see [[reference_etsy_shipping_policy_ui]]).
