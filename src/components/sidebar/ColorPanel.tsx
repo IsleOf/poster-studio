@@ -129,6 +129,22 @@ const ColorPanel: React.FC = () => {
                         borderColor="gray.200"
                     />
                 )}
+                {backgroundImageUrl && /\/backgrounds\/sm002\//.test(backgroundImageUrl) && (
+                    <HStack spacing={2} mt={2} align="center">
+                        <Text fontSize="xs" color="gray.500" fontWeight="500">Colour</Text>
+                        {(['teal', 'blue', 'gold', 'pink'] as const).map((c) => {
+                            const url = `/backgrounds/sm002/bg-${c}-2000.webp`;
+                            const active = backgroundImageUrl === url;
+                            const swatch = { teal: '#1f7a78', blue: '#2f55c0', gold: '#c0902a', pink: '#b02a78' }[c];
+                            return (
+                                <Box key={c} as="button" type="button" onClick={() => setBackgroundImageUrl(url)}
+                                    w="26px" h="26px" borderRadius="md" bg={swatch} title={c}
+                                    border="2px solid" borderColor={active ? 'gray.900' : 'gray.200'}
+                                    _hover={{ borderColor: 'gray.500' }} />
+                            );
+                        })}
+                    </HStack>
+                )}
                 {!backgroundImageUrl && (
                     <Text fontSize="xs" color="gray.400">
                         Upload an image to use as the poster background (replaces solid color).
