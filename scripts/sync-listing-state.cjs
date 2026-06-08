@@ -118,6 +118,21 @@ const DESIGNS = [
     thumbnailPerSize: null,
     sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
   },
+  // ── Forest Night Sky Star Map (SM002) ─────────────────────
+  {
+    groupPrefix: 'sm002-design001',
+    thumbnail: '/designs/SM002/Design001/8x10.png',
+    titleAllCaps: true,
+    thumbnailPerSize: null,
+    sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
+  },
+  {
+    groupPrefix: 'sm002-design002',
+    thumbnail: '/designs/SM002/Design002/8x10.png',
+    titleAllCaps: true,
+    thumbnailPerSize: null,
+    sizes: ['5x7','8x10','11x14','12x16','16x20','18x24','24x36','A1','A2','A3','A4','A5'],
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -141,6 +156,10 @@ const LISTINGS_CONFIG = [
   {
     slug: 'street-map-monochrome',
     designs: ['smbw001-design001'],
+  },
+  {
+    slug: 'star-map-forest-night',
+    designs: ['sm002-design001', 'sm002-design002'],
   },
 ];
 
