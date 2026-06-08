@@ -263,11 +263,11 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                                     {thumbSize?.thumbnail_path ? (
                                                         <picture style={{ display: 'block', width: '100%' }}>
                                                             <source
-                                                                srcSet={`${API}${thumbSize.thumbnail_path.replace(/\.png$/, '.avif')}?v=5`}
+                                                                srcSet={`${API}${thumbSize.thumbnail_path.replace(/\.png$/, '.avif')}?v=6`}
                                                                 type="image/avif"
                                                             />
                                                             <img
-                                                                src={`${API}${thumbSize.thumbnail_path}?v=5`}
+                                                                src={`${API}${thumbSize.thumbnail_path}?v=6`}
                                                                 alt={group.name}
                                                                 style={{ width: '100%', display: 'block', aspectRatio: '4/5', objectFit: 'cover' }}
                                                             />
@@ -425,11 +425,11 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                                     {d.thumbnail_path ? (
                                                         <picture style={{ display: 'block', width: '100%' }}>
                                                             <source
-                                                                srcSet={`${API}${d.thumbnail_path.replace(/\.png$/, '.avif')}?v=5`}
+                                                                srcSet={`${API}${d.thumbnail_path.replace(/\.png$/, '.avif')}?v=6`}
                                                                 type="image/avif"
                                                             />
                                                             <img
-                                                                src={`${API}${d.thumbnail_path}?v=5`}
+                                                                src={`${API}${d.thumbnail_path}?v=6`}
                                                                 alt={label}
                                                                 style={{ width: '100%', display: 'block', aspectRatio: '4/5', objectFit: 'cover' }}
                                                             />

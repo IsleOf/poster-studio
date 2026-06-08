@@ -166,11 +166,14 @@ const ColorPanel: React.FC = () => {
                     <Text fontSize="sm" color="gray.700" fontWeight="500" mb={2}>Sky colour</Text>
                     <HStack spacing={2}>
                         {(['teal', 'blue', 'gold', 'pink'] as const).map((c) => {
-                            const url = `/backgrounds/sm002/bg-${c}-circle.webp`;
-                            const active = mapBackgroundImage === url;
+                            const circleUrl = `/backgrounds/sm002/bg-${c}-circle.webp`;
+                            const forestUrl = `/backgrounds/sm002/bg-${c}-2000.webp`;
+                            const active = mapBackgroundImage === circleUrl;
                             const swatch = { teal: '#1f7a78', blue: '#2f55c0', gold: '#c0902a', pink: '#b02a78' }[c];
+                            // switch the whole design: nebula inside the shape + the forest poster background
+                            const apply = () => { setMapBackgroundImage(circleUrl); setBackgroundImageUrl(forestUrl); };
                             return (
-                                <Box key={c} as="button" type="button" onClick={() => setMapBackgroundImage(url)}
+                                <Box key={c} as="button" type="button" onClick={apply}
                                     w="30px" h="30px" borderRadius="md" bg={swatch} title={c}
                                     border="2px solid" borderColor={active ? 'gray.900' : 'gray.200'}
                                     _hover={{ borderColor: 'gray.500' }} />
