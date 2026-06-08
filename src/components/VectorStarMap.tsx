@@ -76,7 +76,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
         titleAllCaps, locationAllCaps,
         showNames,
-        mapBackgroundImage, backgroundImageUrl, borderStyle, selectedTemplate, starColor, mapInteriorColor,
+        mapBackgroundImage, backgroundImageUrl, backgroundImageOffsetY, borderStyle, selectedTemplate, starColor, mapInteriorColor,
         showDivider, dividerLength, dividerThickness,
         vertSepOffsetY, setVertSepOffsetY,
         showVertSep, vertSepHeight, vertSepThickness, setShowVertSep, setVertSepHeight, setVertSepThickness,
@@ -123,7 +123,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         titleKerning: s.titleKerning, subtitleKerning: s.subtitleKerning,
         detailsKerning: s.detailsKerning, dedicationKerning: s.dedicationKerning, namesKerning: s.namesKerning,
         titleAllCaps: s.titleAllCaps, locationAllCaps: s.locationAllCaps, showNames: s.showNames,
-        mapBackgroundImage: s.mapBackgroundImage, backgroundImageUrl: s.backgroundImageUrl, borderStyle: s.borderStyle,
+        mapBackgroundImage: s.mapBackgroundImage, backgroundImageUrl: s.backgroundImageUrl, backgroundImageOffsetY: s.backgroundImageOffsetY, borderStyle: s.borderStyle,
         selectedTemplate: s.selectedTemplate, starColor: s.starColor, mapInteriorColor: s.mapInteriorColor,
         showDivider: s.showDivider, dividerLength: s.dividerLength, dividerThickness: s.dividerThickness,
         vertSepOffsetY: s.vertSepOffsetY,
@@ -427,17 +427,23 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         if (bgRect.empty()) {
             bgRect = svg.insert('rect', ':first-child').attr('class', 'background-rect') as any;
         }
+        // When a bg image is set it's over-scaled (below) so a vertical slide never exposes an edge,
+        // so the rect can stay transparent; otherwise it's the solid poster colour.
         bgRect.attr('width', '100%').attr('height', '100%').attr('fill', backgroundImageUrl ? 'none' : posterColor);
 
-        // Custom background image — covers the full poster behind all layers
+        // Custom background image — covers the full poster behind all layers, with a vertical
+        // pan via backgroundImageOffsetY. Over-scaled ~15% so sliding never exposes an edge.
         svg.select('image.background-image').remove();
         if (backgroundImageUrl) {
+            const OS = 0.15;
+            const dy = ((backgroundImageOffsetY || 0) / 100) * 0.07 * height; // slider ±100 → ±7% of height
             svg.insert('image', ':first-child')
                 .attr('class', 'background-image')
                 .attr('href', backgroundImageUrl)
-                .attr('x', 0).attr('y', 0)
-                .attr('width', '100%').attr('height', '100%')
-                .attr('preserveAspectRatio', 'xMidYMid slice');
+                .attr('x', `${-OS / 2 * 100}%`).attr('y', `${-OS / 2 * 100}%`)
+                .attr('width', `${(1 + OS) * 100}%`).attr('height', `${(1 + OS) * 100}%`)
+                .attr('preserveAspectRatio', 'xMidYMid slice')
+                .attr('transform', `translate(0, ${dy})`);
         }
 
         // Layers
@@ -452,7 +458,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
             }
         });
 
-    }, [width, height, posterColor, backgroundImageUrl]);
+    }, [width, height, posterColor, backgroundImageUrl, backgroundImageOffsetY]);
 
     // Map Rendering Effect (Heavy)
     useEffect(() => {
@@ -1036,8 +1042,10 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
                 .attr('font-size', '20px').attr('font-family', 'sans-serif')
                 .text('Search a city to load map');
         } else {
-            // Fill shape interior with mapInteriorColor (works for both dark and light mode)
-            const shapeFillColor = mapInteriorColor;
+            // Fill shape interior with mapInteriorColor — UNLESS a full-poster background image is
+            // set, in which case the shape is transparent so the single background shows through
+            // consistently inside and outside the shape (stars/lines render on top).
+            const shapeFillColor = backgroundImageUrl ? 'none' : mapInteriorColor;
             if (maskShape === 'rect') {
                 mapContent.append('rect').attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H).attr('fill', shapeFillColor);
             } else if (maskShape === 'heart') {

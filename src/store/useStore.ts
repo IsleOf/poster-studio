@@ -31,7 +31,7 @@ const DESIGN_FIELDS = [
     'mapColorPreset', 'mapStyleUrl',
     'mapBackgroundImage', 'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
     'showLocationPin', 'locationPinSize', 'locationPinOffsetX', 'locationPinOffsetY',
-    'backgroundImageUrl',
+    'backgroundImageUrl', 'backgroundImageOffsetY',
 ] as const;
 
 type DesignField = typeof DESIGN_FIELDS[number];
@@ -199,6 +199,7 @@ interface StoreState {
     selectedTemplate: string;
     mapBackgroundImage: string | null;
     backgroundImageUrl: string | null; // custom poster background image (URL or data URI)
+    backgroundImageOffsetY: number; // vertical pan of the poster background image (-100..100)
     borderStyle: 'simple' | 'double-offset' | 'dashed';
     templateSettings: Record<string, Partial<StoreState>>; // Store settings for each template
 
@@ -210,6 +211,7 @@ interface StoreState {
     setSelectedTemplate: (template: string) => void;
     setMapBackgroundImage: (url: string | null) => void;
     setBackgroundImageUrl: (url: string | null) => void;
+    setBackgroundImageOffsetY: (v: number) => void;
     setBorderStyle: (style: 'simple' | 'double-offset' | 'dashed') => void;
     saveTemplateSettings: (templateId: string) => void;
     restoreTemplateSettings: (templateId: string) => void;
@@ -530,6 +532,7 @@ export const useStore = create<StoreState>((set) => ({
     selectedTemplate: 'custom',
     mapBackgroundImage: null,
     backgroundImageUrl: null,
+    backgroundImageOffsetY: 0,
     borderStyle: 'simple',
     templateSettings: {},
     captureHighResFn: null,
@@ -538,6 +541,7 @@ export const useStore = create<StoreState>((set) => ({
     setSelectedTemplate: (selectedTemplate) => set({ selectedTemplate }),
     setMapBackgroundImage: (mapBackgroundImage) => set({ mapBackgroundImage }),
     setBackgroundImageUrl: (backgroundImageUrl) => set({ backgroundImageUrl }),
+    setBackgroundImageOffsetY: (backgroundImageOffsetY) => set({ backgroundImageOffsetY }),
     setBorderStyle: (borderStyle) => set({ borderStyle }),
     setCaptureHighResFn: (captureHighResFn) => set({ captureHighResFn }),
     saveTemplateSettings: (templateId) => set((state) => {
@@ -570,6 +574,7 @@ export const useStore = create<StoreState>((set) => ({
             isLightMode: state.isLightMode,
             mapBackgroundImage: state.mapBackgroundImage,
             backgroundImageUrl: state.backgroundImageUrl,
+            backgroundImageOffsetY: state.backgroundImageOffsetY,
             borderStyle: state.borderStyle,
             showFrame: state.showFrame,
             frameInset: state.frameInset,
@@ -652,6 +657,7 @@ export const useStore = create<StoreState>((set) => ({
             isLightMode: state.isLightMode,
             mapBackgroundImage: state.mapBackgroundImage,
             backgroundImageUrl: state.backgroundImageUrl,
+            backgroundImageOffsetY: state.backgroundImageOffsetY,
             borderStyle: state.borderStyle,
             showFrame: state.showFrame,
             frameInset: state.frameInset,

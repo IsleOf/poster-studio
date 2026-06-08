@@ -1,7 +1,7 @@
 // ColorPanel — Poster color palette presets, custom color pickers, background image upload.
 import React, { useRef } from 'react';
 import { useStore } from '../../store/useStore';
-import { Box, VStack, HStack, Text, Input, Button, Image, IconButton } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Input, Button, Image, IconButton, Slider, SliderTrack, SliderFilledTrack, SliderThumb } from '@chakra-ui/react';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -42,6 +42,7 @@ const ColorPanel: React.FC = () => {
         mapDetailRoadColor, setMapDetailRoadColor,
         backgroundImageUrl, setBackgroundImageUrl,
         mapBackgroundImage, setMapBackgroundImage,
+        backgroundImageOffsetY, setBackgroundImageOffsetY,
         posterType,
     } = useStore();
 
@@ -160,18 +161,17 @@ const ColorPanel: React.FC = () => {
                 />
             </Box>
 
-            {/* Sky colour — swaps the in-shape background image (SM002 forest line) */}
-            {mapBackgroundImage && /\/backgrounds\/sm002\//.test(mapBackgroundImage) && (
+            {/* Sky colour + position — the forest night-sky poster background (SM002 line) */}
+            {backgroundImageUrl && /\/backgrounds\/sm002\//.test(backgroundImageUrl) && (
                 <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
                     <Text fontSize="sm" color="gray.700" fontWeight="500" mb={2}>Sky colour</Text>
                     <HStack spacing={2}>
                         {(['teal', 'blue', 'gold', 'pink'] as const).map((c) => {
-                            const circleUrl = `/backgrounds/sm002/bg-${c}-circle.webp`;
                             const forestUrl = `/backgrounds/sm002/bg-${c}-2000.webp`;
-                            const active = mapBackgroundImage === circleUrl;
+                            const active = backgroundImageUrl === forestUrl;
                             const swatch = { teal: '#1f7a78', blue: '#2f55c0', gold: '#c0902a', pink: '#b02a78' }[c];
-                            // switch the whole design: nebula inside the shape + the forest poster background
-                            const apply = () => { setMapBackgroundImage(circleUrl); setBackgroundImageUrl(forestUrl); };
+                            // the shape is transparent, so the forest IS the consistent background; clear any stale in-shape image
+                            const apply = () => { setBackgroundImageUrl(forestUrl); setMapBackgroundImage(null); };
                             return (
                                 <Box key={c} as="button" type="button" onClick={apply}
                                     w="30px" h="30px" borderRadius="md" bg={swatch} title={c}
@@ -180,6 +180,12 @@ const ColorPanel: React.FC = () => {
                             );
                         })}
                     </HStack>
+                    <Text fontSize="xs" color="gray.500" fontWeight="500" mt={3} mb={1}>Background position (up / down)</Text>
+                    <Slider min={-100} max={100} step={1} value={backgroundImageOffsetY ?? 0}
+                        onChange={setBackgroundImageOffsetY} aria-label="background-offset-y">
+                        <SliderTrack><SliderFilledTrack /></SliderTrack>
+                        <SliderThumb />
+                    </Slider>
                 </Box>
             )}
 

@@ -184,11 +184,11 @@ const TemplateCard: React.FC<{
             {t.thumbnail_path ? (
                 <picture style={{ display: 'block', width: '100%', height: '100%' }}>
                     <source
-                        srcSet={`${API}${t.thumbnail_path.replace(/\.png$/, '.avif')}?v=6`}
+                        srcSet={`${API}${t.thumbnail_path.replace(/\.png$/, '.avif')}?v=7`}
                         type="image/avif"
                     />
                     <img
-                        src={`${API}${t.thumbnail_path}?v=6`}
+                        src={`${API}${t.thumbnail_path}?v=7`}
                         alt={t.name}
                         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />

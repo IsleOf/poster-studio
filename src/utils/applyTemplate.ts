@@ -92,7 +92,7 @@ const TEMPLATE_FIELDS = [
     'titleAllCaps', 'locationAllCaps',
     'finelineWidth', 'printSize',
     'title', 'subtitle', 'selectedTemplate',
-    'backgroundImageUrl',
+    'backgroundImageUrl', 'backgroundImageOffsetY',
 ] as const;
 
 // Text-only fields — skip when switching sizes to preserve user's entered text
