@@ -506,7 +506,9 @@ const MainLayout: React.FC = () => {
 
     useEffect(() => {
         if (posterType === 'starmap' || useVectorStreetMap) {
-            setMapBackgroundImage(null);
+            // Keep a designed in-shape background (asset URL); only clear transient street captures.
+            const bg = useStore.getState().mapBackgroundImage;
+            if (!bg || bg.startsWith('data:') || bg.startsWith('blob:')) setMapBackgroundImage(null);
         }
     }, [posterType, setMapBackgroundImage, useVectorStreetMap]);
 

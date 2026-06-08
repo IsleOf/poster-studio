@@ -41,6 +41,7 @@ const ColorPanel: React.FC = () => {
         mapSmallRoadColor, setMapSmallRoadColor,
         mapDetailRoadColor, setMapDetailRoadColor,
         backgroundImageUrl, setBackgroundImageUrl,
+        mapBackgroundImage, setMapBackgroundImage,
         posterType,
     } = useStore();
 
@@ -158,6 +159,26 @@ const ColorPanel: React.FC = () => {
                     onChange={handleImageUpload}
                 />
             </Box>
+
+            {/* Sky colour — swaps the in-shape background image (SM002 forest line) */}
+            {mapBackgroundImage && /\/backgrounds\/sm002\//.test(mapBackgroundImage) && (
+                <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                    <Text fontSize="sm" color="gray.700" fontWeight="500" mb={2}>Sky colour</Text>
+                    <HStack spacing={2}>
+                        {(['teal', 'blue', 'gold', 'pink'] as const).map((c) => {
+                            const url = `/backgrounds/sm002/bg-${c}-circle.webp`;
+                            const active = mapBackgroundImage === url;
+                            const swatch = { teal: '#1f7a78', blue: '#2f55c0', gold: '#c0902a', pink: '#b02a78' }[c];
+                            return (
+                                <Box key={c} as="button" type="button" onClick={() => setMapBackgroundImage(url)}
+                                    w="30px" h="30px" borderRadius="md" bg={swatch} title={c}
+                                    border="2px solid" borderColor={active ? 'gray.900' : 'gray.200'}
+                                    _hover={{ borderColor: 'gray.500' }} />
+                            );
+                        })}
+                    </HStack>
+                </Box>
+            )}
 
             {/* Text & elements */}
             <ColorRow label="Text & Elements" value={textColor} onChange={setTextColor} />

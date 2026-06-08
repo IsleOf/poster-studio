@@ -84,7 +84,7 @@ const TEMPLATE_FIELDS = [
     'showHeartDecor', 'heartDecorOffsetY',
     'showLocationPin', 'locationPinSize', 'locationPinOffsetX', 'locationPinOffsetY',
     'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
-    'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
+    'mapBackgroundImage', 'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
     'mapStyleUrl', 'mapColorPreset', 'mapLabelScale', 'mapBgColor', 'mapStreetColor',
     'mapWaterColor', 'mapLandColor', 'mapMainRoadColor', 'mapSmallRoadColor', 'mapDetailRoadColor',
     'showLocation', 'showDate', 'showCoords',
@@ -174,9 +174,13 @@ export function applyTemplate(
         const pt = updates.posterType as 'starmap' | 'streetmap' | 'coloredmap';
         store.setPosterType(pt);
         delete updates.posterType;
-        // Reset mapBackgroundImage when switching to starmap so old street map image doesn't persist
+        // When switching to starmap, drop a stale street-map *capture* — but KEEP a designed
+        // in-shape background (asset URL, e.g. the SM002 forest) so star designs can render an
+        // image inside the circle/heart shape.
         if (pt === 'starmap') {
-            updates.mapBackgroundImage = null;
+            const tplBg = updates.mapBackgroundImage as string | null | undefined;
+            const isDesigned = typeof tplBg === 'string' && !tplBg.startsWith('data:') && !tplBg.startsWith('blob:');
+            if (!isDesigned) updates.mapBackgroundImage = null;
         }
     }
 
