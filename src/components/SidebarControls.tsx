@@ -260,16 +260,28 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                                         }
                                                     }}
                                                 >
-                                                    <Box
-                                                        as="img"
-                                                        src={thumbSize?.thumbnail_path
-                                                            ? `${API}${thumbSize.thumbnail_path}?v=4`
-                                                            : `${API}/api/templates/${thumbSize?.id ?? group.sizes[0]?.id}/thumbnail`}
-                                                        alt={group.name}
-                                                        w="100%"
-                                                        display="block"
-                                                        style={{ aspectRatio: '4/5', objectFit: 'cover' }}
-                                                    />
+                                                    {thumbSize?.thumbnail_path ? (
+                                                        <picture style={{ display: 'block', width: '100%' }}>
+                                                            <source
+                                                                srcSet={`${API}${thumbSize.thumbnail_path.replace(/\.png$/, '.avif')}?v=5`}
+                                                                type="image/avif"
+                                                            />
+                                                            <img
+                                                                src={`${API}${thumbSize.thumbnail_path}?v=5`}
+                                                                alt={group.name}
+                                                                style={{ width: '100%', display: 'block', aspectRatio: '4/5', objectFit: 'cover' }}
+                                                            />
+                                                        </picture>
+                                                    ) : (
+                                                        <Box
+                                                            as="img"
+                                                            src={`${API}/api/templates/${thumbSize?.id ?? group.sizes[0]?.id}/thumbnail`}
+                                                            alt={group.name}
+                                                            w="100%"
+                                                            display="block"
+                                                            style={{ aspectRatio: '4/5', objectFit: 'cover' }}
+                                                        />
+                                                    )}
                                                     <Box px={1.5} py={1.5} bg="white">
                                                         <Text fontSize="11px" fontWeight="600" color={isActive ? 'gray.900' : 'gray.500'} textAlign="center">
                                                             {group.name}
@@ -410,16 +422,28 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                                                         trackEvent('design_select_main', { templateId: d.id, posterType: d.posterType });
                                                     }}
                                                 >
-                                                    <Box
-                                                        as="img"
-                                                        src={d.thumbnail_path
-                                                            ? `${API}${d.thumbnail_path}?v=4`
-                                                            : `${API}/api/templates/${d.id}/thumbnail`}
-                                                        alt={label}
-                                                        w="100%"
-                                                        display="block"
-                                                        style={{ aspectRatio: '4/5', objectFit: 'cover' }}
-                                                    />
+                                                    {d.thumbnail_path ? (
+                                                        <picture style={{ display: 'block', width: '100%' }}>
+                                                            <source
+                                                                srcSet={`${API}${d.thumbnail_path.replace(/\.png$/, '.avif')}?v=5`}
+                                                                type="image/avif"
+                                                            />
+                                                            <img
+                                                                src={`${API}${d.thumbnail_path}?v=5`}
+                                                                alt={label}
+                                                                style={{ width: '100%', display: 'block', aspectRatio: '4/5', objectFit: 'cover' }}
+                                                            />
+                                                        </picture>
+                                                    ) : (
+                                                        <Box
+                                                            as="img"
+                                                            src={`${API}/api/templates/${d.id}/thumbnail`}
+                                                            alt={label}
+                                                            w="100%"
+                                                            display="block"
+                                                            style={{ aspectRatio: '4/5', objectFit: 'cover' }}
+                                                        />
+                                                    )}
                                                     <Box px={1.5} py={1.5} bg="white">
                                                         <Text fontSize="11px" fontWeight="600" color={isActive ? 'gray.900' : 'gray.500'} textAlign="center">
                                                             {label}
