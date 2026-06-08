@@ -87,7 +87,7 @@ const TEMPLATE_FIELDS = [
     'mapBackgroundImage', 'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
     'mapStyleUrl', 'mapColorPreset', 'mapLabelScale', 'mapBgColor', 'mapStreetColor',
     'mapWaterColor', 'mapLandColor', 'mapMainRoadColor', 'mapSmallRoadColor', 'mapDetailRoadColor',
-    'showLocation', 'showDate', 'showCoords',
+    'showLocation', 'showDate', 'showCoords', 'detailsDateFirst', 'date',
     'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
     'titleAllCaps', 'locationAllCaps',
     'finelineWidth', 'printSize',
@@ -137,6 +137,10 @@ export function applyTemplate(
         if (key === 'printSize' && typeof rawValue === 'string') {
             const resolved = PRINT_SIZE_MAP[rawValue];
             if (resolved) updates[key] = resolved;
+        } else if (key === 'date' && typeof rawValue === 'string') {
+            // template stores the example date as an ISO string; store wants a Date
+            const d = new Date(rawValue);
+            if (!isNaN(d.getTime())) updates[key] = d;
         } else {
             updates[key] = rawValue;
         }

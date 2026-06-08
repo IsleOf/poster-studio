@@ -19,7 +19,7 @@ const DESIGN_FIELDS = [
     'titleOffsetX', 'titleOffsetY', 'subtitleOffsetY', 'detailsOffsetY', 'dedicationOffsetY', 'namesOffsetY',
     'heartDecorOffsetY', 'dividerOffsetY', 'showDivider', 'dividerLength', 'dividerThickness', 'vertSepOffsetY', 'showVertSep', 'vertSepHeight', 'vertSepThickness',
     'showNames',
-    'showConstellations', 'showMilkyWay', 'showGrid', 'showLocation', 'showDate', 'showCoords',
+    'showConstellations', 'showMilkyWay', 'showGrid', 'showLocation', 'showDate', 'showCoords', 'detailsDateFirst',
     'maskShape', 'isLightMode', 'designStyle', 'borderStyle',
     'titleFont', 'subtitleFont', 'detailsFont', 'dedicationFont', 'namesFont',
     'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
@@ -148,6 +148,7 @@ interface StoreState {
     showLocation: boolean;
     showDate: boolean;
     showCoords: boolean;
+    detailsDateFirst: boolean;
 
     // Custom Text Overrides
     customText: {
@@ -240,6 +241,7 @@ interface StoreState {
     setShowLocation: (show: boolean) => void;
     setShowDate: (show: boolean) => void;
     setShowCoords: (show: boolean) => void;
+    setDetailsDateFirst: (v: boolean) => void;
     setPosterColor: (posterColor: string) => void;
     setTextColor: (textColor: string) => void;
     setStarColor: (starColor: string) => void;
@@ -477,6 +479,7 @@ export const useStore = create<StoreState>((set) => ({
     showLocation: true,
     showDate: true,
     showCoords: true,
+    detailsDateFirst: false,
 
     // Custom Text - Defaults empty (use auto-generated)
     customText: {
@@ -743,6 +746,7 @@ export const useStore = create<StoreState>((set) => ({
     setShowLocation: (showLocation) => set({ showLocation }),
     setShowDate: (showDate) => set({ showDate }),
     setShowCoords: (showCoords) => set({ showCoords }),
+    setDetailsDateFirst: (detailsDateFirst) => set({ detailsDateFirst }),
     // Keep mapBgColor and mapInteriorColor in sync with posterColor.
     // mapInteriorColor only follows when it hasn't been manually diverged from posterColor.
     setPosterColor: (posterColor) => set((state) => ({

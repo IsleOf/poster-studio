@@ -69,7 +69,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         title, subtitle, date, time, lat, lng, location, starScale, lineWeight, gridWidth,
         posterColor, textColor, glowIntensity, gridOpacity, showBorder, showConstellations,
         showGrid, designStyle, maskShape, isLightMode, showLocation, showDate,
-        showCoords, customText, printSize, circleSize, heartSize, houseSize, shapeOffsetY, titleFontSize,
+        showCoords, detailsDateFirst, customText, printSize, circleSize, heartSize, houseSize, shapeOffsetY, titleFontSize,
         subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize, titleOffsetX, titleOffsetY, subtitleOffsetY,
         detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, dividerOffsetY, shapeOutlineWidth, showFrame, frameInset, frameWidth,
         titleFont, subtitleFont, detailsFont, dedicationFont, namesFont,
@@ -108,7 +108,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         gridOpacity: s.gridOpacity, showBorder: s.showBorder, showConstellations: s.showConstellations,
         showGrid: s.showGrid, designStyle: s.designStyle, maskShape: s.maskShape,
         isLightMode: s.isLightMode, showLocation: s.showLocation, showDate: s.showDate,
-        showCoords: s.showCoords, customText: s.customText, printSize: s.printSize,
+        showCoords: s.showCoords, detailsDateFirst: s.detailsDateFirst, customText: s.customText, printSize: s.printSize,
         circleSize: s.circleSize, heartSize: s.heartSize, houseSize: s.houseSize,
         shapeOffsetY: s.shapeOffsetY, shapeOffsetX: s.shapeOffsetX, snapEnabled: s.snapEnabled,
         titleFontSize: s.titleFontSize, subtitleFontSize: s.subtitleFontSize,
@@ -1710,14 +1710,27 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
             .attr('transform', `translate(${width / 2 + titleOffsetX}, ${textStartY + naturalY + titleOffsetY})`)
             .attr('text-anchor', 'middle');
 
+        // Title may span multiple lines — an explicit "\n" in the text forces a line break
+        // (used by event/wedding designs e.g. "THE SKY ON OUR\nWEDDING NIGHT").
+        const titleRaw = titleAllCaps ? (customText.title || title).toUpperCase() : (customText.title || title);
+        const titleLines = titleRaw.split('\n');
         const titleNode = titleGroup.append('text')
             .attr('fill', textColor)
             .attr('font-family', `${titleFont}, serif`)
             .attr('font-size', `${titleFontSize}px`)
             .attr('font-weight', ['Lato', 'DM Sans', 'Poppins', 'Nunito', 'Oswald', 'Montserrat', 'Bebas Neue', 'Brandon Grotesque', 'Cinzel', 'Playfair Display', 'Orbitron'].includes(titleFont) ? 'bold' : '400')
             .attr('letter-spacing', titleFont === 'Mapped Moment Script' ? '0' : `${debouncedTitleKerning}em`)
-            .style('white-space', 'pre')
-            .text(titleAllCaps ? (customText.title || title).toUpperCase() : (customText.title || title));
+            .style('white-space', 'pre');
+        if (titleLines.length > 1) {
+            titleLines.forEach((ln, i) => {
+                titleNode.append('tspan')
+                    .attr('x', 0)
+                    .attr('dy', i === 0 ? '0' : `${titleFontSize * 1.08}px`)
+                    .text(ln);
+            });
+        } else {
+            titleNode.text(titleRaw);
+        }
 
         // Auto-fit: scale down if title is too wide for the poster
         const maxTextWidth = width - 2 * (frameInset + 20);
@@ -1783,11 +1796,16 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
             );
         }
 
-        // Advance Natural Y — use reference size so resizing title doesn't move other elements
-        naturalY += (refTitleSize * 0.8) + config.titleBottomMargin;
+        // Advance Natural Y — use reference size so resizing title doesn't move other elements.
+        // Extra title lines push subsequent elements down by one line-height each.
+        naturalY += (refTitleSize * 0.8) + (titleLines.length - 1) * (refTitleSize * 1.08) + config.titleBottomMargin;
 
         // 2. Subtitle Group — only render if there's actual text (avoids blank gap)
-        const subtitleText = (customText.subtitle || subtitle).toUpperCase();
+        // Script fonts (used for couple names like "Laura & Steve") keep their original
+        // casing; geometric/serif subtitles stay upper-cased for the classic look.
+        const SCRIPT_SUBTITLE_FONTS = ['Mapped Moment Script', 'Great Vibes', 'Dancing Script', 'Pinyon Script', 'Allura', 'Petit Formal Script'];
+        const rawSubtitle = customText.subtitle || subtitle;
+        const subtitleText = SCRIPT_SUBTITLE_FONTS.includes(subtitleFont) ? rawSubtitle : rawSubtitle.toUpperCase();
         if (subtitleText) {
             const subtitleGroup = textLayer.append('g')
                 .attr('transform', `translate(${width / 2}, ${textStartY + naturalY + subtitleOffsetY})`)
@@ -1934,15 +1952,24 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         const coordsStr = customText.coords || `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
 
         // When only location + date are shown (no coords), render on ONE line with vertical separator.
-        const inlineLocationDate = showLocation && showDate && !showCoords;
+        // detailsDateFirst forces a stacked layout with the date ABOVE the location (event/wedding style).
+        const inlineLocationDate = showLocation && showDate && !showCoords && !detailsDateFirst;
+
+        const stackedOrder = detailsDateFirst
+            ? [
+                showDate     ? { field: 'date'     as const, text: dateStr } : null,
+                showLocation ? { field: 'location' as const, text: locStr } : null,
+                showCoords   ? { field: 'coords'   as const, text: coordsStr } : null,
+              ]
+            : [
+                showLocation ? { field: 'location' as const, text: locStr } : null,
+                showCoords   ? { field: 'coords'   as const, text: coordsStr } : null,
+                showDate     ? { field: 'date'     as const, text: dateStr } : null,
+              ];
 
         const detailsEntries = inlineLocationDate
             ? [{ field: 'location' as const, text: locStr }, { field: 'date' as const, text: dateStr }]
-            : [
-                showLocation ? { field: 'location' as const, text: locStr } : null,
-                showCoords  ? { field: 'coords'   as const, text: coordsStr } : null,
-                showDate    ? { field: 'date'      as const, text: dateStr } : null,
-              ].filter(Boolean) as { field: 'location' | 'coords' | 'date'; text: string }[];
+            : stackedOrder.filter(Boolean) as { field: 'location' | 'coords' | 'date'; text: string }[];
 
         if (detailsEntries.length > 0) {
             const lineH = detailsFontSize * config.detailsLineHeight + config.detailsSpacing;
@@ -2291,7 +2318,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         titleAllCaps, locationAllCaps, // Text casing
         titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, // Offsets
         showNames, // Names toggle
-        showDate, showLocation, showCoords, showDivider, dividerOffsetY, dividerLength, dividerThickness, vertSepOffsetY, showVertSep, vertSepHeight, vertSepThickness, // Toggles
+        showDate, showLocation, showCoords, detailsDateFirst, showDivider, dividerOffsetY, dividerLength, dividerThickness, vertSepOffsetY, showVertSep, vertSepHeight, vertSepThickness, // Toggles
         showHeartDecor, // Decorative heart below text
         debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, maskShape, // Shape — textStartY depends on these (shapeOffsetY removed: text is now decoupled from shape position)
         textColor, width, height, frameInset, // Global
