@@ -1,14 +1,20 @@
 # HANDOVER — The Mapped Moment (Poster Studio)
 
 > For AI coding agents (Claude Code, Cursor, Copilot Workspace, Devin, etc.)
-> Last updated: 2026-04-11
+> Last updated: 2026-06-09
 
 Read this file before touching anything. The bugs in here have already cost hours — read the "Known Failure Modes" section before you make assumptions.
 
-> **Latest session handoff:** [docs/HANDOVER-2026-06-04-shop.md](docs/HANDOVER-2026-06-04-shop.md) —
-> size-lock fix, digital size-unlock, order confirm-mode, 30-day edit window, inbound message triage,
-> listing-copy audit + Etsy push, and the remaining user actions (Gmail forward, publish drafts, delete
-> stray listing). Changes are deployed to prod but mostly uncommitted in git.
+> **Latest session handoff:** [docs/HANDOVER-2026-06-09-sm002.md](docs/HANDOVER-2026-06-09-sm002.md) —
+> SM002 "Forest Night Sky" star-map listing (forest-image background, Circle+Heart, wedding-reference
+> text matched exactly), plus reusable rendering features: background fit-to-width + vertical slide
+> (`backgroundImageOffsetY`), multi-line title with `titleLineHeight`, script-font subtitle,
+> `detailsDateFirst`, `date` as a template field. Committed + deployed; all 5 listings consistent.
+> See also CLAUDE.md "SM002 …".
+>
+> Earlier: [docs/HANDOVER-2026-06-04-shop.md](docs/HANDOVER-2026-06-04-shop.md) — size-lock fix,
+> digital size-unlock, order confirm-mode, 30-day edit window, inbound message triage, listing-copy
+> audit + Etsy push, and remaining user actions (Gmail forward, publish drafts, delete stray listing).
 
 ---
 

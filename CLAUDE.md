@@ -447,6 +447,42 @@ below. Good for full-bleed street map prints.
 Located in `public/fonts/`. It is listed in `TITLE_FONTS`, `SUBTITLE_FONTS`, and `DETAILS_FONTS` arrays
 in `SidebarControls.tsx`.
 
+### SM002 "Forest Night Sky" star-map line + reference-text features
+SM002 (`star-map-forest-night`, listing id 6) is a star map drawn on a **photographic forest
+night-sky background** (vs SM001's solid colour). Circle + Heart design groups × 12 sizes (24
+templates). Scaffolded by `server/scripts/create-sm002-listing.cjs` (idempotent, INSERT OR REPLACE) —
+it derives typography from SM001-design001 then applies the forest + wedding-reference text overrides.
+**⚠️ After running the scaffolder you MUST run `node scripts/sync-listing-state.cjs` (local + prod):**
+INSERT OR REPLACE nulls `templates.thumbnail_path`, so listing-page thumbnails break until sync
+restores them. The build/deploy adds several reusable rendering features (`VectorStarMap.tsx`):
+
+- **Background image fit + vertical slide.** `backgroundImageUrl` paints behind everything via
+  `preserveAspectRatio="xMidYMid slice"` at `width/height=100%` (x=y=0). For a source **taller** than
+  the poster (the forest is 2:3 on a 4:5 poster) this fits the **width exactly** (nothing cropped
+  left/right) and overflows vertically. `backgroundImageOffsetY` (−100…100, store + DESIGN_FIELDS +
+  TEMPLATE_FIELDS) pans within that overflow — ±10% of poster height, calibrated to the 2:3 source's
+  ~10%/side headroom so the slider travels edge-to-edge without exposing a blank. Slider lives in
+  `sidebar/ColorPanel.tsx` (shown for `/backgrounds/sm002/` URLs). ⚠️ Do NOT re-introduce a horizontal
+  over-scale — it crops the trees at the left/right edges (the bug this replaced).
+- **Transparent shape over the background.** When `backgroundImageUrl` is set the star/heart shape
+  interior is `fill:none` (`shapeFillColor`) so the single background shows through consistently;
+  stars/constellation lines render on top. Don't put a separate `mapBackgroundImage` inside the shape
+  (causes inconsistent sky + a drag-pan handler that fights shape movement).
+- **Multi-line title.** A literal `"\n"` in the title text renders as separate `<tspan>`s. New
+  `titleLineHeight` store field (default 1.08; DESIGN_FIELDS + TEMPLATE_FIELDS) scales the inter-line
+  gap, applied to BOTH the tspan `dy` and the `naturalY` accumulator so following text reflows. The
+  "Line Spacing" slider in `sidebar/TypographyPanel.tsx` shows only when the title contains a `\n`.
+- **Couple names = script subtitle.** The subtitle slot (renders directly under the title) keeps its
+  original casing when `subtitleFont` is a script (Great Vibes / Allura / Dancing Script / Pinyon
+  Script / Petit Formal Script / Mapped Moment Script) instead of force-upper-casing. SM002 puts
+  "Laura & Steve" there with `showNames=false`.
+- **`detailsDateFirst`** (store + DESIGN_FIELDS + TEMPLATE_FIELDS, default false): stacks **date above
+  location** on separate lines instead of the default inline `location | date` one-liner. Default
+  false keeps SM001's inline layout unchanged.
+- **`date` is now a TEMPLATE_FIELD** (string→Date on apply in `applyTemplate.ts`). Set a design's
+  example date on the top-level `date` field (ISO string). NOTE `applyTemplate` always wipes
+  `customText.date`, so setting `customText.date` in a template does nothing — use `date`.
+
 ### Service Worker Tile Cache (`tile-sw.js`)
 A service worker in `public/tile-sw.js` intercepts MapLibre tile requests and caches them in
 `CacheStorage` under the key `maptile-cache-v1`. This allows previously visited map areas to render
