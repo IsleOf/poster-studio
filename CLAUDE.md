@@ -334,6 +334,17 @@ The "Download Preview" modal must only offer PNG. PDF export preserves full vect
 ### DB state inconsistent between local and production
 Run `scripts/sync-listing-state.cjs` on both environments. It will report and fix: wrong `printSize`, wrong `titleAllCaps`, null `thumbnail_path`, missing `listing_templates` rows.
 
+### Admin "Save failed" / "Sync failed — Request failed (413)" on a street/colored map
+413 = payload too large. Street/colored-map designs keep the live raster in `mapBackgroundImage`
+as a multi-MB `data:` URI (regenerated from the map params on load — it is NOT design data). The
+server JSON body limit is 2 MB (`server/index.js`). `captureCurrentSettings()` (admin template
+Save / "Sync to all sizes") **must not persist** a `data:`/`blob:` `mapBackgroundImage` or
+`backgroundImageUrl` — it strips them, keeping only real asset URLs (e.g. `/backgrounds/sm002/…webp`).
+Only the map *settings* (city/lat/lng/zoom/bearing/colors) are saved; the capture reloads on the
+device. ⚠️ Don't "fix" this by raising the body limit — the raster doesn't belong in `settings_json`.
+The admin editor (`DesignEditorPage`) also shows the "Updating map…" overlay during capture
+(`streetMapRendering`), matching `MainLayout`.
+
 ### Street map shows blank
 - The offscreen MapLibre div needs `canvasContextAttributes: { preserveDrawingBuffer: true }` (already set)
 - Wait for the `idle` event before calling `toDataURL()`
