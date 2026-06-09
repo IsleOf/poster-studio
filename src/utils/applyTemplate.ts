@@ -200,6 +200,15 @@ export function captureCurrentSettings(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const key of TEMPLATE_FIELDS) {
         if (state[key] !== undefined) {
+            // Never persist a transient raster into a template. Street/colored maps store the live
+            // capture in `mapBackgroundImage` as a multi-MB `data:`/`blob:` URI (regenerated from the
+            // map params on load); an uploaded custom background can land in `backgroundImageUrl` the
+            // same way. Serializing these bloats settings_json past the 2 MB body limit → HTTP 413 on
+            // save / "Sync to all sizes". Only real asset URLs (e.g. /backgrounds/sm002/…webp) persist.
+            if ((key === 'mapBackgroundImage' || key === 'backgroundImageUrl')) {
+                const v = state[key];
+                if (typeof v === 'string' && (v.startsWith('data:') || v.startsWith('blob:'))) continue;
+            }
             // Convert printSize object back to string code for storage
             if (key === 'printSize' && typeof state[key] === 'object' && state[key] !== null) {
                 const ps = state[key] as { label: string; width: number; height: number };

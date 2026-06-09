@@ -68,6 +68,7 @@ const DesignEditorPage: React.FC = () => {
         printSize,
         posterType,
         setMapBackgroundImage,
+        streetMapRendering,
         isInlineEditing,
     } = useStore();
 
@@ -546,6 +547,21 @@ const DesignEditorPage: React.FC = () => {
                             />
                         )}
                     </Box>
+
+                    {/* "Updating map…" overlay while a street/colored-map capture is in flight */}
+                    {posterType !== 'starmap' && streetMapRendering && (
+                        <Flex
+                            position="absolute" inset={0} zIndex={5}
+                            align="center" justify="center"
+                            bg="rgba(255,255,255,0.55)" pointerEvents="none"
+                            borderRadius="sm"
+                        >
+                            <HStack spacing={2} bg="white" px={3} py={2} borderRadius="md" boxShadow="md">
+                                <Spinner size="sm" color="gray.500" />
+                                <Text fontSize="xs" color="gray.600" fontWeight="500">Updating map…</Text>
+                            </HStack>
+                        </Flex>
+                    )}
 
                     {/* Offscreen street map renderer — lazy-loaded to keep MapLibre out of main bundle */}
                     {posterType !== 'starmap' && (

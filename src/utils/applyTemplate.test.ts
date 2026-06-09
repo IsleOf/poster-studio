@@ -260,6 +260,22 @@ describe('captureCurrentSettings', () => {
         expect(settings.locationAllCaps).toBe(true);
     });
 
+    it('does NOT persist a transient data:/blob: map capture (avoids 413 on save/sync)', () => {
+        useStore.setState({
+            mapBackgroundImage: 'data:image/jpeg;base64,' + 'A'.repeat(5000),
+            backgroundImageUrl: 'blob:http://localhost/abc-123',
+        });
+        const settings = captureCurrentSettings();
+        expect(settings.mapBackgroundImage).toBeUndefined();
+        expect(settings.backgroundImageUrl).toBeUndefined();
+    });
+
+    it('DOES persist a real asset-URL background (e.g. SM002 forest)', () => {
+        useStore.setState({ backgroundImageUrl: '/backgrounds/sm002/bg-teal-2000.webp' });
+        const settings = captureCurrentSettings();
+        expect(settings.backgroundImageUrl).toBe('/backgrounds/sm002/bg-teal-2000.webp');
+    });
+
     it('round-trips a full template apply → capture without data loss', () => {
         const input = {
             posterColor: '#001122',
