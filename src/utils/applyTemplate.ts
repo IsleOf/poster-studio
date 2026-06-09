@@ -88,7 +88,7 @@ const TEMPLATE_FIELDS = [
     'mapStyleUrl', 'mapColorPreset', 'mapLabelScale', 'mapBgColor', 'mapStreetColor',
     'mapWaterColor', 'mapLandColor', 'mapMainRoadColor', 'mapSmallRoadColor', 'mapDetailRoadColor',
     'showLocation', 'showDate', 'showCoords', 'detailsDateFirst', 'date',
-    'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
+    'titleKerning', 'titleLineHeight', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
     'titleAllCaps', 'locationAllCaps',
     'finelineWidth', 'printSize',
     'title', 'subtitle', 'selectedTemplate',

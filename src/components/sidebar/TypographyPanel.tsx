@@ -105,7 +105,8 @@ interface TypographyPanelProps {
 const TypographyPanel: React.FC<TypographyPanelProps> = ({ typoTab, setTypoTab }) => {
     const {
         titleFont, setTitleFont, titleFontSize, setTitleFontSize,
-        titleKerning, setTitleKerning, titleOffsetY, setTitleOffsetY, titleAllCaps, setTitleAllCaps,
+        titleKerning, setTitleKerning, titleLineHeight, setTitleLineHeight, titleOffsetY, setTitleOffsetY, titleAllCaps, setTitleAllCaps,
+        title, customText,
         subtitleFont, setSubtitleFont, subtitleFontSize, setSubtitleFontSize,
         subtitleKerning, setSubtitleKerning, subtitleOffsetY, setSubtitleOffsetY,
         detailsFont, setDetailsFont, detailsFontSize, setDetailsFontSize,
@@ -177,6 +178,9 @@ const TypographyPanel: React.FC<TypographyPanelProps> = ({ typoTab, setTypoTab }
                     </FormControl>
                     {sliderRow('Font Size', titleFontSize, `${titleFontSize}px`, 24, 300, 1, setTitleFontSize)}
                     {sliderRow('Kerning', titleKerning, `${titleKerning.toFixed(2)}em`, -0.1, 0.5, 0.01, setTitleKerning)}
+                    {/* Line spacing only matters when the title wraps to 2+ lines (a "\n" in the text) */}
+                    {((customText?.title ?? title ?? '').includes('\n')) &&
+                        sliderRow('Line Spacing', titleLineHeight, `${titleLineHeight.toFixed(2)}×`, 0.7, 2, 0.01, setTitleLineHeight)}
                     {sliderRow('Vertical Offset', titleOffsetY, `${titleOffsetY}px`, -100, 100, 1, setTitleOffsetY)}
                     <HStack justify="space-between" w="full">
                         <Text fontSize="xs" color="gray.700" fontWeight="500">All Caps</Text>

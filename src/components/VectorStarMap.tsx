@@ -73,7 +73,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize, titleOffsetX, titleOffsetY, subtitleOffsetY,
         detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, dividerOffsetY, shapeOutlineWidth, showFrame, frameInset, frameWidth,
         titleFont, subtitleFont, detailsFont, dedicationFont, namesFont,
-        titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
+        titleKerning, titleLineHeight, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
         titleAllCaps, locationAllCaps,
         showNames,
         mapBackgroundImage, backgroundImageUrl, backgroundImageOffsetY, borderStyle, selectedTemplate, starColor, mapInteriorColor,
@@ -120,7 +120,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         frameInset: s.frameInset, frameWidth: s.frameWidth,
         titleFont: s.titleFont, subtitleFont: s.subtitleFont, detailsFont: s.detailsFont,
         dedicationFont: s.dedicationFont, namesFont: s.namesFont,
-        titleKerning: s.titleKerning, subtitleKerning: s.subtitleKerning,
+        titleKerning: s.titleKerning, titleLineHeight: s.titleLineHeight, subtitleKerning: s.subtitleKerning,
         detailsKerning: s.detailsKerning, dedicationKerning: s.dedicationKerning, namesKerning: s.namesKerning,
         titleAllCaps: s.titleAllCaps, locationAllCaps: s.locationAllCaps, showNames: s.showNames,
         mapBackgroundImage: s.mapBackgroundImage, backgroundImageUrl: s.backgroundImageUrl, backgroundImageOffsetY: s.backgroundImageOffsetY, borderStyle: s.borderStyle,
@@ -427,21 +427,26 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         if (bgRect.empty()) {
             bgRect = svg.insert('rect', ':first-child').attr('class', 'background-rect') as any;
         }
-        // When a bg image is set it's over-scaled (below) so a vertical slide never exposes an edge,
-        // so the rect can stay transparent; otherwise it's the solid poster colour.
+        // The background image fits the full poster WIDTH (so nothing is cropped left/right);
+        // a tall source overflows vertically and that headroom is where the slider pans. The
+        // rect stays transparent under the image; otherwise it's the solid poster colour.
         bgRect.attr('width', '100%').attr('height', '100%').attr('fill', backgroundImageUrl ? 'none' : posterColor);
 
-        // Custom background image — covers the full poster behind all layers, with a vertical
-        // pan via backgroundImageOffsetY. Over-scaled ~15% so sliding never exposes an edge.
+        // Custom background image — covers the full poster behind all layers.
+        //   • preserveAspectRatio "xMidYMid slice" scales uniformly to COVER the poster. For a
+        //     source taller than the poster (e.g. the 2:3 forest on a 4:5 poster) that means the
+        //     WIDTH fits exactly (all trees stay in frame) and the height overflows top+bottom.
+        //   • backgroundImageOffsetY (−100…100) pans within that vertical overflow. ±10% of the
+        //     poster height matches the ~10%/side headroom of the 2:3 source, so the slider uses
+        //     the full travel without ever exposing a blank edge.
         svg.select('image.background-image').remove();
         if (backgroundImageUrl) {
-            const OS = 0.15;
-            const dy = ((backgroundImageOffsetY || 0) / 100) * 0.07 * height; // slider ±100 → ±7% of height
+            const dy = ((backgroundImageOffsetY || 0) / 100) * 0.10 * height;
             svg.insert('image', ':first-child')
                 .attr('class', 'background-image')
                 .attr('href', backgroundImageUrl)
-                .attr('x', `${-OS / 2 * 100}%`).attr('y', `${-OS / 2 * 100}%`)
-                .attr('width', `${(1 + OS) * 100}%`).attr('height', `${(1 + OS) * 100}%`)
+                .attr('x', 0).attr('y', 0)
+                .attr('width', '100%').attr('height', '100%')
                 .attr('preserveAspectRatio', 'xMidYMid slice')
                 .attr('transform', `translate(0, ${dy})`);
         }
@@ -1721,11 +1726,12 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
             .attr('font-weight', ['Lato', 'DM Sans', 'Poppins', 'Nunito', 'Oswald', 'Montserrat', 'Bebas Neue', 'Brandon Grotesque', 'Cinzel', 'Playfair Display', 'Orbitron'].includes(titleFont) ? 'bold' : '400')
             .attr('letter-spacing', titleFont === 'Mapped Moment Script' ? '0' : `${debouncedTitleKerning}em`)
             .style('white-space', 'pre');
+        const titleLH = titleLineHeight || 1.08; // line-height multiple — adjustable per design
         if (titleLines.length > 1) {
             titleLines.forEach((ln, i) => {
                 titleNode.append('tspan')
                     .attr('x', 0)
-                    .attr('dy', i === 0 ? '0' : `${titleFontSize * 1.08}px`)
+                    .attr('dy', i === 0 ? '0' : `${titleFontSize * titleLH}px`)
                     .text(ln);
             });
         } else {
@@ -1797,8 +1803,8 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         }
 
         // Advance Natural Y — use reference size so resizing title doesn't move other elements.
-        // Extra title lines push subsequent elements down by one line-height each.
-        naturalY += (refTitleSize * 0.8) + (titleLines.length - 1) * (refTitleSize * 1.08) + config.titleBottomMargin;
+        // Extra title lines push subsequent elements down by one (adjustable) line-height each.
+        naturalY += (refTitleSize * 0.8) + (titleLines.length - 1) * (refTitleSize * titleLH) + config.titleBottomMargin;
 
         // 2. Subtitle Group — only render if there's actual text (avoids blank gap)
         // Script fonts (used for couple names like "Laura & Steve") keep their original
@@ -2314,7 +2320,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         title, subtitle, customText, location, date, lat, lng, // Content
         titleFont, subtitleFont, detailsFont, dedicationFont, namesFont, // Fonts
         titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize, // Sizes
-        debouncedTitleKerning, debouncedSubtitleKerning, debouncedDetailsKerning, debouncedDedicationKerning, debouncedNamesKerning, // Kerning
+        debouncedTitleKerning, debouncedSubtitleKerning, debouncedDetailsKerning, debouncedDedicationKerning, debouncedNamesKerning, titleLineHeight, // Kerning
         titleAllCaps, locationAllCaps, // Text casing
         titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, // Offsets
         showNames, // Names toggle

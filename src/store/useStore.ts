@@ -22,7 +22,7 @@ const DESIGN_FIELDS = [
     'showConstellations', 'showMilkyWay', 'showGrid', 'showLocation', 'showDate', 'showCoords', 'detailsDateFirst',
     'maskShape', 'isLightMode', 'designStyle', 'borderStyle',
     'titleFont', 'subtitleFont', 'detailsFont', 'dedicationFont', 'namesFont',
-    'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
+    'titleKerning', 'titleLineHeight', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
     'titleAllCaps', 'locationAllCaps',
     'customText', 'posterType', 'printSize', 'selectedTemplate',
     'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
@@ -121,6 +121,7 @@ interface StoreState {
     dedicationFont: string;
     namesFont: string;
     titleKerning: number;
+    titleLineHeight: number;
     subtitleKerning: number;
     detailsKerning: number;
     dedicationKerning: number;
@@ -299,6 +300,7 @@ interface StoreState {
     setNamesFont: (font: string) => void;
     setShowNames: (show: boolean) => void;
     setTitleKerning: (kerning: number) => void;
+    setTitleLineHeight: (lineHeight: number) => void;
     setSubtitleKerning: (kerning: number) => void;
     setDetailsKerning: (kerning: number) => void;
     setDedicationKerning: (kerning: number) => void;
@@ -448,6 +450,7 @@ export const useStore = create<StoreState>((set) => ({
     dedicationFont: 'Playfair Display',
     namesFont: 'Playfair Display',
     titleKerning: 0.05,
+    titleLineHeight: 1.08,
     subtitleKerning: 0.2,
     detailsKerning: 0.1,
     dedicationKerning: 0.05,
@@ -857,6 +860,7 @@ export const useStore = create<StoreState>((set) => ({
     setDetailsFont: (detailsFont) => set({ detailsFont }),
     setDedicationFont: (dedicationFont) => set({ dedicationFont }),
     setTitleKerning: (titleKerning) => set({ titleKerning }),
+    setTitleLineHeight: (titleLineHeight) => set({ titleLineHeight }),
     setSubtitleKerning: (subtitleKerning) => set({ subtitleKerning }),
     setDetailsKerning: (detailsKerning) => set({ detailsKerning }),
     setDedicationKerning: (dedicationKerning) => set({ dedicationKerning }),
