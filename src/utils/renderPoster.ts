@@ -29,6 +29,58 @@ async function fetchFontAsDataUri(url: string): Promise<string | null> {
     }
 }
 
+// Cache base64-encoded image data URIs (background art, in-shape captures) per session.
+const imageDataUriCache = new Map<string, string>();
+
+function guessImageMime(url: string): string {
+    const u = url.split('?')[0].toLowerCase();
+    if (u.endsWith('.webp')) return 'image/webp';
+    if (u.endsWith('.avif')) return 'image/avif';
+    if (u.endsWith('.jpg') || u.endsWith('.jpeg')) return 'image/jpeg';
+    if (u.endsWith('.svg')) return 'image/svg+xml';
+    return 'image/png';
+}
+
+async function fetchImageAsDataUri(url: string): Promise<string | null> {
+    if (imageDataUriCache.has(url)) return imageDataUriCache.get(url)!;
+    try {
+        const fullUrl = url.startsWith('http') ? url : new URL(url, location.origin).href;
+        const resp = await fetch(fullUrl);
+        if (!resp.ok) return null;
+        const buf = await resp.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        const mime = resp.headers.get('content-type') || guessImageMime(url);
+        const dataUri = `data:${mime};base64,${btoa(binary)}`;
+        imageDataUriCache.set(url, dataUri);
+        return dataUri;
+    } catch {
+        return null;
+    }
+}
+
+// Inline every <image> whose href points at an external/relative URL as a base64 data URI.
+// A serialized SVG drawn through a blob URL cannot resolve relative hrefs (e.g. the SM002 forest
+// background "/backgrounds/sm002/bg-teal-2000.webp"), so without this the image silently drops
+// from the exported PNG/PDF and the preview — even though the live DOM preview shows it fine.
+const XLINK = 'http://www.w3.org/1999/xlink';
+async function embedImages(svgEl: SVGSVGElement): Promise<void> {
+    const images = Array.from(svgEl.querySelectorAll('image'));
+    for (const img of images) {
+        const href = img.getAttribute('href') || img.getAttributeNS(XLINK, 'href');
+        if (!href || href.startsWith('data:')) continue;
+        const dataUri = await fetchImageAsDataUri(href);
+        if (dataUri) {
+            img.setAttribute('href', dataUri);
+            try { img.removeAttributeNS(XLINK, 'href'); } catch { /* no xlink attr */ }
+        }
+    }
+}
+
 // Collect every font-family name set as an attribute in the SVG element tree.
 // font-family attributes may be comma-separated stacks like "Title001, serif" —
 // split and strip quotes so each family name can be looked up individually.
@@ -78,6 +130,10 @@ export async function renderPosterToBlob(
     const svgClone = svgEl.cloneNode(true) as SVGSVGElement;
     svgClone.setAttribute('width', String(outputWidth));
     svgClone.setAttribute('height', String(outputHeight));
+
+    // Embed external <image> hrefs (background art, captures) as base64 so they survive the
+    // blob/canvas rasterization — relative URLs don't resolve in a serialized SVG.
+    await embedImages(svgClone);
 
     // Embed custom fonts as base64 data URIs so they render correctly in blob context.
     const usedFamilies = collectUsedFontFamilies(svgClone);
