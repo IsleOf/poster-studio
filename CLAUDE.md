@@ -302,6 +302,17 @@ The `font-family` attribute in SVG is a stack like `"Title001, serif"`. If any c
 
 To verify font embedding is working, file size of a 150dpi 8x10 render should be >300KB (fonts add ~200KB). Without embedded fonts it's ~150KB.
 
+### Exported PNG/PDF missing the background image (forest, uploaded art)
+`renderPoster.ts` serializes the SVG into a **blob URL** and rasterizes it on a canvas. A blob-URL
+SVG cannot resolve **relative `<image>` hrefs** (e.g. `/backgrounds/sm002/bg-teal-2000.webp`), so any
+external image silently drops from the exported/preview PNG and PDF — *even though the live DOM
+preview and the server-side Puppeteer render show it* (both load over HTTP). Fix: `renderPoster.ts`
+`embedImages()` inlines every external `<image>` as a base64 data URI before serialization (same
+pattern as font embedding). ⚠️ **When testing background/image work, test the EXPORT path** (Download
+Preview → PNG, or `saveDesign`), not just the on-screen editor preview — they use different code.
+Drive it headless: load `/l/<slug>`, click "Download Preview (300 DPI)" → the modal's **PNG** button,
+capture the download, and eyeball the saved file.
+
 ### Thumbnails disappear after deploy
 `rsync --delete` wiped the `/designs/` directory. Always use `--exclude='designs/'`. It's in all deploy commands in this file — don't remove it.
 
