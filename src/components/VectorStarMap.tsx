@@ -1843,7 +1843,8 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
                 const r = textEl.getBoundingClientRect();
                 textEl.style.visibility = 'hidden';
                 const subtitleVal = customText.subtitle || subtitle;
-                setInlineEdit({ field: 'subtitle', value: subtitleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: subtitleFont, fontSize: subtitleFontSize, uppercase: true });
+                // Match the render: script-font subtitles (couple names) keep their casing.
+                setInlineEdit({ field: 'subtitle', value: subtitleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: subtitleFont, fontSize: subtitleFontSize, uppercase: !SCRIPT_SUBTITLE_FONTS.includes(subtitleFont) });
                 setActiveTypoField('subtitle');
             }));
 
