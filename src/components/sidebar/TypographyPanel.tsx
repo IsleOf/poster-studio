@@ -35,6 +35,7 @@ const TITLE_FONTS = [
     { label: 'Allura', value: 'Allura' },
     { label: 'Petit Formal Script', value: 'Petit Formal Script' },
     { label: 'Alex Brush', value: 'Alex Brush' },
+    { label: 'Brittany Signature', value: 'Brittany Signature' },
     { label: 'Title004', value: 'Title004' },
 ];
 
@@ -51,6 +52,7 @@ const SUBTITLE_FONTS = [
     { label: 'Playfair Display', value: 'Playfair Display' },
     { label: 'Cinzel', value: 'Cinzel' },
     { label: 'Typewriter', value: 'Typewriter' },
+    { label: 'Josefin Slab', value: 'Josefin Slab' },
 ];
 
 const DETAILS_FONTS = [
@@ -62,6 +64,7 @@ const DETAILS_FONTS = [
     { label: 'Lato', value: 'Lato' },
     { label: 'Space Mono', value: 'Space Mono' },
     { label: 'Typewriter', value: 'Typewriter' },
+    { label: 'Josefin Slab', value: 'Josefin Slab' },
 ];
 
 const DEDICATION_FONTS = [
@@ -80,6 +83,8 @@ const DEDICATION_FONTS = [
     { label: 'Title001', value: 'Title001' },
     { label: 'Title004', value: 'Title004' },
     { label: 'Montserrat', value: 'Montserrat' },
+    { label: 'Josefin Slab', value: 'Josefin Slab' },
+    { label: 'Brittany Signature', value: 'Brittany Signature' },
 ];
 
 // ── Uploaded-font helpers ─────────────────────────────────────────────────────

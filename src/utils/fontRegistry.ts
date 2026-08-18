@@ -7,6 +7,7 @@
 import AlexBrush400 from '../assets/fonts/Alex-Brush-400-normal.woff2?url';
 import Allura400 from '../assets/fonts/Allura-400-normal.woff2?url';
 import BebasNeue400 from '../assets/fonts/Bebas-Neue-400-normal.woff2?url';
+import BrittanySignature400 from '../assets/fonts/BrittanySignature-400-normal.woff2?url';
 import Calligraphy002400 from '../assets/fonts/Calligraphy002-400-normal.woff2?url';
 import Cinzel400 from '../assets/fonts/Cinzel-400-normal.woff2?url';
 import Cinzel700 from '../assets/fonts/Cinzel-700-normal.woff2?url';
@@ -17,6 +18,7 @@ import DancingScript700 from '../assets/fonts/Dancing-Script-700-normal.woff2?ur
 import Details001500 from '../assets/fonts/Details001-500-normal.woff2?url';
 import DidactGothic400 from '../assets/fonts/Didact-Gothic-400-normal.woff2?url';
 import GreatVibes400 from '../assets/fonts/Great-Vibes-400-normal.woff2?url';
+import JosefinSlab400 from '../assets/fonts/JosefinSlab-400-normal.woff2?url';
 import Mapped2_300 from '../assets/fonts/Mapped2-300-normal.woff2?url';
 import Mapped2_400 from '../assets/fonts/Mapped2-400-normal.woff2?url';
 import Mapped2_500 from '../assets/fonts/Mapped2-500-normal.woff2?url';
@@ -61,6 +63,7 @@ export const FONT_REGISTRY: Record<string, FontVariant[]> = {
     'Alex Brush':           [{ weight: '400', url: AlexBrush400 }],
     'Allura':               [{ weight: '400', url: Allura400 }],
     'Bebas Neue':           [{ weight: '400', url: BebasNeue400 }],
+    'Brittany Signature':   [{ weight: '400', url: BrittanySignature400 }],
     'Calligraphy002':       [{ weight: '400', url: Calligraphy002400 }],
     'Cinzel':               [{ weight: '400', url: Cinzel400 }, { weight: '700', url: Cinzel700 }],
     'Cormorant Garamond':   [{ weight: '400', url: CormorantGaramond400 }, { weight: '700', url: CormorantGaramond700 }],
@@ -68,6 +71,7 @@ export const FONT_REGISTRY: Record<string, FontVariant[]> = {
     'Details001':           [{ weight: '400', url: Details001500 }, { weight: '500', url: Details001500 }, { weight: '700', url: Details001500 }],
     'Didact Gothic':        [{ weight: '400', url: DidactGothic400 }],
     'Great Vibes':          [{ weight: '400', url: GreatVibes400 }],
+    'Josefin Slab':         [{ weight: '400', url: JosefinSlab400 }],
     'Mapped Moment Script': [{ weight: '400', url: MappedMomentScript400, sizeAdjust: '250%' }],
     'Mapped2':              [
         { weight: '300', url: Mapped2_300 }, { weight: '400', url: Mapped2_400 },
