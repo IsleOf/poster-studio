@@ -1,5 +1,5 @@
 // ColorPanel — Poster color palette presets, custom color pickers, background image upload.
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { Box, VStack, HStack, Text, Input, Button, Image, IconButton, Slider, SliderTrack, SliderFilledTrack, SliderThumb } from '@chakra-ui/react';
 
@@ -11,21 +11,29 @@ type ColorRowProps = {
     onChange: (value: string) => void;
 };
 
-const ColorRow: React.FC<ColorRowProps> = ({ label, value, onChange }) => (
-    <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-        <Text fontSize="sm" color="gray.700" fontWeight="500">{label}</Text>
-        <HStack>
-            <Text fontSize="xs" color="gray.500" fontFamily="mono">{value}</Text>
-            <Input
-                type="color" w={8} h={8} p={0}
-                border="1px solid" borderColor="gray.300" borderRadius="md" bg="transparent"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                cursor="pointer"
-            />
+// Local state while dragging; commits to store only on blur (picker close).
+// This prevents expensive re-renders on every pointer move inside the native color picker.
+const ColorRow: React.FC<ColorRowProps> = ({ label, value, onChange }) => {
+    const [local, setLocal] = useState(value);
+    // Sync when template/preset changes the value externally
+    useEffect(() => { setLocal(value); }, [value]);
+    return (
+        <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+            <Text fontSize="sm" color="gray.700" fontWeight="500">{label}</Text>
+            <HStack>
+                <Text fontSize="xs" color="gray.500" fontFamily="mono">{local}</Text>
+                <Input
+                    type="color" w={8} h={8} p={0}
+                    border="1px solid" borderColor="gray.300" borderRadius="md" bg="transparent"
+                    value={local}
+                    onChange={(e) => setLocal(e.target.value)}
+                    onBlur={() => { if (local !== value) onChange(local); }}
+                    cursor="pointer"
+                />
+            </HStack>
         </HStack>
-    </HStack>
-);
+    );
+};
 
 const ColorPanel: React.FC = () => {
     const {
@@ -43,8 +51,12 @@ const ColorPanel: React.FC = () => {
         backgroundImageUrl, setBackgroundImageUrl,
         mapBackgroundImage, setMapBackgroundImage,
         backgroundImageOffsetY, setBackgroundImageOffsetY,
-        posterType,
+        posterType, maskShape,
     } = useStore();
+
+    // Show interior color for star maps when there's no full-poster image
+    // (if backgroundImageUrl is set, the shape is transparent and the image shows through)
+    const showInteriorColor = posterType === 'starmap' && !backgroundImageUrl;
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = React.useState(false);
@@ -96,6 +108,15 @@ const ColorPanel: React.FC = () => {
 
             {/* Background color */}
             <ColorRow label="Background" value={posterColor} onChange={setPosterColor} />
+
+            {/* Star map shape interior — shown for star maps without a full-poster bg image */}
+            {showInteriorColor && (
+                <ColorRow
+                    label={maskShape === 'rect' ? 'Map Interior' : 'Sky Interior'}
+                    value={mapInteriorColor}
+                    onChange={setMapInteriorColor}
+                />
+            )}
 
             {/* Background image */}
             <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">

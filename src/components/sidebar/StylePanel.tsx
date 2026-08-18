@@ -12,15 +12,13 @@ import {
 const StylePanel: React.FC = () => {
     const {
         showBorder, setShowBorder,
-        showDivider, setShowDivider,
-        dividerLength, setDividerLength,
-        dividerThickness, setDividerThickness,
-        dividerOffsetY, setDividerOffsetY,
         designStyle, setDesignStyle,
         maskShape, setMaskShape,
         isLightMode, setIsLightMode,
         setStarColor,
         showConstellations, setShowConstellations,
+        showMilkyWay, setShowMilkyWay,
+        milkyWayOpacity, setMilkyWayOpacity,
         showGrid, setShowGrid,
         gridWidth, setGridWidth,
         gridOpacity, setGridOpacity,
@@ -67,47 +65,8 @@ const StylePanel: React.FC = () => {
                 <Switch isChecked={showBorder} onChange={(e) => setShowBorder(e.target.checked)} colorScheme="blue" />
             </HStack>
 
-            {/* Divider */}
-            <Box>
-                <HStack justify="space-between" mb={showDivider ? 3 : 0}>
-                    <Text fontSize="sm" fontWeight="500" color="gray.700">Divider Line</Text>
-                    <Switch isChecked={showDivider} onChange={(e) => setShowDivider(e.target.checked)} colorScheme="blue" />
-                </HStack>
-                {showDivider && (
-                    <VStack spacing={3}>
-                        <Box w="full">
-                            <HStack justify="space-between" mb={1}>
-                                <Text fontSize="xs" color="gray.700" fontWeight="500">Length</Text>
-                                <Text fontSize="xs" color="gray.500">{dividerLength}px</Text>
-                            </HStack>
-                            <Slider value={dividerLength} min={20} max={300} step={5} onChange={setDividerLength}>
-                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                            </Slider>
-                        </Box>
-                        <Box w="full">
-                            <HStack justify="space-between" mb={1}>
-                                <Text fontSize="xs" color="gray.700" fontWeight="500">Thickness</Text>
-                                <Text fontSize="xs" color="gray.500">{dividerThickness.toFixed(1)}px</Text>
-                            </HStack>
-                            <Slider value={dividerThickness} min={0.2} max={5} step={0.1} onChange={setDividerThickness}>
-                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                            </Slider>
-                        </Box>
-                        <Box w="full">
-                            <HStack justify="space-between" mb={1}>
-                                <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Offset</Text>
-                                <Text fontSize="xs" color="gray.500">{dividerOffsetY}px</Text>
-                            </HStack>
-                            <Slider value={dividerOffsetY} min={-50} max={50} step={1} onChange={setDividerOffsetY}>
-                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
-                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
-                            </Slider>
-                        </Box>
-                    </VStack>
-                )}
-            </Box>
+            {/* Divider controls live in the "Location and Text" panel (TextContentPanel) —
+                kept as the single source of truth to avoid two conflicting divider sections. */}
 
             {/* Design Style */}
             <FormControl>
@@ -148,6 +107,11 @@ const StylePanel: React.FC = () => {
                     <FormLabel fontSize="sm" color="gray.700" fontWeight="500" mb={0}>Constellation Lines</FormLabel>
                     <Switch isChecked={showConstellations} onChange={(e) => setShowConstellations(e.target.checked)} colorScheme="gray" />
                 </FormControl>
+                <FormControl display="flex" alignItems="center" justifyContent="space-between">
+                    <FormLabel fontSize="sm" color="gray.700" fontWeight="500" mb={0}>Milky Way</FormLabel>
+                    <Switch isChecked={showMilkyWay} onChange={(e) => setShowMilkyWay(e.target.checked)} colorScheme="gray" />
+                </FormControl>
+                {showMilkyWay && sliderRow('Milky Way Intensity', milkyWayOpacity, `${Math.round(milkyWayOpacity * 100)}%`, 0, 1, 0.05, setMilkyWayOpacity)}
                 {sliderRow('Star Size', starScale, `${starScale.toFixed(1)}x`, 0.5, 2.2, 0.1, setStarScale)}
                 {sliderRow('Line Weight', lineWeight, `${lineWeight.toFixed(1)}pt`, 0.1, 1.8, 0.1, setLineWeight)}
                 {sliderRow('Glow Intensity', glowIntensity, String(glowIntensity), 0, 20, 1, setGlowIntensity)}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { PRINT_SIZE_MAP, fetchAndApplyTemplate } from '../utils/applyTemplate';
 import type { DesignGroup } from '../types/listing';
@@ -46,9 +46,24 @@ interface SidebarProps {
     designGroups?: DesignGroup[];
     editorSiblings?: EditorSibling[];
     onSiblingSwitch?: (siblingId: string) => void;
+    isAdmin?: boolean;
 }
 
-const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings, onSiblingSwitch }) => {
+const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings, onSiblingSwitch, isAdmin }) => {
+    // Paid-order lockdown: when this is a real order's design (or an admin opening it), don't let
+    // the product TYPE be switched (Star/Street/Colored) — that would wipe the purchased design.
+    const { designToken: sbRouteToken } = useParams<{ designToken?: string }>();
+    const [sbPurchased, setSbPurchased] = useState(false);
+    useEffect(() => {
+        if (!sbRouteToken) { setSbPurchased(false); return; }
+        let cancelled = false;
+        fetch(`/api/order-status/${encodeURIComponent(sbRouteToken)}`)
+            .then(r => (r.ok ? r.json() : null))
+            .then(j => { if (!cancelled && j?.found && !['cancelled', 'refunded'].includes(j.status)) setSbPurchased(true); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [sbRouteToken]);
+    const lockProductType = !!isAdmin || sbPurchased;
     const {
         title, setTitle,
         subtitle, setSubtitle,
@@ -340,8 +355,8 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                 })()}
 
 
-                {/* ── Poster Type Toggle — hidden in listing/customer mode ── */}
-                {!(designGroups && designGroups.length > 0) && <Box px={6} py={4} borderBottom="1px" borderColor="gray.200">
+                {/* ── Poster Type Toggle — hidden in listing/customer mode + on paid orders (lockProductType) ── */}
+                {!(designGroups && designGroups.length > 0) && !lockProductType && <Box px={6} py={4} borderBottom="1px" borderColor="gray.200">
                     <HStack spacing={1}>
                         <Button size="sm" flex={1}
                             onClick={() => { setPosterType('starmap'); trackEvent('poster_type_change', { type: 'starmap' }); }}
@@ -607,7 +622,7 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
                     </AccordionItem >
                 </Accordion >
 
-                <OrderSection />
+                <OrderSection isAdmin={isAdmin} />
             </Box >
         </Box >
     );
@@ -618,6 +633,17 @@ const SidebarControls: React.FC<SidebarProps> = ({ designGroups, editorSiblings,
 const ETSY_DIGITAL_URL = 'https://www.etsy.com/shop/TheMappedMoment';
 const ETSY_PRINT_URL   = 'https://www.etsy.com/shop/TheMappedMoment';
 const API_BASE = ''; // relative — served by same nginx
+
+// Show the "Printed Poster" / "Framed Poster" buy options?
+//
+// FALSE since 2026-07 because the shop is DIGITAL-ONLY and those options were a dead end:
+//   1. All 5 physical Etsy listings are deactivated (state=edit) — there is nothing live to buy,
+//      so a customer choosing "Printed Poster" got sent to Etsy to purchase a listing that
+//      doesn't exist.
+//   2. `enable_auto_prodigi` is OFF (deliberately — the seller funds Prodigi only after the
+//      Etsy payout clears), so a physical order couldn't be auto-fulfilled anyway.
+// Flip to true ONLY after re-activating physical listings AND deciding on Prodigi funding.
+const PHYSICAL_PRODUCTS_ENABLED = false;
 
 function blobToBase64(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -639,8 +665,9 @@ const FRAME_COLORS = [
 ] as const;
 type FrameColor = typeof FRAME_COLORS[number]['id'];
 
-const OrderSection: React.FC = () => {
+const OrderSection: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
     const store = useStore();
+    const { canUndo, canRedo, undo, redo } = useStore();
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [orderType, setOrderType] = useState<'digital' | 'print' | 'framed' | null>(null);
@@ -654,6 +681,14 @@ const OrderSection: React.FC = () => {
     // Confirm mode state — set when the order is awaiting size confirmation
     const [confirmInfo, setConfirmInfo] = useState<{ orderId: number; listingType: string; printSize: string } | null>(null);
     const [confirmState, setConfirmState] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
+    // Purchased mode — the token belongs to a real (paid) order. Show edit + no-watermark
+    // download; hide the buy-on-Etsy UI (the customer already paid — never loop them back).
+    const [purchased, setPurchased] = useState(false);
+    // Order details captured alongside `purchased`, needed to background-sync edits to the
+    // server (see the auto-sync effect below) — separate from confirmInfo, which is only for
+    // the one-time awaiting_size_confirm step.
+    const [purchasedOrderInfo, setPurchasedOrderInfo] = useState<{ listingType: string; revisionsRemaining: number } | null>(null);
+    const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'synced' | 'exhausted' | 'error'>('idle');
 
     // Size + variant info for post-save instructions
     const displaySize = store.selectedTemplateFulfillmentSize || store.printSize?.label || '';
@@ -694,24 +729,62 @@ const OrderSection: React.FC = () => {
         frameColor: type === 'framed' ? frameColor : undefined,
     }), [store, frameColor]);
 
-    // When the editor is opened via /d/:designToken, check if the order is awaiting
-    // size confirmation and switch to confirm mode if so.
+    // When the editor is opened via /d/:designToken, check if a real order now exists for
+    // this design and switch to confirm/purchased mode if so.
+    //
+    // Seamless round-trip: a customer typically designs here, THEN opens Etsy in a separate
+    // tab to paste their code and check out — this tab is often still open/bookmarked when
+    // they come back. Etsy's own poll only picks up new receipts every 2 minutes, so a single
+    // check on mount would miss an order placed moments ago. Keep polling (capped) so the
+    // page flips itself into purchased mode automatically — no re-entering a code or order
+    // number required. Also re-checks immediately when the tab regains focus, which is the
+    // most common "I just finished checking out" moment.
     useEffect(() => {
         if (!routeToken) return;
         let cancelled = false;
-        (async () => {
+        let attempts = 0;
+        let found = false; // stop polling as soon as an order is found — no need to keep checking
+        const MAX_ATTEMPTS = 20; // ~ 20 * 20s = ~6.5min of polling — comfortably past Etsy's 2min poll cadence
+
+        const check = async () => {
+            if (cancelled || found) return;
             try {
                 const res = await fetch(`/api/order-status/${encodeURIComponent(routeToken)}`);
                 if (!res.ok || cancelled) return;
                 const json = await res.json();
-                if (!cancelled && json.confirmRequired) {
+                if (cancelled) return;
+                if (json.confirmRequired) {
+                    found = true;
                     setConfirmInfo({ orderId: json.orderId, listingType: json.listingType, printSize: json.printSize });
+                } else if (json.found && !['cancelled', 'refunded'].includes(json.status)) {
+                    // A real paid order exists for this design → purchased mode.
+                    found = true;
+                    setPurchased(true);
+                    if (json.delivered) {
+                        setPurchasedOrderInfo({ listingType: json.listingType, revisionsRemaining: json.revisionsRemaining ?? 0 });
+                    }
                 }
             } catch {
                 // silent — confirm mode is opt-in; normal shopping UI shown on failure
             }
-        })();
-        return () => { cancelled = true; };
+        };
+
+        check();
+        const interval = setInterval(() => {
+            attempts += 1;
+            if (found || attempts >= MAX_ATTEMPTS) { clearInterval(interval); return; }
+            check();
+        }, 20000);
+        const onFocus = () => check();
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onFocus);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onFocus);
+        };
     }, [routeToken]);
 
     // Confirm the design at the ordered size and re-enter the production pipeline.
@@ -730,6 +803,76 @@ const OrderSection: React.FC = () => {
             setConfirmState('error');
         }
     }, [routeToken, confirmInfo, buildSnapshot]);
+
+    // ── Server sync of post-purchase edits (EXPLICIT, never automatic) ──────────
+    // When a buyer edits an already-delivered order, "Export (No Watermark)" gives them an
+    // instant client-side file but tells the SERVER nothing, so our stored render_path (what
+    // /verify re-downloads and what the seller uploads to Etsy) would stay on the ORIGINAL
+    // file. `syncUpdate()` pushes the edit to /confirm-order, which re-renders under the same
+    // guards as the /verify revision path (edit window + MAX_REVISIONS).
+    //
+    // ⚠️ This is deliberately a BUTTON, not a background auto-sync. An earlier version fired
+    // automatically on a debounce whenever the snapshot changed, which spent a STRICTLY
+    // LIMITED resource (3 free updates) with no intent signal:
+    //   - the shop OWNER opening a customer's design to grab the file could burn the
+    //     customer's credits by nudging a slider or dragging the map;
+    //   - a customer idly tweaking across three sessions could exhaust all 3 updates without
+    //     ever meaning to "submit" anything.
+    // A credit must only ever be spent on a deliberate click. Do not reintroduce auto-sync.
+    const snapshotJson = useMemo(
+        () => (purchased && purchasedOrderInfo
+            ? JSON.stringify(buildSnapshot(purchasedOrderInfo.listingType as 'digital' | 'print' | 'framed'))
+            : null),
+        [purchased, purchasedOrderInfo, buildSnapshot]
+    );
+    const lastSyncedRef = useRef<string | null>(null);
+    const baselineSetRef = useRef(false);
+
+    // Capture the AS-DELIVERED state as the baseline when purchased mode is detected, so we can
+    // tell "actually edited something" from "just opened the page".
+    useEffect(() => {
+        if (!purchased) { baselineSetRef.current = false; return; }
+        if (purchasedOrderInfo && snapshotJson && !baselineSetRef.current) {
+            lastSyncedRef.current = snapshotJson;
+            baselineSetRef.current = true;
+        }
+    }, [purchased, purchasedOrderInfo, snapshotJson]);
+
+    // True only when the current design genuinely differs from what was delivered.
+    const hasUnsyncedEdits = !!(
+        purchased && purchasedOrderInfo && baselineSetRef.current &&
+        snapshotJson && snapshotJson !== lastSyncedRef.current
+    );
+
+    const syncUpdate = useCallback(async () => {
+        if (!routeToken || !purchasedOrderInfo || !snapshotJson) return;
+        if (purchasedOrderInfo.revisionsRemaining <= 0) { setSyncState('exhausted'); return; }
+        setSyncState('syncing');
+        try {
+            const res = await fetch('/api/confirm-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: routeToken, state: JSON.parse(snapshotJson) }),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (json.revisionsExhausted || json.editWindowClosed) {
+                    setSyncState('exhausted');
+                    setPurchasedOrderInfo(info => (info ? { ...info, revisionsRemaining: 0 } : info));
+                } else {
+                    setSyncState('error');
+                }
+                return;
+            }
+            lastSyncedRef.current = snapshotJson;
+            setSyncState('synced');
+            setPurchasedOrderInfo(info => (info
+                ? { ...info, revisionsRemaining: json.revisionsRemaining ?? info.revisionsRemaining }
+                : info));
+        } catch {
+            setSyncState('error');
+        }
+    }, [routeToken, purchasedOrderInfo, snapshotJson]);
 
     const saveDesign = useCallback(async (type: 'digital' | 'print' | 'framed') => {
         setLoading(true);
@@ -788,6 +931,7 @@ const OrderSection: React.FC = () => {
             showLocation: s.showLocation, showDate: s.showDate, showCoords: s.showCoords,
             showDivider: s.showDivider, dividerLength: s.dividerLength, dividerThickness: s.dividerThickness,
             showConstellations: s.showConstellations, showMilkyWay: s.showMilkyWay, showGrid: s.showGrid,
+            milkyWayOpacity: s.milkyWayOpacity,
             gridWidth: s.gridWidth, gridOpacity: s.gridOpacity,
             // Rings & decorations
             showInnerRing: s.showInnerRing, innerRingWidth: s.innerRingWidth, innerRingInset: s.innerRingInset,
@@ -860,33 +1004,57 @@ const OrderSection: React.FC = () => {
         });
     };
 
-    // Confirm mode — shown instead of the shopping UI when the order is awaiting size confirmation
+    // Post-purchase: an admin opening an order (?admin=1, server-verified upstream) OR a paid
+    // customer. Both get the no-watermark export and NO buy-on-Etsy UI (edit + download only).
+    const postPurchase = isAdmin || purchased;
+
+    // Confirm / edit mode — shown instead of the shopping UI when the order is in confirm/edit mode
+    // (awaiting_size_confirm). Used both for print size-confirm AND digital "personalise your map".
     if (confirmInfo) {
+        const isDigital = confirmInfo.listingType === 'digital';
         const productLabel = confirmInfo.listingType === 'framed'
             ? 'Framed Print'
             : confirmInfo.listingType === 'print'
                 ? 'Printed Poster'
-                : 'order';
-        const formattedSize = confirmInfo.printSize.replace('x', '×');
+                : 'Digital Download';
+        const formattedSize = (confirmInfo.printSize || '').replace('x', '×');
+        const editOrderId = (typeof window !== 'undefined')
+            ? new URLSearchParams(window.location.search).get('o') : null;
+        const downloadHref = editOrderId ? `/verify?o=${encodeURIComponent(editOrderId)}` : '/verify';
 
         return (
             <Box p={6} borderTop="1px" borderColor="gray.200">
                 <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={5}>
                     <Text fontWeight="700" fontSize="md" color="gray.900" mb={3}>
-                        Confirm your order
+                        {isDigital ? 'Personalise your map' : 'Confirm your order'}
                     </Text>
                     <Text fontSize="sm" color="gray.600" mb={4}>
-                        You ordered a {formattedSize} {productLabel}. We&apos;ve laid your design out
-                        at {formattedSize} — edit anything above, then confirm and it goes straight
-                        to production. No extra charge.
+                        {isDigital
+                            ? 'Make any changes above — location, date, names, colours — then get your print-ready file. No extra charge.'
+                            : <>You ordered a {formattedSize} {productLabel}. We&apos;ve laid your design out at {formattedSize} — edit anything above, then confirm and it goes straight to production. No extra charge.</>}
                     </Text>
 
                     {confirmState === 'done' ? (
                         <Box bg="green.50" border="1px solid" borderColor="green.200"
                             borderRadius="md" p={4} textAlign="center">
-                            <Text fontWeight="700" color="green.700" fontSize="sm">
-                                ✓ Confirmed! Your order is now in production. We&apos;ll email you when it ships.
-                            </Text>
+                            {isDigital ? (
+                                <>
+                                    <Text fontWeight="700" color="green.700" fontSize="sm" mb={3}>
+                                        ✓ Saved! Your file is being prepared — about a minute.
+                                    </Text>
+                                    <Button as="a" href={downloadHref}
+                                        size="md" width="full" borderRadius="md"
+                                        bg="green.600" color="white" fontWeight="700" fontSize="sm"
+                                        _hover={{ bg: 'green.700' }}
+                                    >
+                                        Download my file →
+                                    </Button>
+                                </>
+                            ) : (
+                                <Text fontWeight="700" color="green.700" fontSize="sm">
+                                    ✓ Confirmed! Your order is now in production. We&apos;ll email you when it ships.
+                                </Text>
+                            )}
                         </Box>
                     ) : (
                         <VStack spacing={3}>
@@ -898,12 +1066,12 @@ const OrderSection: React.FC = () => {
                             <Button
                                 onClick={confirmOrder}
                                 isLoading={confirmState === 'submitting'}
-                                loadingText="Confirming…"
+                                loadingText={isDigital ? 'Preparing…' : 'Confirming…'}
                                 size="md" width="full" borderRadius="md"
                                 bg="gray.900" color="white" fontWeight="600" fontSize="sm"
                                 _hover={{ bg: 'gray.700' }}
                             >
-                                ✓ Confirm &amp; send to production
+                                {isDigital ? '✓ Get my file' : '✓ Confirm & send to production'}
                             </Button>
                         </VStack>
                     )}
@@ -914,7 +1082,25 @@ const OrderSection: React.FC = () => {
 
     return (
         <Box p={6} borderTop="1px" borderColor="gray.200">
-            <DownloadButton />
+            <HStack spacing={2} mb={3}>
+                <Button
+                    flex={1} size="sm" variant="outline" borderColor="gray.300"
+                    color="gray.600" fontWeight="500" fontSize="xs"
+                    isDisabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)"
+                    _disabled={{ opacity: 0.35, cursor: 'not-allowed' }}
+                >
+                    ↩ Undo
+                </Button>
+                <Button
+                    flex={1} size="sm" variant="outline" borderColor="gray.300"
+                    color="gray.600" fontWeight="500" fontSize="xs"
+                    isDisabled={!canRedo} onClick={redo} title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
+                    _disabled={{ opacity: 0.35, cursor: 'not-allowed' }}
+                >
+                    Redo ↪
+                </Button>
+            </HStack>
+            <DownloadButton isAdmin={postPurchase} />
             <Button
                 size="sm" width="full" mt={2} variant="outline" borderColor="gray.300"
                 color="gray.600" fontWeight="500" fontSize="xs"
@@ -922,17 +1108,64 @@ const OrderSection: React.FC = () => {
             >
                 Share Design Link
             </Button>
-            <Text fontSize="xs" textAlign="center" color="gray.400" mt={2} mb={5} fontWeight="400">
-                Preview only · 150 DPI · watermarked
-            </Text>
+            {/* Must match reality: renderPosterToBlob() is called with dpi=300 for BOTH the free
+                preview and the paid export — the ONLY difference is the watermark flag (`!isAdmin`).
+                This previously claimed "150 DPI", which was never true and made the preview look
+                lower-quality than it is. Don't reintroduce a DPI number here unless DownloadButton
+                actually renders at that DPI. */}
+            {!postPurchase && (
+                <Text fontSize="xs" textAlign="center" color="gray.400" mt={2} mb={5} fontWeight="400">
+                    Preview only · watermarked
+                </Text>
+            )}
 
-            {!token ? (
+            {postPurchase ? (
+                <Box bg="green.50" border="1px solid" borderColor="green.200" borderRadius="lg" p={4} mt={3}>
+                    <Text fontWeight="700" fontSize="sm" color="green.800" mb={1}>
+                        ✓ {isAdmin && !purchased ? 'Admin — order design' : 'Your purchased design'}
+                    </Text>
+                    <Text fontSize="xs" color="gray.600">
+                        Edit anything above, then use <b>Export (No Watermark)</b> to download your
+                        full-resolution file. {purchased ? 'No need to buy again.' : ''}
+                    </Text>
+                    {purchased && purchasedOrderInfo && (
+                        <Box mt={3}>
+                            {/* A credit is spent ONLY by clicking this button — never automatically. */}
+                            {hasUnsyncedEdits && syncState !== 'synced' && purchasedOrderInfo.revisionsRemaining > 0 && (
+                                <Button
+                                    onClick={syncUpdate}
+                                    isLoading={syncState === 'syncing'}
+                                    loadingText="Updating your file…"
+                                    size="sm" width="full" mb={2}
+                                    bg="green.600" color="white" fontWeight="700" fontSize="xs"
+                                    _hover={{ bg: 'green.700' }}
+                                >
+                                    Save changes &amp; update my file
+                                </Button>
+                            )}
+                            <Text fontSize="xs" color="gray.500">
+                                {syncState === 'syncing' && 'Updating your file…'}
+                                {syncState === 'synced' && '✓ Updated — your file is up to date.'}
+                                {syncState === 'error' && 'Could not update — please try again or email studio@themappedmoment.com.'}
+                                {syncState === 'exhausted' && "You've used all your free updates — email studio@themappedmoment.com for further changes."}
+                                {syncState === 'idle' && purchasedOrderInfo.revisionsRemaining <= 0 &&
+                                    "You've used all your free updates — email studio@themappedmoment.com for further changes."}
+                                {syncState === 'idle' && purchasedOrderInfo.revisionsRemaining > 0 && (hasUnsyncedEdits
+                                    ? `Unsaved changes — ${purchasedOrderInfo.revisionsRemaining} free update${purchasedOrderInfo.revisionsRemaining !== 1 ? 's' : ''} left`
+                                    : `${purchasedOrderInfo.revisionsRemaining} free update${purchasedOrderInfo.revisionsRemaining !== 1 ? 's' : ''} remaining`)}
+                            </Text>
+                        </Box>
+                    )}
+                </Box>
+            ) : !token ? (
                 <VStack spacing={3}>
-                    {/* Product type cards */}
+                    {/* Product type cards — physical options gated by PHYSICAL_PRODUCTS_ENABLED (top of file) */}
                     {([
                         { type: 'digital' as const,  icon: '📄', title: 'Digital File',    sub: '300 DPI PNG, instant download' },
-                        { type: 'print'   as const,  icon: '🖼',  title: 'Printed Poster', sub: 'Fine Art Print, unframed' },
-                        { type: 'framed'  as const,  icon: '🪟',  title: 'Framed Poster',  sub: 'Fine Art Print + frame' },
+                        ...(PHYSICAL_PRODUCTS_ENABLED ? [
+                            { type: 'print'  as const, icon: '🖼', title: 'Printed Poster', sub: 'Fine Art Print, unframed' },
+                            { type: 'framed' as const, icon: '🪟', title: 'Framed Poster',  sub: 'Fine Art Print + frame' },
+                        ] : []),
                     ]).map(({ type, icon, title, sub }) => {
                         const isActive = orderType === type || (!orderType && type === 'digital');
                         return (

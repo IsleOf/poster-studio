@@ -36,7 +36,7 @@ export interface TemplateSettings {
 const TEMPLATE_FIELD_DEFAULTS: Record<string, unknown> = {
     posterType: 'starmap',
     posterColor: '#1B2735', textColor: '#ffffff', starColor: '#ffffff', mapInteriorColor: '#1B2735',
-    starScale: 1, lineWeight: 1.5, gridWidth: 1, glowIntensity: 3, gridOpacity: 0.5,
+    starScale: 1, lineWeight: 1.5, gridWidth: 1, glowIntensity: 3, gridOpacity: 0.5, milkyWayOpacity: 0.6,
     showBorder: true, showConstellations: true, showMilkyWay: false, showGrid: true,
     designStyle: 'standard', maskShape: 'circle', isLightMode: false, borderStyle: 'simple',
     showFrame: true, frameInset: 40, frameWidth: 5, shapeOutlineWidth: 1,
@@ -68,7 +68,7 @@ const TEMPLATE_FIELD_DEFAULTS: Record<string, unknown> = {
 // Fields that should be applied from a template (whitelist)
 const TEMPLATE_FIELDS = [
     'posterType', 'posterColor', 'textColor', 'starColor', 'mapInteriorColor',
-    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity',
+    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity', 'milkyWayOpacity',
     'showBorder', 'showConstellations', 'showMilkyWay', 'showGrid',
     'designStyle', 'maskShape', 'isLightMode', 'borderStyle',
     'showFrame', 'frameInset', 'frameWidth', 'shapeOutlineWidth',

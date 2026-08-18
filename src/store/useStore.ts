@@ -8,7 +8,7 @@ const MAX_HISTORY = 30;
 // Design-affecting fields (excludes UI/preview state and history itself)
 const DESIGN_FIELDS = [
     'title', 'subtitle', 'date', 'time', 'location', 'lat', 'lng',
-    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity',
+    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity', 'milkyWayOpacity',
     'showBorder', 'posterColor', 'textColor', 'starColor', 'mapInteriorColor',
     'showFrame', 'frameInset', 'frameWidth', 'finelineWidth',
     'circleSize', 'heartSize', 'houseSize', 'shapeOutlineWidth', 'shapeOffsetY', 'shapeOffsetX', 'snapEnabled',
@@ -135,6 +135,7 @@ interface StoreState {
     // New Feature Toggles
     showConstellations: boolean;
     showMilkyWay: boolean;
+    milkyWayOpacity: number; // master intensity for the Milky Way band (0–1)
     showGrid: boolean;
     designStyle: 'standard' | 'fineline' | 'minimal';
     finelineWidth: number; // NEW: Width for fineline double lines
@@ -174,6 +175,21 @@ interface StoreState {
     isDraggingMapImage: boolean;
     /** True while the vector street map is fetching tiles / rasterising a new view */
     streetMapRendering: boolean;
+    /**
+     * True only while DownloadButton is actively exporting a vector street map from the live
+     * editor. The editor normally rasterises vector street maps to a JPEG <image> for fast
+     * pan/zoom (see VectorStarMap's raster-preview effect) — correct for interactive use, but
+     * it means the DOM never contains real <path> elements there. DownloadButton's own export
+     * wait polls specifically for <path> data, a condition that can never become true in raster
+     * mode no matter how long you wait — this is what silently hung real customer exports
+     * (confirmed via direct testing: pathChars stayed frozen at just the location pin's fixed
+     * length for a full 168s run, unrelated to network speed). Setting this flag makes
+     * VectorStarMap render true vectors for the export's duration, matching what the
+     * server-side /render page (forceVector=true) already does successfully — and is also the
+     * behavior actually documented as intended: exports should be crisp vectors, not a frozen
+     * raster snapshot.
+     */
+    forceVectorExport: boolean;
 
     // Poster Type
     posterType: 'starmap' | 'streetmap' | 'coloredmap';
@@ -235,6 +251,7 @@ interface StoreState {
     setShowBorder: (show: boolean) => void;
     setShowConstellations: (show: boolean) => void;
     setShowMilkyWay: (show: boolean) => void;
+    setMilkyWayOpacity: (opacity: number) => void;
     setShowGrid: (show: boolean) => void;
     setDesignStyle: (style: 'standard' | 'fineline' | 'minimal') => void;
     setMaskShape: (shape: 'circle' | 'heart' | 'house' | 'rect') => void;
@@ -330,6 +347,7 @@ interface StoreState {
     setMapImageOpacity: (opacity: number) => void;
     setIsDraggingMapImage: (v: boolean) => void;
     setStreetMapRendering: (v: boolean) => void;
+    setForceVectorExport: (v: boolean) => void;
 
     // Active typography field (set when user clicks a text element in the poster)
     activeTypoField: 'title' | 'subtitle' | 'details' | 'dedication' | 'names' | null;
@@ -472,6 +490,7 @@ export const useStore = create<StoreState>((set) => ({
     // New Feature Defaults
     showConstellations: true,
     showMilkyWay: false,
+    milkyWayOpacity: 0.6,
     showGrid: true,
     designStyle: 'standard',
     finelineWidth: 1.0,
@@ -505,6 +524,7 @@ export const useStore = create<StoreState>((set) => ({
     mapImageOpacity: 1,
     isDraggingMapImage: false,
     streetMapRendering: false,
+    forceVectorExport: false,
     activeTypoField: null,
     typoFieldVersion: 0,
     pendingGlyphForInlineEdit: null,
@@ -574,6 +594,7 @@ export const useStore = create<StoreState>((set) => ({
             showBorder: state.showBorder,
             showConstellations: state.showConstellations,
             showMilkyWay: state.showMilkyWay,
+            milkyWayOpacity: state.milkyWayOpacity,
             showGrid: state.showGrid,
             designStyle: state.designStyle,
             maskShape: state.maskShape,
@@ -657,6 +678,7 @@ export const useStore = create<StoreState>((set) => ({
             showBorder: state.showBorder,
             showConstellations: state.showConstellations,
             showMilkyWay: state.showMilkyWay,
+            milkyWayOpacity: state.milkyWayOpacity,
             showGrid: state.showGrid,
             designStyle: state.designStyle,
             maskShape: state.maskShape,
@@ -739,6 +761,7 @@ export const useStore = create<StoreState>((set) => ({
     setShowBorder: (showBorder) => set({ showBorder }),
     setShowConstellations: (showConstellations) => set({ showConstellations }),
     setShowMilkyWay: (showMilkyWay) => set({ showMilkyWay }),
+    setMilkyWayOpacity: (milkyWayOpacity) => set({ milkyWayOpacity }),
     setShowGrid: (showGrid) => set({ showGrid }),
     setDesignStyle: (designStyle) => set({
         designStyle,
@@ -893,6 +916,7 @@ export const useStore = create<StoreState>((set) => ({
     setMapImageOpacity: (mapImageOpacity) => set({ mapImageOpacity }),
     setIsDraggingMapImage: (isDraggingMapImage) => set({ isDraggingMapImage }),
     setStreetMapRendering: (streetMapRendering) => set({ streetMapRendering }),
+    setForceVectorExport: (forceVectorExport) => set({ forceVectorExport }),
     setActiveTypoField: (activeTypoField) => set((s) => ({ activeTypoField, typoFieldVersion: s.typoFieldVersion + 1 })),
     setPendingGlyphForInlineEdit: (pendingGlyphForInlineEdit) => set({ pendingGlyphForInlineEdit }),
     setShowLocationPin: (showLocationPin) => set({ showLocationPin }),

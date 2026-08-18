@@ -17,7 +17,7 @@ const TEMPLATE_FIELDS = [
     'showBorder', 'borderStyle', 'shapeOutlineWidth', 'showFrame', 'frameInset', 'frameWidth',
     'showDivider', 'dividerLength', 'dividerThickness',
     'circleSize', 'heartSize', 'houseSize', 'shapeOffsetY',
-    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity',
+    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity', 'milkyWayOpacity',
     'showConstellations', 'showMilkyWay', 'showGrid',
     'showLocationPin', 'locationPinSize',
     'mapStyleUrl', 'mapColorPreset', 'mapBgColor', 'mapStreetColor',
