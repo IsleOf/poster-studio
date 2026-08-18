@@ -13,6 +13,7 @@ import StreetMapCapture from './StreetMapCapture';
 import { renderPosterToBlob } from '../utils/renderPoster';
 import { calculateMapExportTarget } from '../utils/mapExportSizing';
 import { isVectorStreetMapEnabled } from '../utils/vectorStreetMapRenderer';
+import { normalizePrintSize, printSizeInches } from '../utils/printSizes';
 
 declare global {
     interface Window {
@@ -40,6 +41,13 @@ function applyDesignState(state: Record<string, unknown>) {
         // Convert serialised date string back to Date object
         if (key === 'date' && typeof value === 'string') {
             patch[key] = new Date(value);
+            continue;
+        }
+        // printSize may be a string label (templates/recovered designs) — the renderer needs
+        // the object {…,ratio}. Normalise; skip if unresolvable (store default object stays).
+        if (key === 'printSize' && typeof value === 'string') {
+            const sz = normalizePrintSize(value);
+            if (sz) patch[key] = sz;
             continue;
         }
         patch[key] = value;
@@ -147,7 +155,7 @@ const PosterRenderPage: React.FC = () => {
         const prepareMap = async () => {
             try {
                 const target = calculateMapExportTarget({
-                    printSize,
+                    printSize: { ...printSize, ...printSizeInches(printSize) },
                     dpi: 300,
                     maskShape,
                     circleSize,
@@ -205,10 +213,11 @@ const PosterRenderPage: React.FC = () => {
                     await waitForVectorStreetMap(svgEl);
                 }
 
+                const { width: wIn, height: hIn } = printSizeInches(printSize);
                 const blob = await renderPosterToBlob(
                     svgEl,
-                    printSize.width,
-                    printSize.height,
+                    wIn,
+                    hIn,
                     300,
                     false  // no watermark for order renders
                 );

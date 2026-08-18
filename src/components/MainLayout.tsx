@@ -10,6 +10,7 @@ import { AUTO_SAVE_KEY } from '../store/useStore';
 import { trackEvent } from '../utils/analytics';
 import { fetchAndApplyTemplate } from '../utils/applyTemplate';
 import { isVectorStreetMapEnabled } from '../utils/vectorStreetMapRenderer';
+import { printSizeInches } from '../utils/printSizes';
 import VectorStarMap from './VectorStarMap';
 import SidebarControls from './SidebarControls';
 import EmailCaptureModal from './EmailCaptureModal';
@@ -18,22 +19,11 @@ import EmailCaptureModal from './EmailCaptureModal';
 // This keeps MapLibre GL JS (~200 KB gzipped) out of the initial bundle for star map users.
 const StreetMapCapture = React.lazy(() => import('./StreetMapCapture'));
 import type { DesignGroup } from '../types/listing';
+import { PRINT_SIZE_BY_LABEL as LOCKED_SIZE_MAP, normalizePrintSize } from '../utils/printSizes';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 const TEMPLATE_BOOTSTRAP_TIMEOUT_MS = 4000;
 
-const LOCKED_SIZE_MAP: Record<string, { label: string; width: number; height: number; ratio: string }> = {
-    '5x7':   { label: '5x7"',   width: 5,   height: 7,   ratio: '5/7'    },
-    '8x10':  { label: '8x10"',  width: 8,   height: 10,  ratio: '4/5'    },
-    '11x14': { label: '11x14"', width: 11,  height: 14,  ratio: '11/14'  },
-    '12x16': { label: '12x16"', width: 12,  height: 16,  ratio: '3/4'    },
-    '16x20': { label: '16x20"', width: 16,  height: 20,  ratio: '4/5'    },
-    '18x24': { label: '18x24"', width: 18,  height: 24,  ratio: '3/4'    },
-    '24x36': { label: '24x36"', width: 24,  height: 36,  ratio: '2/3'    },
-    'A5':    { label: 'A5',     width: 148, height: 210, ratio: '148/210' },
-    'A4':    { label: 'A4',     width: 210, height: 297, ratio: '210/297' },
-    'A3':    { label: 'A3',     width: 297, height: 420, ratio: '297/420' },
-};
 
 const MainLayout: React.FC = () => {
     const { templateId, slug, designSlug, designToken } = useParams<{ templateId?: string; slug?: string; designSlug?: string; designToken?: string }>();
@@ -43,6 +33,10 @@ const MainLayout: React.FC = () => {
     // This prevents the legacy default "My Star Map" from flickering before
     // the real first design loads.
     const [templateLoading, setTemplateLoading] = useState(true);
+    // No-watermark / full-res export for an authenticated admin opening ?admin=1 (e.g. to send a
+    // file manually via Etsy message). Server-verified (token signature checked by requireAdmin),
+    // not just a client-side claim — the export is the revenue-protected step.
+    const [adminExport, setAdminExport] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const {
         previewZoom, setPreviewZoom,
@@ -77,7 +71,8 @@ const MainLayout: React.FC = () => {
         setIsCopying(true);
         try {
             // Render at 150 DPI for a reasonable clipboard image size
-            const blob = await renderPosterToBlob(svgEl, printSize.width, printSize.height, 150, true);
+            const { width: wIn, height: hIn } = printSizeInches(printSize);
+            const blob = await renderPosterToBlob(svgEl, wIn, hIn, 150, true);
             await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
             toast({ title: 'Copied!', description: 'Poster image copied to clipboard.', status: 'success', duration: 2500, isClosable: true });
             trackEvent('copy_image');
@@ -115,6 +110,13 @@ const MainLayout: React.FC = () => {
                 if (!state) return;
                 const patch: Record<string, unknown> = { ...state };
                 if (typeof patch.date === 'string') patch.date = new Date(patch.date as string);
+                // Templates/recovered designs store printSize as a string label ("5x7"); the
+                // store + renderer need the object {label,width,height,ratio}. Normalise or drop
+                // (drop → keep the store default object) so printSize.ratio never throws.
+                if (typeof patch.printSize === 'string') {
+                    const sz = normalizePrintSize(patch.printSize);
+                    if (sz) patch.printSize = sz; else delete patch.printSize;
+                }
                 useStore.setState(patch as unknown as Parameters<typeof useStore.setState>[0]);
             })
             .catch(() => {})
@@ -122,12 +124,23 @@ const MainLayout: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [designToken]);
 
+    // Enable no-watermark export when ?admin=1 AND the stored admin token is valid server-side.
+    useEffect(() => {
+        if (searchParams.get('admin') !== '1') return;
+        const tok = localStorage.getItem('admin_token');
+        if (!tok) return;
+        fetch(`${API_URL}/api/admin/orders/stats`, { headers: { Authorization: `Bearer ${tok}` } })
+            .then(r => { if (r.ok) setAdminExport(true); })
+            .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // Auto-load Design001 (or the first available design for the default map type)
     // when the user lands on / with no template/listing URL. Without this, the page
     // shows the bare Zustand defaults ("My Star Map") which is not a finished design.
     // Autosave restore (below) can still override if the user clicks Restore.
     useEffect(() => {
-        if (templateId || slug) return;
+        if (templateId || slug || designToken) return; // /d/:token loads its own saved design below
         const API = API_URL;
         let cancelled = false;
         const controller = new AbortController();
@@ -176,7 +189,7 @@ const MainLayout: React.FC = () => {
 
     // Auto-save restore — offer to reload from localStorage on first mount (only if no template in URL)
     useEffect(() => {
-        if (templateId || slug) return; // template/listing URL overrides autosave
+        if (templateId || slug || designToken) return; // template/listing/design URL overrides autosave
         try {
             const raw = localStorage.getItem(AUTO_SAVE_KEY);
             if (!raw) return;
@@ -303,6 +316,7 @@ const MainLayout: React.FC = () => {
                 if (c.dividerThickness != null) store.setDividerThickness(c.dividerThickness);
                 if (typeof c.showConstellations === 'boolean') store.setShowConstellations(c.showConstellations);
                 if (typeof c.showMilkyWay === 'boolean') store.setShowMilkyWay(c.showMilkyWay);
+                if (c.milkyWayOpacity != null) store.setMilkyWayOpacity(c.milkyWayOpacity);
                 if (typeof c.showGrid === 'boolean') store.setShowGrid(c.showGrid);
                 if (c.gridWidth != null) store.setGridWidth(c.gridWidth);
                 if (c.gridOpacity != null) store.setGridOpacity(c.gridOpacity);
@@ -698,7 +712,7 @@ const MainLayout: React.FC = () => {
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
-                bg="gray.50"
+                bg="#EAEEF2"
                 p={{ base: 3, md: 8 }}
                 overflow="hidden"
                 position={{ base: 'sticky', md: 'relative' }}
@@ -867,7 +881,7 @@ const MainLayout: React.FC = () => {
 
                 {/* Loading spinner for listing/template pages */}
                 {templateLoading && (
-                    <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" zIndex={200} bg="gray.50">
+                    <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" zIndex={200} bg="#EAEEF2">
                         <VStack spacing={3}>
                             <Box as="div" w="24px" h="24px" border="2px solid" borderColor="gray.300" borderTopColor="gray.600" borderRadius="full"
                                 animation="spin 0.6s linear infinite" />
@@ -974,14 +988,23 @@ const MainLayout: React.FC = () => {
                     _hover={{ bg: 'blue.100', opacity: 0.6 }}
                     transition="background 0.15s"
                 />
-                <SidebarControls designGroups={designGroups} />
+                <SidebarControls designGroups={designGroups} isAdmin={adminExport} />
             </Box>
             )}
-            <EmailCaptureModal
-                listingSlug={slug || undefined}
-                designGroupId={designSlug || null}
-                designLabel={designSlug ? `your ${designSlug}` : null}
-            />
+            {/* Email capture is a LEAD-CAPTURE prompt for prospects browsing a listing: it offers
+                to email them a link back to the design they're building. Never show it on
+                /d/:designToken — that visitor ALREADY has the link (they arrived through it), and
+                is typically a paying customer opening the design they bought. It fires on first
+                interaction, so on mobile it popped up and covered the whole screen the instant a
+                buyer tapped to edit — which is what blocked a real customer from editing her
+                purchased map. */}
+            {!designToken && (
+                <EmailCaptureModal
+                    listingSlug={slug || undefined}
+                    designGroupId={designSlug || null}
+                    designLabel={designSlug ? `your ${designSlug}` : null}
+                />
+            )}
         </Flex>
         </>
     );
