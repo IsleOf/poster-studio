@@ -161,6 +161,30 @@ const LISTINGS_CONFIG = [
     slug: 'star-map-forest-night',
     designs: ['sm002-design001', 'sm002-design002'],
   },
+  // "(Digital Download)" listings — currently the ones actually LIVE on Etsy (see
+  // docs/HANDOVER note 2026-08-11). Reuse the same design groups as their richer,
+  // currently-unpublished counterparts above; this is what keeps their listing_templates
+  // membership from silently drifting back to empty/incomplete.
+  {
+    slug: 'star-map-digital',
+    designs: ['sm001-design001', 'sm001-design002', 'sm001-design003', 'sm001-design004', 'sm001-design005', 'sm001-design006'],
+  },
+  {
+    slug: 'home-map-digital',
+    designs: ['cmhs001-design001'],
+  },
+  {
+    slug: 'heart-map-digital',
+    designs: ['cmhh001-design001'],
+  },
+  {
+    slug: 'street-map-digital',
+    designs: ['smbw001-design001'],
+  },
+  {
+    slug: 'star-map-forest-digital',
+    designs: ['sm002-design001', 'sm002-design002'],
+  },
 ];
 
 // Resolve IDs from DB so hardcoded values can't diverge between environments
@@ -277,4 +301,59 @@ for (const listing of LISTINGS) {
   if (issues === 0) {
     console.log(`  ✓ Listing ${listing.listing_id} (${listing.slug}): ${rows.length} templates, all consistent`);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GLOBAL ORPHAN SCAN
+//
+// Everything above only walks the hardcoded DESIGNS / LISTINGS_CONFIG arrays, so a design
+// this file has never heard of is invisible to it — the script would print "all state is
+// consistent" while a brand-new design group sat detached from every listing. That is
+// exactly how five live listings ended up with 1 of 72 templates linked for six weeks, and
+// the listing factory reproduces the same shape automatically unless something checks for
+// it. This pass queries the whole DB instead of the config, so new work fails loudly.
+console.log('\n=== Orphan Scan (whole DB, not just configured listings) ===');
+let orphanIssues = 0;
+
+const ungroupedDesigns = db.prepare(`
+  SELECT id, name FROM design_groups WHERE listing_id IS NULL
+`).all();
+for (const g of ungroupedDesigns) {
+  console.log(`  ✗ design_group "${g.id}" (${g.name}) has listing_id = NULL — attached to no listing`);
+  orphanIssues++;
+}
+
+// Only templates that BELONG to a design group are expected to appear on a listing. The
+// original standalone presets (classic-dark, modern-white, …, created 2026-03 before the
+// listing system existed) legitimately have design_group_id = NULL and no listing_templates
+// row — flagging those would make this scan noisy, and a noisy gate is one people learn to
+// ignore.
+const unlinkedTemplates = db.prepare(`
+  SELECT t.id, t.design_group_id
+  FROM templates t
+  LEFT JOIN listing_templates lt ON lt.template_id = t.id
+  WHERE lt.template_id IS NULL AND t.is_active = 1 AND t.design_group_id IS NOT NULL
+`).all();
+for (const t of unlinkedTemplates) {
+  console.log(`  ✗ template "${t.id}" (group ${t.design_group_id}) has no listing_templates row — invisible on every listing page`);
+  orphanIssues++;
+}
+
+const danglingGroup = db.prepare(`
+  SELECT t.id, t.design_group_id
+  FROM templates t
+  WHERE t.design_group_id IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM design_groups g WHERE g.id = t.design_group_id)
+`).all();
+for (const t of danglingGroup) {
+  console.log(`  ✗ template "${t.id}" points at missing design_group "${t.design_group_id}"`);
+  orphanIssues++;
+}
+
+if (orphanIssues === 0) {
+  console.log('  ✓ No orphaned design groups or templates.');
+} else {
+  console.log(`\n✗ ${orphanIssues} orphan issue(s) found — these will NOT show up for customers.`);
+  console.log('  Fix by attaching the design group to a listing and inserting listing_templates rows.');
+  process.exitCode = 1;
 }
