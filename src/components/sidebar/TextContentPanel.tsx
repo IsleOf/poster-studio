@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { ChevronDown } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { trackEvent } from '../../utils/analytics';
+import { asCalendarDate } from '../../utils/dateOnly';
 import { inputStyles, labelStyles, toggleButtonStyles } from './sidebarStyles';
 import {
     Box, VStack, HStack, Text, Input, Button, Accordion, AccordionItem,
@@ -276,8 +277,41 @@ const TextContentPanel: React.FC = () => {
         maskShape,
         locationAllCaps, setLocationAllCaps,
         showDivider, setShowDivider, dividerLength, setDividerLength, dividerThickness, setDividerThickness,
+        dividerOffsetY, setDividerOffsetY,
         showVertSep, setShowVertSep, vertSepHeight, setVertSepHeight, vertSepThickness, setVertSepThickness,
+        vertSepOffsetY, setVertSepOffsetY,
     } = useStore();
+
+    // ── Clearable text lines ────────────────────────────────────────────────
+    // Clearing a custom-text field should REMOVE that line from the poster. Customers delete the
+    // characters and reasonably expect it gone — but the renderer treats an empty customText value
+    // as "not customised, fall back to the auto-generated default", which silently puts it right
+    // back. (Two real customers hit this on the date; one spent a paid revision on a change that
+    // did nothing.) That renderer rule is load-bearing — most saved designs legitimately store ''
+    // and rely on the default — so intent is expressed via the show* flag here instead of changing
+    // renderer semantics, which would retroactively alter existing customers' posters.
+    //
+    // Hiding happens on BLUR, never on keystroke: people routinely clear a field before typing a
+    // replacement, and hiding per-keystroke made the line flicker off/on mid-edit (and could leave
+    // it hidden if they wandered off with the box momentarily empty). Typing always restores it.
+    //
+    // Applied uniformly to every line that has a Visibility toggle EXCEPT `names`: that input is
+    // itself rendered only when showNames is true, so auto-hiding would make the field vanish
+    // out from under the user mid-edit. Names stays toggle-only.
+    const clearableText = (
+        field: 'date' | 'location' | 'coords',
+        isShown: boolean,
+        setShown: (v: boolean) => void,
+    ) => ({
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+            const v = e.target.value;
+            setCustomText(field, v);
+            if (v.trim() !== '' && !isShown) setShown(true);
+        },
+        onBlur: (e: React.FocusEvent<HTMLInputElement>) => {
+            if (e.target.value.trim() === '') setShown(false);
+        },
+    });
 
     const [locationQuery, setLocationQuery] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -378,7 +412,7 @@ const TextContentPanel: React.FC = () => {
             <HStack spacing={4}>
                 <FormControl>
                     <FormLabel {...labelStyles}>Date</FormLabel>
-                    <Input type="date" value={format(date, 'yyyy-MM-dd')} onChange={handleDateChange} {...inputStyles} />
+                    <Input type="date" value={format(asCalendarDate(date), 'yyyy-MM-dd')} onChange={handleDateChange} {...inputStyles} />
                 </FormControl>
                 <FormControl>
                     <FormLabel {...labelStyles}>Time</FormLabel>
@@ -505,6 +539,12 @@ const TextContentPanel: React.FC = () => {
                     <Button onClick={() => setShowCoords(!showCoords)} {...toggleButtonStyles(showCoords)}>Coords</Button>
                     <Button onClick={() => setShowNames(!showNames)} {...toggleButtonStyles(showNames)}>Names</Button>
                 </HStack>
+                {/* Discoverability: two customers in a row tried to remove the date by clearing the
+                    text box in "Advanced Text Options" and couldn't find these toggles. Spell out
+                    that tapping a button here removes that line from the poster. */}
+                <Text fontSize="xs" color="gray.500" mt={2}>
+                    Tap to show or hide each line on your poster. A dimmed button means that line is hidden.
+                </Text>
             </Box>
 
             {/* Horizontal Divider controls */}
@@ -531,6 +571,21 @@ const TextContentPanel: React.FC = () => {
                                 <Text fontSize="xs" color="gray.500">{dividerThickness.toFixed(1)}px</Text>
                             </HStack>
                             <Slider value={dividerThickness} min={0.3} max={4} step={0.1} onChange={(v) => setDividerThickness(parseFloat(v.toFixed(1)))}>
+                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
+                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
+                            </Slider>
+                        </Box>
+                        <Box w="full">
+                            <HStack justify="space-between" mb={1}>
+                                <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Position</Text>
+                                <HStack spacing={2}>
+                                    <Text fontSize="xs" color="gray.500">{Math.round(dividerOffsetY)}px</Text>
+                                    {Math.round(dividerOffsetY) !== 0 && (
+                                        <Button size="xs" variant="ghost" colorScheme="gray" px={1} h="auto" py={0} fontSize="xs" onClick={() => setDividerOffsetY(0)}>Reset</Button>
+                                    )}
+                                </HStack>
+                            </HStack>
+                            <Slider value={dividerOffsetY} min={-300} max={300} step={1} onChange={setDividerOffsetY}>
                                 <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                 <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                             </Slider>
@@ -568,6 +623,21 @@ const TextContentPanel: React.FC = () => {
                                     <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                                 </Slider>
                             </Box>
+                            <Box w="full">
+                                <HStack justify="space-between" mb={1}>
+                                    <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Position</Text>
+                                    <HStack spacing={2}>
+                                        <Text fontSize="xs" color="gray.500">{Math.round(vertSepOffsetY)}px</Text>
+                                        {Math.round(vertSepOffsetY) !== 0 && (
+                                            <Button size="xs" variant="ghost" colorScheme="gray" px={1} h="auto" py={0} fontSize="xs" onClick={() => setVertSepOffsetY(0)}>Reset</Button>
+                                        )}
+                                    </HStack>
+                                </HStack>
+                                <Slider value={vertSepOffsetY} min={-100} max={100} step={1} onChange={setVertSepOffsetY}>
+                                    <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
+                                    <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
+                                </Slider>
+                            </Box>
                         </VStack>
                     )}
                 </Box>
@@ -588,12 +658,15 @@ const TextContentPanel: React.FC = () => {
                                 <FormLabel {...labelStyles}>Custom Date Text</FormLabel>
                                 <Input
                                     value={customText.date}
-                                    onChange={(e) => setCustomText('date', e.target.value)}
+                                    {...clearableText('date', showDate, setShowDate)}
                                     placeholder={format(date, 'MMMM do, yyyy').toUpperCase()}
                                     name="custom-date-text-unique"
                                     autoComplete="new-password"
                                     {...inputStyles}
                                 />
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                    Clear this field to remove the date from your poster.
+                                </Text>
                             </FormControl>
                             <FormControl>
                                 <HStack justify="space-between" align="center" mb={2}>
@@ -610,21 +683,27 @@ const TextContentPanel: React.FC = () => {
                                 </HStack>
                                 <Input
                                     value={customText.location}
-                                    onChange={(e) => setCustomText('location', e.target.value)}
+                                    {...clearableText('location', showLocation, setShowLocation)}
                                     placeholder={location ? location.toUpperCase() : 'Location'}
                                     autoComplete="new-password"
                                     {...inputStyles}
                                 />
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                    Clear this field to remove the location from your poster.
+                                </Text>
                             </FormControl>
                             <FormControl>
                                 <FormLabel {...labelStyles}>Custom Coordinates</FormLabel>
                                 <Input
                                     value={customText.coords}
-                                    onChange={(e) => setCustomText('coords', e.target.value)}
+                                    {...clearableText('coords', showCoords, setShowCoords)}
                                     placeholder="0.0000° N, 0.0000° E"
                                     autoComplete="new-password"
                                     {...inputStyles}
                                 />
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                    Clear this field to remove the coordinates from your poster.
+                                </Text>
                             </FormControl>
                             {showNames && (
                                 <FormControl>

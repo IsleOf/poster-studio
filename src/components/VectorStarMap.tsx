@@ -8,6 +8,7 @@ import { useStore } from '../store/useStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getProjectionRotation } from '../utils/astronomy';
 import { format } from 'date-fns';
+import { asCalendarDate } from '../utils/dateOnly';
 import { useDebounce } from '../hooks/useDebounce';
 import {
     isVectorStreetMapEnabled,
@@ -100,6 +101,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         showInnerRing, innerRingWidth, innerRingInset,
         showOuterRing, outerRingWidth, outerRingGap,
         showHeartDecor,
+        forceVectorExport,
     } = useStore(useShallow(s => ({
         title: s.title, subtitle: s.subtitle, date: s.date, time: s.time,
         lat: s.lat, lng: s.lng, location: s.location,
@@ -156,7 +158,16 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         showInnerRing: s.showInnerRing, innerRingWidth: s.innerRingWidth, innerRingInset: s.innerRingInset,
         showOuterRing: s.showOuterRing, outerRingWidth: s.outerRingWidth, outerRingGap: s.outerRingGap,
         showHeartDecor: s.showHeartDecor,
+        forceVectorExport: s.forceVectorExport,
     })));
+
+    // `forceVector` prop is true only on the dedicated /render page (server-side Puppeteer
+    // target). `forceVectorExport` is the live editor's equivalent, set by DownloadButton for
+    // the duration of an export — see the field's doc comment in useStore.ts for why this
+    // exists: without it, the editor's fast raster preview mode (real <path> data never
+    // reaches the DOM) made DownloadButton's own "wait for vector paths" check unsatisfiable,
+    // silently hanging every editor-triggered street map export forever.
+    const useTrueVectors = forceVector || forceVectorExport;
 
     // Keep a ref to inlineEdit so the pending-glyph effect always sees the latest value
     // without needing it in the dependency array (avoids circular re-runs)
@@ -299,7 +310,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
     }, [width, height, maskShape, debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetX, debouncedShapeOffsetY]);
 
     useEffect(() => {
-        if (forceVector) {
+        if (useTrueVectors) {
             setVectorStreetMapRaster(null);
             return;
         }
@@ -375,7 +386,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
     }, [
         // NOTE: mapImageOffsetX/Y intentionally excluded — panning is a display-time
         // transform on the <image>; regenerating the raster on pan caused the snap-back.
-        vectorStreetMap, forceVector, mapGeomForRaster,
+        vectorStreetMap, useTrueVectors, mapGeomForRaster,
         mapBgColor, mapLandColor, mapWaterColor, mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor, mapStreetColor,
         width, height,
     ]);
@@ -564,7 +575,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
 
         // Background Image or Color
         if (useVectorStreetMap && (vectorStreetMapRaster || vectorStreetMap)) {
-            if (!forceVector && vectorStreetMapRaster) {
+            if (!useTrueVectors && vectorStreetMapRaster) {
                 // Fast preview: render the pre-rasterised bitmap instead of live vector paths.
                 // Background rect (in map bg colour) sits behind the image so panning beyond
                 // the rendered area never reveals transparency/black.
@@ -1467,7 +1478,7 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
         showBorder, showConstellations, showGrid, designStyle, maskShape, isLightMode, // Toggles
         debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetY, debouncedShapeOffsetX, debouncedShapeOutlineWidth, // Shape
         posterColor, textColor, starColor, mapInteriorColor, mapStreetColor, width, height, // Colors & Dims
-        useVectorStreetMap, vectorStreetMap, vectorStreetMapRaster, forceVector,
+        useVectorStreetMap, vectorStreetMap, vectorStreetMapRaster, useTrueVectors,
         mapBgColor, mapWaterColor, mapLandColor,
         mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
         mapBackgroundImage, mapImageOpacity, borderStyle, posterType, // New Props
@@ -1953,7 +1964,10 @@ const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = fals
             .attr('transform', `translate(${width / 2}, ${textStartY + naturalY + detailsOffsetY})`)
             .attr('text-anchor', 'middle');
 
-        const dateStr = customText.date || format(new Date(date), 'MMMM do, yyyy').toUpperCase();
+        // asCalendarDate: the same calendar day must render whether this SVG is drawn in the
+        // customer's own browser (their local timezone) or server-side by Puppeteer (which
+        // runs in Europe/Berlin/UTC in production) — see src/utils/dateOnly.ts.
+        const dateStr = customText.date || format(asCalendarDate(new Date(date)), 'MMMM do, yyyy').toUpperCase();
         const rawLocStr = customText.location || (location ? location.toUpperCase() : '');
         const locStr = locationAllCaps ? rawLocStr.toUpperCase() : rawLocStr;
         const coordsStr = customText.coords || `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;

@@ -33,6 +33,15 @@ const TILEJSON_URL = 'https://tiles.openfreemap.org/planet';
 const TILE_SIZE = 512;
 const MAX_SOURCE_ZOOM = 14;
 const MIN_STREET_DETAIL_SOURCE_ZOOM = 14;
+// Absolute floor for the tile-budget backoff below — z10 still resolves major/minor
+// roads, just not fine service-road detail. Only reached for very wide (zoomed-out) views.
+const MIN_SOURCE_ZOOM_FLOOR = 10;
+// A wide/zoomed-out poster view covers a large geographic fraction of the world; fetching
+// that whole area at the fixed street-detail zoom (14) can balloon to hundreds of tiles
+// (observed 163-277+ for a city-wide template), which is slow and failure-prone on real
+// customer connections. Back off sourceZoom one level at a time (each step ~quarters the
+// tile count) until the fetch fits this budget, never going below MIN_SOURCE_ZOOM_FLOOR.
+const TILE_COUNT_BUDGET = 150;
 const TILE_FETCH_TIMEOUT_MS = 15000;
 const TILE_FETCH_CONCURRENCY = 8;
 const TILE_FETCH_RETRIES = 2;
@@ -264,8 +273,10 @@ export async function renderVectorStreetMap(options: VectorStreetMapOptions): Pr
     // Do not let zoomed-out poster views use generalized low-zoom vector tiles.
     // Print output can resolve many fine streets even when the map covers a city,
     // so keep source tiles at street-detail zoom and project them into the same
-    // geographic bounds instead of changing the visual map zoom.
-    const sourceZoom = Math.max(
+    // geographic bounds instead of changing the visual map zoom — UNLESS that would
+    // require fetching more tiles than TILE_COUNT_BUDGET, in which case back off a
+    // level at a time (see constants above) until the fetch is a reasonable size.
+    const preferredSourceZoom = Math.max(
         0,
         Math.min(MAX_SOURCE_ZOOM, Math.max(MIN_STREET_DETAIL_SOURCE_ZOOM, Math.floor(renderZoom)))
     );
@@ -274,12 +285,23 @@ export async function renderVectorStreetMap(options: VectorStreetMapOptions): Pr
     const topLeft = { x: centerWorld.x - half, y: centerWorld.y - half };
     const bottomRight = { x: centerWorld.x + half, y: centerWorld.y + half };
     const renderWorldSize = TILE_SIZE * Math.pow(2, renderZoom);
-    const sourceTileCount = Math.pow(2, sourceZoom);
 
-    const minTileX = Math.floor((topLeft.x / renderWorldSize) * sourceTileCount) - 1;
-    const maxTileX = Math.floor((bottomRight.x / renderWorldSize) * sourceTileCount) + 1;
-    const minTileY = Math.max(0, Math.floor((topLeft.y / renderWorldSize) * sourceTileCount) - 1);
-    const maxTileY = Math.min(sourceTileCount - 1, Math.floor((bottomRight.y / renderWorldSize) * sourceTileCount) + 1);
+    const tileBoundsAt = (zoom: number) => {
+        const sourceTileCount = Math.pow(2, zoom);
+        const minTileX = Math.floor((topLeft.x / renderWorldSize) * sourceTileCount) - 1;
+        const maxTileX = Math.floor((bottomRight.x / renderWorldSize) * sourceTileCount) + 1;
+        const minTileY = Math.max(0, Math.floor((topLeft.y / renderWorldSize) * sourceTileCount) - 1);
+        const maxTileY = Math.min(sourceTileCount - 1, Math.floor((bottomRight.y / renderWorldSize) * sourceTileCount) + 1);
+        return { minTileX, maxTileX, minTileY, maxTileY, count: (maxTileX - minTileX + 1) * (maxTileY - minTileY + 1) };
+    };
+
+    let sourceZoom = preferredSourceZoom;
+    let bounds = tileBoundsAt(sourceZoom);
+    while (bounds.count > TILE_COUNT_BUDGET && sourceZoom > MIN_SOURCE_ZOOM_FLOOR) {
+        sourceZoom -= 1;
+        bounds = tileBoundsAt(sourceZoom);
+    }
+    const { minTileX, maxTileX, minTileY, maxTileY } = bounds;
 
     const majorClasses = new Set(['motorway', 'trunk', 'primary', 'secondary']);
     const smallClasses = new Set(['tertiary', 'minor', 'residential', 'unclassified']);
