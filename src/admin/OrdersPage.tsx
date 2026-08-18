@@ -114,8 +114,14 @@ const OrdersPage: React.FC = () => {
                     value={search} onChange={e => setSearch(e.target.value)}
                     maxW="300px"
                 />
-                <Select size="sm" maxW="180px" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
+                <Button size="sm" colorScheme="orange"
+                    variant={statusFilter === 'needs_attention' ? 'solid' : 'outline'}
+                    onClick={() => { setStatusFilter('needs_attention'); setPage(1); }}>
+                    ⚠ Needs attention
+                </Button>
+                <Select size="sm" maxW="190px" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
                     <option value="all">All statuses</option>
+                    <option value="needs_attention">⚠ Needs attention</option>
                     <option value="pending">Pending</option>
                     <option value="pending_manual">Pending Manual</option>
                     <option value="rendering">Rendering</option>

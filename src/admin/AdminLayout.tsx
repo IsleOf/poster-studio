@@ -17,10 +17,12 @@ import ListingsPage from './ListingsPage';
 import ListingDesignsPage from './ListingDesignsPage';
 import DesignImportPage from './DesignImportPage';
 import InboxPage from './InboxPage';
+import LeadsPage from './LeadsPage';
 
 const NAV_ITEMS = [
     { path: '/admin/dashboard', label: 'Dashboard' },
     { path: '/admin/orders', label: 'Orders' },
+    { path: '/admin/leads', label: 'Leads' },
     { path: '/admin/inbox', label: 'Inbox' },
     { path: '/admin/queue', label: 'Queue' },
     { path: '/admin/listings', label: 'Listings' },
@@ -88,6 +90,7 @@ const AdminLayout: React.FC = () => {
                     <Route path="dashboard" element={<DashboardPage />} />
                     <Route path="orders" element={<OrdersPage />} />
                     <Route path="orders/:id" element={<OrderDetailPage />} />
+                    <Route path="leads" element={<LeadsPage />} />
                     <Route path="inbox" element={<InboxPage />} />
                     <Route path="queue" element={<QueuePage />} />
                     <Route path="templates" element={<TemplatesPage />} />

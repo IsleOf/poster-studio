@@ -171,6 +171,15 @@ export async function updateOrderNotes(id: number, notes: string) {
     return res.json();
 }
 
+export async function updateOrderEmail(id: number, email: string) {
+    const res = await adminFetch(`/api/admin/orders/${id}/email`, {
+        method: 'PATCH',
+        body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || 'Failed to update email');
+    return res.json();
+}
+
 export async function bulkUpdateOrderStatus(ids: number[], status: string) {
     return Promise.all(ids.map(id => updateOrderStatus(id, status)));
 }

@@ -102,6 +102,10 @@ const EtsyPage: React.FC = () => {
                                 <Button size="sm" onClick={handleSync} isLoading={syncing}>
                                     Sync Orders Now
                                 </Button>
+                                <Button as="a" href="/auth/etsy" size="sm" variant="outline"
+                                    title="Re-run the OAuth consent flow to refresh the token with all current scopes (e.g. email_r for buyer emails)">
+                                    Reauthorize
+                                </Button>
                                 {syncResult && (
                                     <Text fontSize="sm" color={syncResult.ok ? 'green.600' : 'red.500'} fontWeight="600">
                                         {syncResult.msg}
