@@ -5,31 +5,66 @@
 
 Read this file before touching anything. The bugs in here have already cost hours — read the "Known Failure Modes" section before you make assumptions.
 
-> **Latest session handoff:** [docs/HANDOVER-2026-06-09-sm002.md](docs/HANDOVER-2026-06-09-sm002.md) —
-> SM002 "Forest Night Sky" star-map listing (forest-image background, Circle+Heart, wedding-reference
-> text matched exactly), plus reusable rendering features: background fit-to-width + vertical slide
-> (`backgroundImageOffsetY`), multi-line title with `titleLineHeight`, script-font subtitle,
-> `detailsDateFirst`, `date` as a template field. Committed + deployed; all 5 listings consistent.
-> See also CLAUDE.md "SM002 …".
+> **Latest session handoff:** [docs/HANDOVER-2026-08-18-export-hang-and-price-fix.md](docs/HANDOVER-2026-08-18-export-hang-and-price-fix.md) —
+> Fixed the client-side vector street map export hang (root cause: the live editor renders street
+> maps as a raster `<image>`, so `DownloadButton`'s "wait for vector paths" check could never pass
+> — no timeout could have fixed it; added a `forceVectorExport` store flag instead), the
+> `price_cents` 100x inflation bug (Etsy Money-object divisor was being ignored; backfilled 34
+> corrupted production order rows), and a wide-area street map tile-count explosion (361→121 tiles
+> for a city-wide view via a new tile-count budget with graceful zoom backoff). All three verified
+> with real Playwright runs (not just reasoning) and deployed to production. ⚠️ Also surfaced: the
+> A-series print-size fix mentioned below was sitting uncommitted and got swept into this
+> session's `dist` deploy as a side effect — it's now live.
 >
-> Earlier: [docs/HANDOVER-2026-06-04-shop.md](docs/HANDOVER-2026-06-04-shop.md) — size-lock fix,
-> digital size-unlock, order confirm-mode, 30-day edit window, inbound message triage, listing-copy
-> audit + Etsy push, and remaining user actions (Gmail forward, publish drafts, delete stray listing).
+> Previous: [docs/HANDOVER-2026-08-14-factory-stage004.md](docs/HANDOVER-2026-08-14-factory-stage004.md) —
+> Listing-factory stage 004 (render) wired end-to-end. While building the render-proof step
+> (rendering through the real `PosterRenderPage` path, not the admin editor preview), found and
+> fixed a live production bug: **every A-series print size (A4/A5/A3/A2/A1) silently failed to
+> export** — `PRINT_SIZE_BY_LABEL` stores those in millimetres but every render call site treated
+> them as inches, computing a ~63000×89100px canvas for A4 that fails to rasterize. No customer
+> has ever ordered an A-series size, so it was undiscovered. Fixed locally across 7 call sites;
+> deployed to prod 2026-08-18 (see latest handoff above).
+>
+> Previous: [docs/HANDOVER-2026-08-02-contabo-migration.md](docs/HANDOVER-2026-08-02-contabo-migration.md) —
+> **READ THIS FIRST.** The server moved: AWS EC2 Sydney (`3.107.34.169`) → **Contabo VPS in Paris
+> (`169.58.110.137`)**, 7.8 GB RAM. Every deploy/SSH command in this file and in CLAUDE.md still names
+> the old IP — use the new one. Covers the full cutover, five gotchas hit on the way, and five findings
+> that need decisions — notably that **`server/` is gitignored so the backend has no version control**,
+> and that an **SSRF guard in `designs.js` is written but never deployed**. Old box is intact as a
+> rollback; don't decommission it yet.
+>
+> Previous: [docs/HANDOVER-2026-07-16-digital-pivot.md](docs/HANDOVER-2026-07-16-digital-pivot.md) —
+> The shop model changed completely since the entries below: it's now digital-only,
+> made-to-order via Etsy's Personalization box, 5 live listings at $6.99. Covers a critical order-routing
+> bug (fixed today — wrong design was being rendered for made-to-order orders), an Etsy inventory-price
+> API gotcha, the buyer-email approval saga, an Etsy API deprecation, a pending server migration, and an
+> AI-art fulfillment pivot under discussion. The business-model description in §1 and the "Next Steps" in
+> §16/§19 below are **stale** — everything else in this file (render pipeline, font system, DB schema,
+> deployment mechanics) is still accurate.
+>
+> Earlier: [docs/HANDOVER-2026-06-09-sm002.md](docs/HANDOVER-2026-06-09-sm002.md) — SM002 "Forest Night
+> Sky" star-map listing, background fit-to-width + vertical slide, multi-line title, script-font
+> subtitle, `detailsDateFirst`.
+>
+> Earlier still: [docs/HANDOVER-2026-06-04-shop.md](docs/HANDOVER-2026-06-04-shop.md) — size-lock fix,
+> digital size-unlock, order confirm-mode, 30-day edit window, inbound message triage.
 
 ---
 
 ## 1. What This Project Is
 
-**The Mapped Moment** is a custom poster design tool + Etsy storefront for selling personalized star maps, street maps, and colored maps as digital downloads and physical prints.
+**The Mapped Moment** is a custom poster design tool + Etsy storefront for selling personalized star maps, street maps, and colored maps.
 
-**Business model:**
-- Customer finds listing on Etsy → buys digital download ($12-20) or physical print ($25-45)
-- Customer visits themappedmoment.com/verify → enters Etsy order number
-- System verifies purchase via Etsy API → renders poster → delivers download link or sends to print fulfillment
-- For digital: customer gets 300 DPI PNG download (link valid 7 days, 3 free revisions)
-- For prints: system uploads to Printify → ships to customer
+⚠️ **STALE SECTION — see [docs/HANDOVER-2026-07-16-digital-pivot.md](docs/HANDOVER-2026-07-16-digital-pivot.md) for the current model.** Summary: the shop pivoted from physical-print-via-Printify to **digital-only, made-to-order via Etsy**. There are no physical listings live (archived, not deleted — `archive/physical-listings/`). Printify is not the active fulfiller.
 
-**Revenue so far:** $0 — shop is connected; catalog is now 4 draft listings (Star Map, Couple Map, Heart Map, Home/Street Map) across 9 design groups, pending mockup images and publish.
+**Current business model (as of 2026-07-16):**
+- 5 live Etsy listings, `type=download` + `when_made=made_to_order`, **$6.99** each.
+- Buyer designs free at `themappedmoment.com/go/<code>`, copies their design code, buys on Etsy, pastes the code into Etsy's **Personalization box at checkout**.
+- The 2-minute Etsy poll reads that code from the order's **variations** (not `transaction.personalization` — see the digital-pivot doc for a critical bug this caused), renders, and attempts to email the file.
+- `/verify` (enter order number + design code) remains as a self-serve backup/edit path.
+- **Buyer email is `null` from Etsy shop-wide** (separate approval pending) — most orders currently need **manual delivery** via Etsy message.
+
+**Revenue so far:** 2 real paid orders (both $0.99, pre-reprice — pricing is now $6.99 for future orders). See the digital-pivot doc §1 for order-table caveats (legacy cancelled rows, unverified old rows).
 
 ---
 
@@ -205,6 +240,38 @@ const thumbSize = group.sizes.find(sz => sz.fulfillment_size === '8x10') ?? grou
 // ...
 style={{ aspectRatio: '4/5', objectFit: 'cover' }}
 ```
+
+### G. Etsy variation confused with design code / print size (fixed 2026-07-16)
+
+**Symptom:** A real paid made-to-order order rendered the wrong (generic default) poster; a design
+token ended up stored in `orders.print_size`.
+
+**Root cause:** `server/services/etsy.js` `extractToken()` only checked `transaction.personalization`
+for the buyer's pasted design code. On made-to-order listings, Etsy actually delivers that code as a
+**variation** (`property_id: 54, formatted_name: "Personalization"`) — a different field entirely.
+`sizeFromVariations()` also had a `|| vals[0]` fallback that, with no real size variation present,
+grabbed that same Personalization variation's value and stored it as the size.
+
+**Fix:** `extractToken()` now also scans `transaction.variations` for `property_id === 54` /
+`/personaliz/i.test(formatted_name)`. `sizeFromVariations()` excludes that variation and returns
+`null` (never `vals[0]`) when no real size variation exists. **Any new code that reads
+`transaction.variations` must exclude the Personalization variation before treating a value as
+anything else** — this is an easy mistake to repeat.
+
+### H. Etsy `PATCH /listings/{id}` price field silently no-ops (fixed 2026-07-16)
+
+**Symptom:** `PATCH /listings/{id} {price: X}` returns `200 OK`, but re-fetching the listing shows the
+price unchanged.
+
+**Root cause:** On inventory-backed listings (anything with offerings — which these are, even with
+only one offering), price lives on the **inventory offering**, not the top-level listing resource. The
+top-level `price` field is read-only display data.
+
+**Fix:** `PUT /listings/{id}/inventory` with the offering's `price` as a plain decimal. Working
+example: `server/scripts/reprice-digital-listings.js`. **General rule: never trust a 200 from an Etsy
+PATCH — always re-GET and verify the field actually changed.** This is the second silent-no-op pattern
+found in this codebase (the other: nginx `state=inactive` parking a listing in undocumented "edit"
+limbo — see the Etsy troubleshooting section in `CLAUDE.md`).
 
 ---
 
@@ -598,11 +665,11 @@ ls /var/www/poster-studio/designs/
 
 ## 16. Next Steps (Priority Order)
 
-1. **Publish Etsy listings** — Create listing images, publish via admin Etsy page, set `ETSY_DIGITAL_LISTING_IDS` in .env
-2. **Enable server-side rendering** — Set `ENABLE_LOCAL_RENDER=true` and `FRONTEND_URL` in production .env, add 2GB swap
-3. **End-to-end order test** — Place test order on Etsy, verify render → download works
-4. **Prodigi print integration** — `server/services/prodigi.js`, wire into verify flow
-5. **Harden production secrets** — Rotate `ADMIN_PASSWORD`, `JWT_SECRET`, `DOWNLOAD_SECRET` to 24+ char random values
+⚠️ **STALE — this list predates the digital pivot** (listings are published and live, server-side
+rendering is on, Prodigi is already the fulfiller for the print path even though print isn't currently
+sold). **See [docs/HANDOVER-2026-07-16-digital-pivot.md](docs/HANDOVER-2026-07-16-digital-pivot.md)
+§10 for the current next-steps list.** Item 5 (secret rotation) is still a legitimately open item —
+not confirmed done as of the digital-pivot doc.
 
 ---
 
@@ -633,6 +700,12 @@ ls /var/www/poster-studio/designs/
 
 > Full detail in **CLAUDE.md** sections "Fulfillment & Print Products", "Profitability Guard",
 > "Markets/products/shipping", and "Modular architecture". This is the handover summary.
+>
+> ⚠️ **The infrastructure described below (profitability guard, Prodigi, shipping profiles) is still
+> live in the code but the shop currently sells digital-only** — the physical/print/framed path this
+> section describes isn't actively used (no physical listings are live; see
+> [docs/HANDOVER-2026-07-16-digital-pivot.md](docs/HANDOVER-2026-07-16-digital-pivot.md) §1). The "open
+> question" at the end of this section (shipping profiles vs. size-as-variation) is moot for now.
 
 ### Platform-agnostic fulfillment
 Product type (`digital`/`print`/`framed`) comes from the saved design `orderType` first

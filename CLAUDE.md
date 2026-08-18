@@ -2,22 +2,33 @@
 
 ## Project Knowledge Base — read first
 
-On this dev machine, durable cross-session context for this project lives in the local
-Obsidian **second-brain** vault (outside the repo, sanitized — no secrets):
+⚠️ **2026-07-16: the vault path below moved and was restructured — verify before trusting this
+section.** The old path (`/mnt/c/Agents/hermes-local/projects/second-brain/ai-chats/the-mapped-moment/`)
+no longer exists; there is no `ai-chats/` directory anywhere in the vault anymore. The vault is now at
+`/mnt/c/Agents/ObsidianVault/` (a PARA-style layout: `00-Inbox` … `80-MOCs`), and as of this writing it
+has **no curated project folder for poster-studio** — `50-Projects/` is empty aside from this project's
+own notes if you're reading this after they've been added. **Confirm the path is still valid before
+following these instructions** — vault layouts on this workstation have drifted at least once already.
 
-`/mnt/c/Agents/hermes-local/projects/second-brain/`
-- `ai-chats/the-mapped-moment/` — summaries of past agent sessions (what was done, decisions,
-  outcomes) + `_index.md` (start here) and `earlier-session.md` / dated notes.
-- `codebases/the-mapped-moment/file-map.md` — annotated repo map.
+If the vault is reachable, durable cross-session context for this project should live at
+`/mnt/c/Agents/ObsidianVault/50-Projects/poster-studio/` (create it if absent — nothing else claims that
+name). If it's unreachable or restructured again, **this repo's own `docs/HANDOVER-YYYY-MM-DD-*.md`
+files are the reliable fallback** — they're git-tracked, they don't depend on a Windows mount being up,
+and they follow the same "Done / Working / Next-blockers" shape. `HANDOVER.md` at the repo root always
+points to the latest one. When in doubt, write there instead of (or in addition to) the vault.
 
 ### At the START of a session — READ
-Skim `ai-chats/the-mapped-moment/_index.md` + `codebases/the-mapped-moment/file-map.md` for a fast
-overview before diving into source.
+Check `/mnt/c/Agents/ObsidianVault/50-Projects/poster-studio/` if reachable; regardless, read
+`HANDOVER.md` (repo root) → follow its "Latest session handoff" pointer into `docs/`.
 
 ### At the END of a session (or after a meaningful milestone) — WRITE
-This is a standing requirement: keep the second brain current so the next agent inherits context.
-Append a dated note `ai-chats/the-mapped-moment/<source>-YYYY-MM-DD.md` (source = `claude`/`codex`/…)
-using `ai-chats/the-mapped-moment/_session-template.md`, covering:
+This is a standing requirement: keep cross-session context current so the next agent inherits it.
+Append a dated note (source = `claude`/`codex`/…) to **both**, if the vault is reachable:
+1. `/mnt/c/Agents/ObsidianVault/50-Projects/poster-studio/<source>-YYYY-MM-DD.md`
+2. `docs/HANDOVER-YYYY-MM-DD-<short-topic>.md` in this repo, with `HANDOVER.md`'s top pointer updated
+   to reference it (this one is mandatory — do it even if the vault is unreachable).
+
+Covering:
 - **Done** — what was completed + verified (with file/endpoint refs)
 - **Working / in progress** — what's partially done or deployed-not-verified
 - **Subagents used** — each delegated task: model (sonnet/haiku), what it did, outcome
@@ -334,6 +345,20 @@ The "Download Preview" modal must only offer PNG. PDF export preserves full vect
 ### DB state inconsistent between local and production
 Run `scripts/sync-listing-state.cjs` on both environments. It will report and fix: wrong `printSize`, wrong `titleAllCaps`, null `thumbnail_path`, missing `listing_templates` rows.
 
+### Etsy order lands in `pending_manual` with a BLANK design (recovery never ran)
+Symptom: a real order shows `status='pending_manual'`, empty `state_json` (`{}`), no render, no
+email — log line `[Etsy] No design, no email match, no template for order … — pending_manual`.
+**Root cause:** the DB `listings` row for that Etsy listing has **`etsy_listing_id` = NULL**. The
+poll resolves the prefill template via `listings WHERE etsy_listing_id = ?` (`loadDefaultDesignState`
+/ `loadDesignStateByNumber` in `server/services/etsy.js`); with no mapping it can't find a template,
+so it **skips order-recovery entirely** and drops a blank placeholder. The `create-listing` /
+`update-listing-mimic` scripts do **NOT** auto-populate `etsy_listing_id` — you must backfill it after
+publishing each listing: `UPDATE listings SET etsy_listing_id='<etsy_id>' WHERE id=<db_id>;` (verify
+with `SELECT id,slug,etsy_listing_id FROM listings`). This silently breaks auto-fulfillment for the
+WHOLE listing, not one order. (2026-06-24: Heart/Home/Forest were all unmapped → first heart sale
+stuck blank. Backfilled all five.) ⚠️ Also note `listing_templates` has columns `(listing_id,
+template_id, position)` ONLY — never `ORDER BY lt.created_at` (no such column; it throws).
+
 ### Admin "Save failed" / "Sync failed — Request failed (413)" on a street/colored map
 413 = payload too large. Street/colored-map designs keep the live raster in `mapBackgroundImage`
 as a multi-MB `data:` URI (regenerated from the map params on load — it is NOT design data). The
@@ -359,6 +384,56 @@ The admin editor (`DesignEditorPage`) also shows the "Updating map…" overlay d
 # Clean rebuild
 rm -rf node_modules dist && npm install && npm run build
 ```
+
+### Etsy `updateListing` state=inactive parks the listing in undocumented "edit" state
+Deactivating a published listing via the API (`PATCH /shops/{id}/listings/{id}` form `state=inactive`)
+returns 200 but the listing then reports `state=edit` (NOT in Etsy's documented enum
+active/inactive/draft/expired/sold_out) **and stays publicly live** (still in `/shops/{id}/listings/active`).
+The state change parks as an unpublished edit overlay rather than committing. `state=active` round-trips
+cleanly (→ `active`), so to *deactivate* reliably use the **Etsy dashboard "Deactivate" button**, not the
+API. (Verified 2026-06-27 attempting the physical→digital swap; restored all 5 to clean `active`.) ⚠️ Never
+deactivate the physical listings before the digital replacements are **published** — that leaves the shop
+with zero live listings (publish-digital-first, then deactivate physical).
+
+### Etsy digital listings + personalization: MADE-TO-ORDER (not instant download)
+> **⚠ CORRECTION (2026-07-02) — supersedes the 2026-06-27 note below.** That note claimed there was "NO
+> API path to made-to-order digital" and that a digital listing can't collect the code at checkout. The
+> first claim was **WRONG.** A `type=download` + **`when_made=made_to_order`** + **NO file** + personalization
+> listing IS API-creatable and **shows the Personalization box at checkout** (verified against live listing
+> `639826492`). **All 5 shop listings are now made-to-order digital** — converted via
+> `server/scripts/convert-to-made-to-order.js` (delete the file FIRST → the listing reverts to physical →
+> then `PATCH {type:download, when_made:made_to_order, who_made, is_supply}` **together**; Etsy rejects
+> `when_made` alone, and deleting the file *after* setting `made_to_order` still flips it to physical, so
+> order matters). Feasibility prover: `server/scripts/test-made-to-order.js`.
+> **Flow now:** buyer designs at `/go/<code>` → pastes the code in Etsy's **Personalization box at
+> checkout** → the poll reads that note → renders → **emails the file + `/verify` link** (auto). The
+> `/verify` "Design Code" self-serve loop below still works as a backup/edit path.
+> **⚠ Completion is manual for now:** the v3 API **cannot deliver a file to a receipt** (`uploadListingFile`
+> is listing-level only; no per-order endpoint — Etsy dev forum Discussion #1301), so marking each order
+> "complete" on Etsy (Shop Manager → Complete order → upload the rendered PNG) is **UI-only**, to be
+> web-automated later. Buyer already has the file by email; the manual step just closes the Etsy order +
+> populates its native "Download files". Do NOT auto-close with the `createReceiptShipment`
+> `DIGITAL-DELIVERED` tracking hack ("No tracking", reserve risk).
+
+<sub>Superseded 2026-06-27 note (instant-download model — kept for the still-valid `/verify` edit-loop detail):</sub>
+A `type=download` listing **requires** an uploaded file (API error otherwise: "This digital listing cannot
+be activated. Please upload a file…") → that makes it an **instant download** → Etsy **suppresses the
+personalization box** (no place for the buyer to paste their design code). Removing the file to free up
+personalization **reverts the listing to `type=physical`** (then needs a shipping profile). There is **NO
+API path** to a "made-to-order digital" listing (download + no file + personalization) — it's UI-only and
+the API won't activate it. So a CUSTOM/personalized product on a true digital listing can't collect the code
+at checkout. **Shop model (chosen 2026-06-27): keep instant-download; buyer designs at `/go/<code>`, copies
+their DESIGN CODE, buys, then enters ORDER NUMBER + design code at `/verify`** (the "Design Code" field —
+`VerifyOrder.tsx`). Descriptions + the auto-delivered how-to PDF instruct exactly this. **No-code / wrong-default buyers
+self-serve via the edit loop:** at `/verify` ("No design code? Personalise your map →") or after download
+("Edit / personalise your map") → `POST /api/order-edit` flips the order to `awaiting_size_confirm` and
+opens THEIR design in the full editor (`/d/<token>?o=<orderId>`, live preview + CitySearch geocoding) →
+the digital-aware confirm panel ("Personalise your map" / "✓ Get my file") reuses `POST /api/confirm-order`
+→ render → the editor links back to `/verify?o=<orderId>` which auto-polls `order-status` and downloads the
+**fresh** file (no re-typing, no stale render). "message us" is only the last resort.
+The proven alternative (NOT chosen) is a **physical** listing with a "Digital File" variation —
+personalization works on physical. (`is_personalizable=true` can persist on an instant-download listing but
+the field still won't render; the `personalization_questions` POST 201s but is moot.)
 
 ---
 
@@ -590,6 +665,14 @@ independently.
    `editWindowClosed` and points the buyer to studio@ (verify.js revision branch).
 5. Print/Framed: PNG sent to Prodigi → produced → shipped
 
+**Digital-order "tracking" convention (NOTE):** if you ever mark a DIGITAL order shipped on Etsy,
+use shipping method / `carrier_name = "other"` and `tracking_code = "DIGITAL-DELIVERED"` (not blank).
+⚠️ Etsy still displays this as **"No tracking"** (the code isn't carrier-verifiable), so it gives **zero**
+Star-Seller benefit, never releases a payment reserve, and is a risk signal. So we **do NOT auto-apply
+it** (removed from `renderQueue.js` digital branch 2026-06-25). The real fix is a true `type=download`
+digital listing (no tracking ever expected → doesn't drag the Star Seller shipping metric). Physical
+orders DO push real, verifiable Prodigi tracking (`webhooks.js → markReceiptShipped`).
+
 ### Key Files
 | Task | File |
 |------|------|
@@ -777,9 +860,22 @@ recover and nothing paid out. Only mandatory exception: faulty/lost → **free r
 Built to be swapped out cleanly as the business grows:
 
 ### LLM provider — `server/services/llm.js`
-One interface `extractJson(system, user)`; provider chosen by setting `llm_provider` / env
-`LLM_PROVIDER`. **ACTIVE PROVIDER: `openrouter`** (prod setting, since 2026-06-02).
-- **openrouter** (ACTIVE) — model **`openai/gpt-oss-120b:free`** (tested most reliable free model:
+One interface `extractJson(system, user, useCase)`. **RESILIENT CHAIN** (not a single provider):
+`extractJson` walks the `llm_chain` setting in order until one returns valid JSON, so one
+rate-limited free key never takes the feature down. **Prod chain (2026-06-22):**
+`openrouter,groq,gemini,bedrock` (setting `llm_chain`; `llm_provider`=`openrouter` is the head).
+Three free providers verified live working — openrouter ✓, **groq ✓ (~90ms, fastest)**, gemini ✓;
+bedrock ✗ (IAM). Every attempt is logged to the `llm_calls` table → admin endpoint
+`GET /api/admin/llm-status` (`?ping=1` runs `llmHealth()` across the chain). Add a provider:
+implement `async (system,user)=>string|null`, register in `PROVIDERS`, add to `llm_chain`.
+- **groq** — Groq (OpenAI-compatible, very fast) model **`llama-3.3-70b-versatile`** (verified
+  multilingual extraction: ES/DE/FR messy notes → correct fields + ISO dates). Separate free-tier
+  pool independent of OpenRouter/Gemini → real redundancy. Needs `GROQ_API_KEY` in server `.env`.
+  Settings: `groq_model`, `groq_api_key`. Endpoint `api.groq.com/openai/v1/chat/completions`.
+- **gemini** — Google AI Studio model **`gemini-3.1-flash-lite`** (500 RPD free pool — most
+  Flash models are only 20 RPD, which is why earlier `gemini-2.0-flash` 429'd). Needs
+  `GEMINI_API_KEY`. Settings: `gemini_model`, `gemini_api_key`.
+- **openrouter** (head) — model **`openai/gpt-oss-120b:free`** (tested most reliable free model:
   3/3 messy-note extractions with free headroom while popular models 429'd; OpenAI open-weight → sticky).
   Fallback model `openrouter/free` (Free Models Router) if the slug ever disappears. Needs
   `OPENROUTER_API_KEY` (`sk-or-v1-…`) in the server `.env`. Settings: `openrouter_model`,
