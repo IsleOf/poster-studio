@@ -218,7 +218,7 @@ if (!candidateDir) { console.error('Usage: node factory-create-etsy-draft.js <ca
     // written used to make a retry create a second draft.  If the manifest already
     // has a draft id, inspect it and stop rather than ever creating a duplicate.
     const existingDraftId = manifest.etsy?.draft_listing_id;
-    if (existingDraftId) {
+    if (existingDraftId && !dryRun) {
         const existingResponse = await etsyFetch(`${BASE}/listings/${existingDraftId}`);
         if (!existingResponse.ok) {
             throw new Error(`Manifest points to Etsy draft ${existingDraftId}, but GET /listings/${existingDraftId} returned ${existingResponse.status}; refusing to create a duplicate.`);
