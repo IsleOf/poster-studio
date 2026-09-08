@@ -4,7 +4,7 @@ Format: Agentic Universe project graph v1 · Graph: `knowledge/graph/poster-stud
 
 Evidence-base commit: `65e3a2da58d7287834ace69bf3d1d77aacb453dc` · Branch: `codex/backup-current-state-20260501`
 
-Mapping commit: recorded after the initial mapping commit below; this header is finalized in a metadata-only follow-up.
+Mapping-content commit: `ccecfef2470acc37296e828dc30290c02355bc53` (both artifacts). This SHA is recorded by a metadata-only follow-up so the document does not pretend to contain its own final commit hash. Find the latest delivery commit with `git log -1 --format=%H -- docs/PROJECT_STATE.md`.
 
 Validate from the repository root: `python3 -B /mnt/c/Agents/agentic-universe/repo/docs/project_audit_kit/project_graph_scaffold.py validate knowledge/graph/poster-studio_project_graph.json`
 
