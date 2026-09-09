@@ -113,6 +113,45 @@ describe('applyTemplate', () => {
         expect(state.title).not.toBe('New Title');
     });
 
+    it('preserves map placement when switching sizes', () => {
+        useStore.setState({
+            mapCity: 'Paris',
+            mapCenterLat: 48.8637,
+            mapCenterLng: 2.3431,
+            mapZoom: 15.8,
+            mapBearing: 7,
+            mapImageOffsetX: 12,
+            mapImageOffsetY: -9,
+            locationPinOffsetX: 4,
+            locationPinOffsetY: -3,
+        } as Parameters<typeof useStore.setState>[0]);
+
+        applyTemplate({
+            printSize: '24x36',
+            mapCity: 'Default',
+            mapCenterLat: 0,
+            mapCenterLng: 0,
+            mapZoom: 14,
+            mapBearing: 0,
+            mapImageOffsetX: 0,
+            mapImageOffsetY: 0,
+            locationPinOffsetX: 0,
+            locationPinOffsetY: 0,
+        }, { preserveMapPlacement: true });
+
+        const state = getState();
+        expect((state.printSize as { label: string }).label).toBe('24x36"');
+        expect(state.mapCity).toBe('Paris');
+        expect(state.mapCenterLat).toBe(48.8637);
+        expect(state.mapCenterLng).toBe(2.3431);
+        expect(state.mapZoom).toBe(15.8);
+        expect(state.mapBearing).toBe(7);
+        expect(state.mapImageOffsetX).toBe(12);
+        expect(state.mapImageOffsetY).toBe(-9);
+        expect(state.locationPinOffsetX).toBe(4);
+        expect(state.locationPinOffsetY).toBe(-3);
+    });
+
     it('sets customText fields from template settings', () => {
         applyTemplate({ title: 'Star Night', subtitle: 'Summer Solstice', dedication: 'For you' });
         const ct = getState().customText as Record<string, string>;
@@ -134,6 +173,22 @@ describe('applyTemplate', () => {
         const state = getState();
         expect(state.maskShape).toBe('rect');
         expect(state.posterType).toBe('streetmap');
+    });
+
+    it('applies saved map viewport fields from settings', () => {
+        applyTemplate({
+            mapCity: 'Jacksonville',
+            mapCenterLat: 30.357,
+            mapCenterLng: -81.4635,
+            mapZoom: 16,
+            mapBearing: 12,
+        });
+        const state = getState();
+        expect(state.mapCity).toBe('Jacksonville');
+        expect(state.mapCenterLat).toBe(30.357);
+        expect(state.mapCenterLng).toBe(-81.4635);
+        expect(state.mapZoom).toBe(16);
+        expect(state.mapBearing).toBe(12);
     });
 
     it('does not throw on empty settings object', () => {
@@ -179,6 +234,48 @@ describe('captureCurrentSettings', () => {
         expect(settings.dedication).toBe('To the moon and back');
     });
 
+    it('captures map viewport fields for admin Save and Sync', () => {
+        applyTemplate({
+            mapCity: 'Jacksonville',
+            mapCenterLat: 30.357,
+            mapCenterLng: -81.4635,
+            mapZoom: 16,
+            mapBearing: 12,
+            mapImageOffsetX: 20,
+            mapImageOffsetY: -15,
+        });
+        const settings = captureCurrentSettings();
+        expect(settings.mapCity).toBe('Jacksonville');
+        expect(settings.mapCenterLat).toBe(30.357);
+        expect(settings.mapCenterLng).toBe(-81.4635);
+        expect(settings.mapZoom).toBe(16);
+        expect(settings.mapBearing).toBe(12);
+        expect(settings.mapImageOffsetX).toBe(20);
+        expect(settings.mapImageOffsetY).toBe(-15);
+    });
+
+    it('captures location all-caps setting with text settings', () => {
+        applyTemplate({ locationAllCaps: true });
+        const settings = captureCurrentSettings();
+        expect(settings.locationAllCaps).toBe(true);
+    });
+
+    it('does NOT persist a transient data:/blob: map capture (avoids 413 on save/sync)', () => {
+        useStore.setState({
+            mapBackgroundImage: 'data:image/jpeg;base64,' + 'A'.repeat(5000),
+            backgroundImageUrl: 'blob:http://localhost/abc-123',
+        });
+        const settings = captureCurrentSettings();
+        expect(settings.mapBackgroundImage).toBeUndefined();
+        expect(settings.backgroundImageUrl).toBeUndefined();
+    });
+
+    it('DOES persist a real asset-URL background (e.g. SM002 forest)', () => {
+        useStore.setState({ backgroundImageUrl: '/backgrounds/sm002/bg-teal-2000.webp' });
+        const settings = captureCurrentSettings();
+        expect(settings.backgroundImageUrl).toBe('/backgrounds/sm002/bg-teal-2000.webp');
+    });
+
     it('round-trips a full template apply → capture without data loss', () => {
         const input = {
             posterColor: '#001122',
@@ -189,6 +286,11 @@ describe('captureCurrentSettings', () => {
             showBorder: false,
             printSize: '16x20',
             title: 'Round Trip',
+            mapCity: 'Jacksonville',
+            mapCenterLat: 30.357,
+            mapCenterLng: -81.4635,
+            mapZoom: 16,
+            mapBearing: 12,
         };
         applyTemplate(input);
         const captured = captureCurrentSettings();
@@ -201,6 +303,11 @@ describe('captureCurrentSettings', () => {
         expect(captured.showBorder).toBe(false);
         expect(captured.printSize).toBe('16x20');
         expect(captured.title).toBe('Round Trip');
+        expect(captured.mapCity).toBe('Jacksonville');
+        expect(captured.mapCenterLat).toBe(30.357);
+        expect(captured.mapCenterLng).toBe(-81.4635);
+        expect(captured.mapZoom).toBe(16);
+        expect(captured.mapBearing).toBe(12);
     });
 
     it('applies → captures → applies again gives same result', () => {

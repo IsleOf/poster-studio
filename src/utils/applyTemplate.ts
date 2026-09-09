@@ -36,7 +36,7 @@ export interface TemplateSettings {
 const TEMPLATE_FIELD_DEFAULTS: Record<string, unknown> = {
     posterType: 'starmap',
     posterColor: '#1B2735', textColor: '#ffffff', starColor: '#ffffff', mapInteriorColor: '#1B2735',
-    starScale: 1, lineWeight: 1.5, gridWidth: 1, glowIntensity: 3, gridOpacity: 0.5,
+    starScale: 1, lineWeight: 1.5, gridWidth: 1, glowIntensity: 3, gridOpacity: 0.5, milkyWayOpacity: 0.6,
     showBorder: true, showConstellations: true, showMilkyWay: false, showGrid: true,
     designStyle: 'standard', maskShape: 'circle', isLightMode: false, borderStyle: 'simple',
     showFrame: true, frameInset: 40, frameWidth: 5, shapeOutlineWidth: 1,
@@ -47,13 +47,17 @@ const TEMPLATE_FIELD_DEFAULTS: Record<string, unknown> = {
     dedicationOffsetY: 0, namesOffsetY: 0, dividerOffsetY: 0, vertSepOffsetY: 0,
     showDivider: false, dividerLength: 90, dividerThickness: 0.5,
     showVertSep: true, vertSepHeight: 16, vertSepThickness: 0.8,
-    showNames: false, titleAllCaps: false,
+    showNames: false, titleAllCaps: false, locationAllCaps: false,
     circleSize: 1, heartSize: 1, houseSize: 1, shapeOffsetY: -60, shapeOffsetX: 0, snapEnabled: true,
     showInnerRing: false, innerRingWidth: 2, innerRingInset: 10,
     showOuterRing: false, outerRingWidth: 1.5, outerRingGap: 15,
     showHeartDecor: false, heartDecorOffsetY: 0,
     showLocationPin: true, locationPinSize: 70, locationPinOffsetX: 0, locationPinOffsetY: 0,
-    mapStyleUrl: null, mapColorPreset: 'midnight', mapBgColor: '#1a1a2e', mapStreetColor: '#3d5a80',
+    mapCity: '', mapCenterLat: 48.8566, mapCenterLng: 2.3522, mapZoom: 14, mapBearing: 0,
+    mapImageOffsetX: 0, mapImageOffsetY: 0, mapImageOpacity: 1,
+    mapStyleUrl: null, mapColorPreset: 'midnight', mapLabelScale: 1, mapBgColor: '#1a1a2e', mapStreetColor: '#3d5a80',
+    mapWaterColor: '#8f8f8f', mapLandColor: '#b6b6b6',
+    mapMainRoadColor: '#111111', mapSmallRoadColor: '#1a1a1a', mapDetailRoadColor: '#2a2a2a',
     showLocation: true, showDate: true, showCoords: true,
     titleKerning: 0.05, subtitleKerning: 0.2, detailsKerning: 0.1, dedicationKerning: 0.05, namesKerning: 0.15,
     finelineWidth: 1.0,
@@ -64,7 +68,7 @@ const TEMPLATE_FIELD_DEFAULTS: Record<string, unknown> = {
 // Fields that should be applied from a template (whitelist)
 const TEMPLATE_FIELDS = [
     'posterType', 'posterColor', 'textColor', 'starColor', 'mapInteriorColor',
-    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity',
+    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity', 'milkyWayOpacity',
     'showBorder', 'showConstellations', 'showMilkyWay', 'showGrid',
     'designStyle', 'maskShape', 'isLightMode', 'borderStyle',
     'showFrame', 'frameInset', 'frameWidth', 'shapeOutlineWidth',
@@ -79,26 +83,49 @@ const TEMPLATE_FIELDS = [
     'showOuterRing', 'outerRingWidth', 'outerRingGap',
     'showHeartDecor', 'heartDecorOffsetY',
     'showLocationPin', 'locationPinSize', 'locationPinOffsetX', 'locationPinOffsetY',
-    'mapStyleUrl', 'mapColorPreset', 'mapBgColor', 'mapStreetColor',
-    'showLocation', 'showDate', 'showCoords',
-    'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
-    'titleAllCaps',
+    'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
+    'mapBackgroundImage', 'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
+    'mapStyleUrl', 'mapColorPreset', 'mapLabelScale', 'mapBgColor', 'mapStreetColor',
+    'mapWaterColor', 'mapLandColor', 'mapMainRoadColor', 'mapSmallRoadColor', 'mapDetailRoadColor',
+    'showLocation', 'showDate', 'showCoords', 'detailsDateFirst', 'date',
+    'titleKerning', 'titleLineHeight', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
+    'titleAllCaps', 'locationAllCaps',
     'finelineWidth', 'printSize',
     'title', 'subtitle', 'selectedTemplate',
+    'backgroundImageUrl', 'backgroundImageOffsetY',
 ] as const;
 
 // Text-only fields — skip when switching sizes to preserve user's entered text
 const TEXT_FIELDS = new Set(['title', 'subtitle', 'dedication', 'location', 'lat', 'lng']);
 
+// Customer-selected map placement must survive size switches. Different sizes
+// need their layout values, but not a reset of the selected place/zoom/pan.
+const MAP_PLACEMENT_FIELDS = new Set([
+    'mapCity',
+    'mapCenterLat',
+    'mapCenterLng',
+    'mapZoom',
+    'mapBearing',
+    'mapImageOffsetX',
+    'mapImageOffsetY',
+    'mapImageOpacity',
+    'locationPinOffsetX',
+    'locationPinOffsetY',
+]);
+
 // Fields stored in template JSON that map to customText sub-fields
 const CUSTOM_TEXT_KEYS = ['dedication', 'names'] as const;
 
-export function applyTemplate(settings: TemplateSettings, { preserveText = false } = {}): void {
+export function applyTemplate(
+    settings: TemplateSettings,
+    { preserveText = false, preserveMapPlacement = false } = {}
+): void {
     const store = useStore.getState();
     const updates: Record<string, unknown> = {};
 
     for (const key of TEMPLATE_FIELDS) {
         if (preserveText && TEXT_FIELDS.has(key)) continue;
+        if (preserveMapPlacement && MAP_PLACEMENT_FIELDS.has(key)) continue;
         // Use template value if present, else fall back to store default.
         // This prevents stale values from a previously-loaded template bleeding through
         // when loading an older template that was saved before a field existed.
@@ -110,6 +137,10 @@ export function applyTemplate(settings: TemplateSettings, { preserveText = false
         if (key === 'printSize' && typeof rawValue === 'string') {
             const resolved = PRINT_SIZE_MAP[rawValue];
             if (resolved) updates[key] = resolved;
+        } else if (key === 'date' && typeof rawValue === 'string') {
+            // template stores the example date as an ISO string; store wants a Date
+            const d = new Date(rawValue);
+            if (!isNaN(d.getTime())) updates[key] = d;
         } else {
             updates[key] = rawValue;
         }
@@ -147,9 +178,13 @@ export function applyTemplate(settings: TemplateSettings, { preserveText = false
         const pt = updates.posterType as 'starmap' | 'streetmap' | 'coloredmap';
         store.setPosterType(pt);
         delete updates.posterType;
-        // Reset mapBackgroundImage when switching to starmap so old street map image doesn't persist
+        // When switching to starmap, drop a stale street-map *capture* — but KEEP a designed
+        // in-shape background (asset URL, e.g. the SM002 forest) so star designs can render an
+        // image inside the circle/heart shape.
         if (pt === 'starmap') {
-            updates.mapBackgroundImage = null;
+            const tplBg = updates.mapBackgroundImage as string | null | undefined;
+            const isDesigned = typeof tplBg === 'string' && !tplBg.startsWith('data:') && !tplBg.startsWith('blob:');
+            if (!isDesigned) updates.mapBackgroundImage = null;
         }
     }
 
@@ -165,6 +200,15 @@ export function captureCurrentSettings(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const key of TEMPLATE_FIELDS) {
         if (state[key] !== undefined) {
+            // Never persist a transient raster into a template. Street/colored maps store the live
+            // capture in `mapBackgroundImage` as a multi-MB `data:`/`blob:` URI (regenerated from the
+            // map params on load); an uploaded custom background can land in `backgroundImageUrl` the
+            // same way. Serializing these bloats settings_json past the 2 MB body limit → HTTP 413 on
+            // save / "Sync to all sizes". Only real asset URLs (e.g. /backgrounds/sm002/…webp) persist.
+            if ((key === 'mapBackgroundImage' || key === 'backgroundImageUrl')) {
+                const v = state[key];
+                if (typeof v === 'string' && (v.startsWith('data:') || v.startsWith('blob:'))) continue;
+            }
             // Convert printSize object back to string code for storage
             if (key === 'printSize' && typeof state[key] === 'object' && state[key] !== null) {
                 const ps = state[key] as { label: string; width: number; height: number };
@@ -193,21 +237,31 @@ export function captureCurrentSettings(): Record<string, unknown> {
 
 export async function fetchAndApplyTemplate(
     templateId: string,
-    { preserveText = false, designGroupId }: { preserveText?: boolean; designGroupId?: string } = {}
+    {
+        preserveText = false,
+        preserveMapPlacement = false,
+        designGroupId,
+    }: { preserveText?: boolean; preserveMapPlacement?: boolean; designGroupId?: string } = {}
 ): Promise<boolean> {
     try {
         const API_URL = import.meta.env.VITE_API_URL || '';
-        const res = await fetch(`${API_URL}/api/templates/${templateId}`);
+        const url = new URL(`${API_URL}/api/templates/${templateId}`, window.location.origin);
+        // Bust browser disk caches so production always reflects the latest saved template.
+        url.searchParams.set('ts', `${Date.now()}`);
+        const res = await fetch(url.toString(), { cache: 'no-store' });
         if (!res.ok) return false;
         const data = await res.json();
-        // Store the Etsy listing URL so DownloadButton can show the right CTA
-        const { setSelectedTemplateEtsyUrl, setActiveDesignGroupId } = useStore.getState();
+        // Store Etsy metadata so the order UI can show the right CTA, size, and variant
+        const { setSelectedTemplateEtsyUrl, setSelectedTemplateEtsyVariantName, setSelectedTemplateFulfillmentSize, setSelectedTemplateListingSlug, setActiveDesignGroupId } = useStore.getState();
         setSelectedTemplateEtsyUrl(data.etsy_listing_url || null);
+        setSelectedTemplateEtsyVariantName(data.etsy_variant_name || null);
+        setSelectedTemplateFulfillmentSize(data.fulfillment_size || null);
+        setSelectedTemplateListingSlug(data.listing_slug || null);
         if (designGroupId !== undefined) {
             setActiveDesignGroupId(designGroupId);
         }
         if (data.settings) {
-            applyTemplate(data.settings, { preserveText });
+            applyTemplate(data.settings, { preserveText, preserveMapPlacement });
             return true;
         }
         return false;

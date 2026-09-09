@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import {
     Button, Modal, ModalOverlay, ModalContent, ModalHeader,
     ModalBody, ModalFooter, ModalCloseButton, useDisclosure,
@@ -8,12 +9,30 @@ import {
 } from '@chakra-ui/react';
 import { useStore } from '../store/useStore';
 import { renderPosterToBlob, renderPosterToPdf } from '../utils/renderPoster';
+import { calculateMapExportTarget } from '../utils/mapExportSizing';
+import { isVectorStreetMapEnabled } from '../utils/vectorStreetMapRenderer';
+import { printSizeInches } from '../utils/printSizes';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
-const DownloadButton: React.FC = () => {
+// Etsy's file upload only accepts letters, numbers, hyphens, underscores, and periods
+// (3-70 chars) — a title like "For Better, For Worse, Forever" left commas/apostrophes/etc
+// in place (only whitespace was ever converted to hyphens), producing filenames Etsy's
+// order-completion upload rejects outright. Strip everything else, collapse repeat hyphens,
+// and cap length so the timestamp suffix + extension still fit inside the 70-char limit.
+function slugifyFilename(title: string): string {
+    const slug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    return (slug || 'poster').slice(0, 40);
+}
+
+const DownloadButton: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
     const {
         printSize, title, posterType, captureHighResFn, setMapBackgroundImage,
+        setForceVectorExport,
         selectedTemplateEtsyUrl, savedDesignToken, setSavedDesignToken,
         // design fields for save
         subtitle, date, time, location, lat, lng,
@@ -24,13 +43,15 @@ const DownloadButton: React.FC = () => {
         titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize,
         titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, namesOffsetY,
         heartDecorOffsetY, dividerOffsetY, showDivider, dividerLength, dividerThickness,
-        showNames, titleAllCaps,
-        showConstellations, showMilkyWay, showGrid, showLocation, showDate, showCoords,
+        showNames, titleAllCaps, locationAllCaps,
+        showConstellations, showMilkyWay, milkyWayOpacity, showGrid, showLocation, showDate, showCoords,
         maskShape, isLightMode, designStyle, borderStyle,
         titleFont, subtitleFont, detailsFont, dedicationFont, namesFont,
         titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
         customText, mapCity, mapCenterLat, mapCenterLng, mapZoom, mapBearing,
-        mapBgColor, mapStreetColor, mapColorPreset, mapStyleUrl,
+        mapBgColor, mapStreetColor, mapWaterColor, mapLandColor,
+        mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
+        mapColorPreset, mapStyleUrl,
         mapImageOffsetX, mapImageOffsetY, mapImageOpacity,
         showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY,
         selectedTemplate,
@@ -42,42 +63,222 @@ const DownloadButton: React.FC = () => {
     const [errorMsg, setErrorMsg] = useState('');
     const [copied, setCopied] = useState(false);
 
+    // ── Server-side render fallback ─────────────────────────────────────────
+    // The normal export runs entirely in this browser. On vector street maps it can time out
+    // ("Timed out waiting for vector street map paths"), leaving a paying buyer unable to
+    // download the file they bought (order 36). The server renderer doesn't share that failure
+    // mode, so offer it as a fallback: ask the server to render, poll, hand back the file.
+    // Only meaningful for a design attached to a real order — /api/render-now enforces that.
+    const { designToken: routeToken } = useParams<{ designToken?: string }>();
+    const [srvState, setSrvState] = useState<'idle' | 'queued' | 'ready' | 'error'>('idle');
+    const [srvMsg, setSrvMsg] = useState('');
+    const [srvUrl, setSrvUrl] = useState('');
+
+    const requestServerRender = useCallback(async () => {
+        if (!routeToken) {
+            setSrvState('error');
+            setSrvMsg('Server rendering is available for purchased designs opened from your order link.');
+            return;
+        }
+        setSrvState('queued');
+        setSrvMsg('Generating your file on our server — this usually takes about a minute.');
+        setSrvUrl('');
+        try {
+            const res = await fetch(`${API_URL}/api/render-now`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: routeToken }),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setSrvState('error');
+                setSrvMsg(json.error || 'Could not start the server render.');
+                return;
+            }
+            // Poll until the render lands (server render is ~30-60s; allow generous headroom).
+            const deadline = Date.now() + 5 * 60 * 1000;
+            while (Date.now() < deadline) {
+                await new Promise(r => setTimeout(r, 5000));
+                const s = await fetch(`${API_URL}/api/order-status/${encodeURIComponent(routeToken)}`)
+                    .then(r => r.ok ? r.json() : null).catch(() => null);
+                if (s?.downloadUrl) {
+                    setSrvUrl(s.downloadUrl);
+                    setSrvState('ready');
+                    setSrvMsg('Your file is ready.');
+                    return;
+                }
+                if (s?.status === 'failed') {
+                    setSrvState('error');
+                    setSrvMsg('The server render failed. Please email studio@themappedmoment.com and we will send your file.');
+                    return;
+                }
+            }
+            setSrvState('error');
+            setSrvMsg('This is taking longer than expected. Email studio@themappedmoment.com and we will send your file directly.');
+        } catch {
+            setSrvState('error');
+            setSrvMsg('Could not reach the server. Please try again.');
+        }
+    }, [routeToken]);
+
+    // Reusable fallback UI shown next to any export failure.
+    const serverRenderFallback = (
+        <Box mt={2} p={3} bg="blue.50" border="1px solid" borderColor="blue.200" borderRadius="md">
+            <Text fontSize="xs" color="blue.900" fontWeight="600" mb={2}>
+                Download didn&apos;t work? Let our server build it instead.
+            </Text>
+            {srvState === 'ready' ? (
+                <Button as="a" href={srvUrl} size="sm" width="full" colorScheme="blue" fontSize="xs">
+                    Download your file →
+                </Button>
+            ) : (
+                <Button
+                    onClick={requestServerRender}
+                    isLoading={srvState === 'queued'}
+                    loadingText="Building your file… (about a minute)"
+                    size="sm" width="full" colorScheme="blue" variant="outline" fontSize="xs"
+                >
+                    Render on our server instead
+                </Button>
+            )}
+            {srvMsg && (
+                <Text fontSize="xs" color={srvState === 'error' ? 'red.600' : 'blue.700'} mt={2}>
+                    {srvMsg}
+                </Text>
+            )}
+        </Box>
+    );
+
     const isTemplateMode = !!selectedTemplateEtsyUrl;
     const isBusy = progress === 'rendering' || pdfProgress === 'rendering';
 
     const getSvgEl = () =>
         document.getElementById('poster-preview')?.querySelector('svg') as SVGSVGElement | null;
 
-    /** Ensure the map background is captured at high-res before rendering */
-    const ensureHighResMap = async () => {
+    const waitForImageDecode = (src: string): Promise<void> => new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = src;
+    });
+
+    const waitForSvgMapImage = async (src: string): Promise<void> => {
+        const deadline = Date.now() + 8000;
+        while (Date.now() < deadline) {
+            const svgEl = getSvgEl();
+            const images = Array.from(svgEl?.querySelectorAll('image') ?? []);
+            const hasHighResImage = images.some(image => {
+                const href = image.getAttribute('href')
+                    || image.getAttribute('xlink:href')
+                    || (image as SVGImageElement).href?.baseVal;
+                return href === src;
+            });
+
+            if (hasHighResImage) {
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                return;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        console.warn('Timed out waiting for high-res map image to appear in SVG; export may use preview map image.');
+    };
+
+    const waitForVectorStreetMap = async (): Promise<void> => {
+        // CORRECTED — an earlier version of this comment blamed tile-fetch network timing for
+        // order 40's export hang and just widened this deadline. That was wrong, verified by
+        // direct Playwright testing: pathChars sat frozen at exactly the location pin's fixed
+        // length (299) for a full 168s run while tiles fetched fine in under 30s. The real
+        // cause was structural, not timing — the editor renders street maps via a rasterised
+        // <image> for fast pan/zoom (see VectorStarMap's raster-preview effect), so real <path>
+        // elements never reach the DOM there at all, and this function was polling for exactly
+        // that. No timeout, however long, could ever have passed. The actual fix is
+        // `setForceVectorExport` below, which makes the editor render true vectors for the
+        // export's duration (matching what the server-side /render page already does). This
+        // 120s deadline now really is just tile-fetch headroom, and is kept generous for that.
+        const deadline = Date.now() + 120000;
+        while (Date.now() < deadline) {
+            const mapLayer = getSvgEl()?.querySelector('#map-layer');
+            const pathChars = Array.from(mapLayer?.querySelectorAll('path') ?? [])
+                .reduce((total, path) => total + (path.getAttribute('d')?.length || 0), 0);
+            const text = mapLayer?.textContent || '';
+
+            if (pathChars > 10000 && !text.includes('Search a city to load map')) {
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                return;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        throw new Error('Timed out waiting for vector street map paths');
+    };
+
+    /** Ensure the map background is captured at print-size resolution before rendering. */
+    const ensureHighResMap = async (dpi: number): Promise<() => void> => {
+        if (posterType === 'streetmap' && mapColorPreset === 'design2' && isVectorStreetMapEnabled()) {
+            // The live editor renders vector street maps as a rasterised <image> for fast
+            // pan/zoom (see VectorStarMap's raster-preview effect) — real <path> elements
+            // are only ever mounted when `forceVector`/`forceVectorExport` is set, which is
+            // otherwise true only on the server-side /render page. Flip it on for the
+            // duration of this export so waitForVectorStreetMap() has real paths to find,
+            // and flip it back off afterward (success or failure) via the returned cleanup.
+            setForceVectorExport(true);
+            try {
+                await waitForVectorStreetMap();
+            } catch (e) {
+                setForceVectorExport(false);
+                throw e;
+            }
+            return () => setForceVectorExport(false);
+        }
+
         if (posterType !== 'starmap' && captureHighResFn) {
             try {
-                const highResUrl = await captureHighResFn();
+                const previousMapImage = useStore.getState().mapBackgroundImage;
+                const target = calculateMapExportTarget({
+                    printSize: { ...printSize, ...printSizeInches(printSize) },
+                    dpi,
+                    maskShape,
+                    circleSize,
+                    heartSize,
+                    houseSize,
+                });
+                const highResUrl = await captureHighResFn({
+                    targetPx: target.targetPx,
+                    detailScale: target.detailScale,
+                });
+                await waitForImageDecode(highResUrl);
                 setMapBackgroundImage(highResUrl);
-                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                await waitForSvgMapImage(highResUrl);
+                return () => setMapBackgroundImage(previousMapImage);
             } catch (e) {
                 console.warn('High-res map capture failed, using preview image:', e);
             }
         }
+        return () => {};
     };
 
     const handleDownload = async () => {
         const svgEl = getSvgEl();
         if (!svgEl) return;
         setProgress('rendering');
+        let restoreMap = () => {};
         try {
-            await ensureHighResMap();
-            const blob = await renderPosterToBlob(svgEl, printSize.width, printSize.height, 300, true);
-            const slug = title.replace(/\s+/g, '-').toLowerCase() || 'poster';
+            restoreMap = await ensureHighResMap(300);
+            const { width: wIn, height: hIn } = printSizeInches(printSize);
+            const blob = await renderPosterToBlob(svgEl, wIn, hIn, 300, !isAdmin);
+            const slug = slugifyFilename(title);
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `${slug}-demo-${Date.now()}.png`;
+            a.download = `${slug}${isAdmin ? '' : '-demo'}-${Date.now()}.png`;
             a.click();
             URL.revokeObjectURL(a.href);
             setProgress('done');
         } catch (err) {
             setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
             setProgress('error');
+        } finally {
+            restoreMap();
         }
     };
 
@@ -85,10 +286,12 @@ const DownloadButton: React.FC = () => {
         const svgEl = getSvgEl();
         if (!svgEl) return;
         setPdfProgress('rendering');
+        let restoreMap = () => {};
         try {
-            await ensureHighResMap();
-            const blob = await renderPosterToPdf(svgEl, printSize.width, printSize.height, title);
-            const slug = title.replace(/\s+/g, '-').toLowerCase() || 'poster';
+            restoreMap = await ensureHighResMap(300);
+            const { width: wIn, height: hIn } = printSizeInches(printSize);
+            const blob = await renderPosterToPdf(svgEl, wIn, hIn, title);
+            const slug = slugifyFilename(title);
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = `${slug}-demo-${Date.now()}.pdf`;
@@ -98,6 +301,8 @@ const DownloadButton: React.FC = () => {
         } catch (err) {
             setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
             setPdfProgress('error');
+        } finally {
+            restoreMap();
         }
     };
 
@@ -115,14 +320,16 @@ const DownloadButton: React.FC = () => {
                 titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize,
                 titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, namesOffsetY,
                 heartDecorOffsetY, dividerOffsetY, showDivider, dividerLength, dividerThickness,
-                showNames, titleAllCaps,
-                showConstellations, showMilkyWay, showGrid, showLocation, showDate, showCoords,
+                showNames, titleAllCaps, locationAllCaps,
+                showConstellations, showMilkyWay, milkyWayOpacity, showGrid, showLocation, showDate, showCoords,
                 maskShape, isLightMode, designStyle, borderStyle,
                 titleFont, subtitleFont, detailsFont, dedicationFont, namesFont,
                 titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
                 customText, posterType, printSize,
                 mapCity, mapCenterLat, mapCenterLng, mapZoom, mapBearing,
-                mapBgColor, mapStreetColor, mapColorPreset, mapStyleUrl,
+                mapBgColor, mapStreetColor, mapWaterColor, mapLandColor,
+                mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
+                mapColorPreset, mapStyleUrl,
                 mapImageOffsetX, mapImageOffsetY, mapImageOpacity,
                 showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY,
                 selectedTemplate,
@@ -164,31 +371,106 @@ const DownloadButton: React.FC = () => {
         <>
             <Button
                 onClick={handleOpen}
-                bg={isTemplateMode ? 'orange.500' : 'gray.900'}
+                bg={isAdmin ? 'purple.600' : isTemplateMode ? 'orange.500' : 'gray.900'}
                 color="white"
                 size="lg"
                 width="full"
                 borderRadius="md"
                 fontWeight="700"
                 fontSize="sm"
-                _hover={{ bg: isTemplateMode ? 'orange.600' : 'gray.800' }}
-                _active={{ bg: isTemplateMode ? 'orange.700' : 'gray.700' }}
+                _hover={{ bg: isAdmin ? 'purple.700' : isTemplateMode ? 'orange.600' : 'gray.800' }}
+                _active={{ bg: isAdmin ? 'purple.800' : isTemplateMode ? 'orange.700' : 'gray.700' }}
                 border="1px solid"
-                borderColor={isTemplateMode ? 'orange.500' : 'gray.900'}
+                borderColor={isAdmin ? 'purple.600' : isTemplateMode ? 'orange.500' : 'gray.900'}
             >
-                {isTemplateMode ? 'Save Design & Order' : 'Download Preview (300 DPI)'}
+                {isAdmin ? 'Export (No Watermark)' : isTemplateMode ? 'Save Design & Order' : 'Download Preview (300 DPI)'}
             </Button>
 
             <Modal isOpen={isOpen} onClose={onClose} size="md" isCentered>
                 <ModalOverlay />
                 <ModalContent borderRadius="lg" mx={4}>
                     <ModalHeader fontSize="md" fontWeight="700" pb={2}>
-                        {isTemplateMode ? 'Save Your Design' : 'Download Your Design'}
+                        {isAdmin ? 'Export Design' : isTemplateMode ? 'Save Your Design' : 'Download Your Design'}
                     </ModalHeader>
                     <ModalCloseButton />
 
                     <ModalBody>
-                        {isTemplateMode ? (
+                        {isAdmin ? (
+                            /* ── Admin mode: no-watermark PNG + PDF export ── */
+                            <VStack align="stretch" spacing={4}>
+                                <Box bg="purple.50" borderRadius="md" p={3} border="1px solid" borderColor="purple.200">
+                                    <VStack align="stretch" spacing={1.5}>
+                                        <HStack justify="space-between">
+                                            <Text fontSize="xs" color="gray.500">Resolution</Text>
+                                            <Text fontSize="xs" fontWeight="600">300 DPI (print quality)</Text>
+                                        </HStack>
+                                        <HStack justify="space-between">
+                                            <Text fontSize="xs" color="gray.500">Print size</Text>
+                                            <Text fontSize="xs" fontWeight="600">{printSize.label}</Text>
+                                        </HStack>
+                                        <HStack justify="space-between">
+                                            <Text fontSize="xs" color="gray.500">Pixel dimensions</Text>
+                                            <Text fontSize="xs" fontWeight="600">
+                                                {Math.round(printSizeInches(printSize).width * 300).toLocaleString()} × {Math.round(printSizeInches(printSize).height * 300).toLocaleString()} px
+                                            </Text>
+                                        </HStack>
+                                    </VStack>
+                                </Box>
+
+                                <HStack spacing={2}>
+                                    <Button
+                                        flex={1}
+                                        onClick={handleDownload}
+                                        isLoading={progress === 'rendering'}
+                                        isDisabled={isBusy}
+                                        loadingText="Generating…"
+                                        bg="purple.600"
+                                        color="white"
+                                        _hover={{ bg: 'purple.700' }}
+                                        fontWeight="600"
+                                        size="sm"
+                                    >
+                                        PNG
+                                    </Button>
+                                    <Button
+                                        flex={1}
+                                        onClick={handleDownloadPdf}
+                                        isLoading={pdfProgress === 'rendering'}
+                                        isDisabled={isBusy}
+                                        loadingText="Generating…"
+                                        bg="purple.600"
+                                        color="white"
+                                        _hover={{ bg: 'purple.700' }}
+                                        fontWeight="600"
+                                        size="sm"
+                                    >
+                                        PDF (vector)
+                                    </Button>
+                                </HStack>
+
+                                {(progress === 'rendering' || pdfProgress === 'rendering') && (
+                                    <Box>
+                                        <Text fontSize="xs" color="gray.500" mb={1}>Generating…</Text>
+                                        <Progress size="xs" isIndeterminate colorScheme="purple" borderRadius="full" />
+                                    </Box>
+                                )}
+                                {(progress === 'done' || pdfProgress === 'done') && (
+                                    <Alert status="success" borderRadius="md" fontSize="sm">
+                                        <AlertIcon />
+                                        Download started!
+                                    </Alert>
+                                )}
+                                {(progress === 'error' || pdfProgress === 'error') && (
+                                    <Box>
+                                        <Alert status="error" borderRadius="md" fontSize="sm">
+                                            <AlertIcon />
+                                            Export failed: {errorMsg}
+                                        </Alert>
+                                        {serverRenderFallback}
+                                    </Box>
+                                )}
+                            </VStack>
+                        ) : isTemplateMode ? (
                             /* ── Template mode: Save design → get token → go to Etsy ── */
                             <VStack align="stretch" spacing={4}>
                                 {/* Step indicator */}
@@ -331,7 +613,7 @@ const DownloadButton: React.FC = () => {
                                     <Box>
                                         <Text fontWeight="600">This is a watermarked preview</Text>
                                         <Text color="gray.600" fontSize="xs" mt={0.5}>
-                                            The downloaded file will contain repeating "DEMO" text. Purchase on Etsy to receive the full-resolution, watermark-free file.
+                                            The downloaded file will contain a light themappedmoment.com watermark. Purchase on Etsy to receive the full-resolution, watermark-free file.
                                         </Text>
                                     </Box>
                                 </Alert>
@@ -353,7 +635,7 @@ const DownloadButton: React.FC = () => {
                                         <HStack justify="space-between">
                                             <Text fontSize="xs" color="gray.500">Pixel dimensions</Text>
                                             <Text fontSize="xs" fontWeight="600">
-                                                {Math.round(printSize.width * 300).toLocaleString()} × {Math.round(printSize.height * 300).toLocaleString()} px
+                                                {Math.round(printSizeInches(printSize).width * 300).toLocaleString()} × {Math.round(printSizeInches(printSize).height * 300).toLocaleString()} px
                                             </Text>
                                         </HStack>
                                     </VStack>
@@ -389,10 +671,13 @@ const DownloadButton: React.FC = () => {
                                     </Alert>
                                 )}
                                 {progress === 'error' && (
-                                    <Alert status="error" borderRadius="md" fontSize="sm">
-                                        <AlertIcon />
-                                        Export failed: {errorMsg}
-                                    </Alert>
+                                    <Box>
+                                        <Alert status="error" borderRadius="md" fontSize="sm">
+                                            <AlertIcon />
+                                            Export failed: {errorMsg}
+                                        </Alert>
+                                        {serverRenderFallback}
+                                    </Box>
                                 )}
                             </VStack>
                         )}
@@ -400,7 +685,7 @@ const DownloadButton: React.FC = () => {
 
                     <ModalFooter pt={2} gap={2}>
                         <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
-                        {!isTemplateMode && (
+                        {!isAdmin && !isTemplateMode && (
                             <Button
                                 onClick={handleDownload}
                                 isLoading={progress === 'rendering'}

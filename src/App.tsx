@@ -31,6 +31,7 @@ function App() {
         <Routes>
           <Route path="/" element={<MainLayout />} />
           <Route path="/t/:templateId" element={<MainLayout />} />
+          <Route path="/d/:designToken" element={<MainLayout />} />
           <Route path="/design" element={<TemplateSelector />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/verify" element={<VerifyOrder />} />

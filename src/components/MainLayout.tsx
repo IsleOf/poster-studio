@@ -4,28 +4,39 @@ import {
     Text, VStack, HStack, Button, useToast, Tooltip,
 } from '@chakra-ui/react';
 import { renderPosterToBlob } from '../utils/renderPoster';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { AUTO_SAVE_KEY } from '../store/useStore';
 import { trackEvent } from '../utils/analytics';
 import { fetchAndApplyTemplate } from '../utils/applyTemplate';
+import { isVectorStreetMapEnabled } from '../utils/vectorStreetMapRenderer';
+import { printSizeInches } from '../utils/printSizes';
 import VectorStarMap from './VectorStarMap';
 import SidebarControls from './SidebarControls';
+import EmailCaptureModal from './EmailCaptureModal';
 
 // Lazy-load MapLibre-powered capture component — only needed for street/colored map modes.
 // This keeps MapLibre GL JS (~200 KB gzipped) out of the initial bundle for star map users.
 const StreetMapCapture = React.lazy(() => import('./StreetMapCapture'));
 import type { DesignGroup } from '../types/listing';
+import { PRINT_SIZE_BY_LABEL as LOCKED_SIZE_MAP, normalizePrintSize } from '../utils/printSizes';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
+const TEMPLATE_BOOTSTRAP_TIMEOUT_MS = 4000;
+
 
 const MainLayout: React.FC = () => {
-    const { templateId, slug, designSlug } = useParams<{ templateId?: string; slug?: string; designSlug?: string }>();
+    const { templateId, slug, designSlug, designToken } = useParams<{ templateId?: string; slug?: string; designSlug?: string; designToken?: string }>();
+    const [searchParams] = useSearchParams();
     const [designGroups, setDesignGroups] = useState<DesignGroup[]>([]);
     // Always start in loading state — even on /, we auto-load Design001 below.
     // This prevents the legacy default "My Star Map" from flickering before
     // the real first design loads.
     const [templateLoading, setTemplateLoading] = useState(true);
+    // No-watermark / full-res export for an authenticated admin opening ?admin=1 (e.g. to send a
+    // file manually via Etsy message). Server-verified (token signature checked by requireAdmin),
+    // not just a client-side claim — the export is the revenue-protected step.
+    const [adminExport, setAdminExport] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const {
         previewZoom, setPreviewZoom,
@@ -33,9 +44,19 @@ const MainLayout: React.FC = () => {
         previewPanY, setPreviewPanY,
         printSize,
         posterType,
+        mapColorPreset,
+        setLockedPrintSize,
         setMapBackgroundImage,
+        mapBackgroundImage,
         isInlineEditing,
+        streetMapRendering,
     } = useStore();
+    const useVectorStreetMap = posterType === 'streetmap' && mapColorPreset === 'design2' && isVectorStreetMapEnabled();
+    const isMapMode = posterType === 'streetmap' || posterType === 'coloredmap';
+    const isMapLoading = isMapMode && !useVectorStreetMap && !mapBackgroundImage;
+    // Any map mode (vector street, raster street, or colored) is fetching tiles /
+    // rasterising / recapturing a new view — gray out + spinner over the old map.
+    const isMapUpdating = isMapMode && streetMapRendering;
 
     const { canUndo, canRedo, undo, redo } = useStore();
     const toast = useToast();
@@ -50,7 +71,8 @@ const MainLayout: React.FC = () => {
         setIsCopying(true);
         try {
             // Render at 150 DPI for a reasonable clipboard image size
-            const blob = await renderPosterToBlob(svgEl, printSize.width, printSize.height, 150, true);
+            const { width: wIn, height: hIn } = printSizeInches(printSize);
+            const blob = await renderPosterToBlob(svgEl, wIn, hIn, 150, true);
             await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
             toast({ title: 'Copied!', description: 'Poster image copied to clipboard.', status: 'success', duration: 2500, isClosable: true });
             trackEvent('copy_image');
@@ -67,34 +89,107 @@ const MainLayout: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Lock print size when ?lockedSize=8x10 is in the URL (set by verify page for revisions)
+    useEffect(() => {
+        const raw = searchParams.get('lockedSize');
+        if (!raw) return;
+        const size = LOCKED_SIZE_MAP[raw] ?? LOCKED_SIZE_MAP[raw.toLowerCase()];
+        if (size) setLockedPrintSize(size);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Load saved design from server when accessed via /d/:designToken
+    // This lets customers return to their design from any device (not just localStorage).
+    // If ?lockedSize is also present, the size lock effect above will fire after this loads.
+    useEffect(() => {
+        if (!designToken) return;
+        setTemplateLoading(true);
+        fetch(`${API_URL}/api/design/${encodeURIComponent(designToken)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(state => {
+                if (!state) return;
+                const patch: Record<string, unknown> = { ...state };
+                if (typeof patch.date === 'string') patch.date = new Date(patch.date as string);
+                // Templates/recovered designs store printSize as a string label ("5x7"); the
+                // store + renderer need the object {label,width,height,ratio}. Normalise or drop
+                // (drop → keep the store default object) so printSize.ratio never throws.
+                if (typeof patch.printSize === 'string') {
+                    const sz = normalizePrintSize(patch.printSize);
+                    if (sz) patch.printSize = sz; else delete patch.printSize;
+                }
+                useStore.setState(patch as unknown as Parameters<typeof useStore.setState>[0]);
+            })
+            .catch(() => {})
+            .finally(() => setTemplateLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [designToken]);
+
+    // Enable no-watermark export when ?admin=1 AND the stored admin token is valid server-side.
+    useEffect(() => {
+        if (searchParams.get('admin') !== '1') return;
+        const tok = localStorage.getItem('admin_token');
+        if (!tok) return;
+        fetch(`${API_URL}/api/admin/orders/stats`, { headers: { Authorization: `Bearer ${tok}` } })
+            .then(r => { if (r.ok) setAdminExport(true); })
+            .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // Auto-load Design001 (or the first available design for the default map type)
     // when the user lands on / with no template/listing URL. Without this, the page
     // shows the bare Zustand defaults ("My Star Map") which is not a finished design.
     // Autosave restore (below) can still override if the user clicks Restore.
     useEffect(() => {
-        if (templateId || slug) return;
+        if (templateId || slug || designToken) return; // /d/:token loads its own saved design below
         const API = API_URL;
-        fetch(`${API}/api/templates`)
+        let cancelled = false;
+        const controller = new AbortController();
+        const bootstrapTimeout = window.setTimeout(() => controller.abort(), TEMPLATE_BOOTSTRAP_TIMEOUT_MS);
+        const finishLoading = () => {
+            if (!cancelled) setTemplateLoading(false);
+        };
+        const withTimeout = <T,>(promise: Promise<T>) => Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                window.setTimeout(() => reject(new Error('Template bootstrap timed out')), TEMPLATE_BOOTSTRAP_TIMEOUT_MS);
+            }),
+        ]);
+
+        const templatesUrl = new URL(`${API}/api/templates`, window.location.origin);
+        templatesUrl.searchParams.set('ts', `${Date.now()}`);
+        fetch(templatesUrl.toString(), { signal: controller.signal, cache: 'no-store' })
             .then(r => r.ok ? r.json() : [])
-            .then(async (rows: Array<{ id: string; design_group_id: string | null; posterType?: string }>) => {
-                if (!Array.isArray(rows) || rows.length === 0) {
-                    setTemplateLoading(false);
-                    return;
-                }
+            .then(async (rows: Array<{ id: string; design_group_id: string | null; posterType?: string; listing_slug?: string }>) => {
+                if (!Array.isArray(rows) || rows.length === 0) return;
                 const starmaps = rows.filter(r => r.design_group_id && (r.posterType ?? 'starmap') === 'starmap');
                 const design001 = starmaps.find(r => /-design001$/i.test(r.design_group_id || '')) || starmaps[0];
-                if (design001) {
-                    await fetchAndApplyTemplate(design001.id, { designGroupId: design001.design_group_id || undefined });
+                if (!design001) return;
+                await withTimeout(fetchAndApplyTemplate(design001.id, { designGroupId: design001.design_group_id || undefined }));
+
+                // Load the listing's design groups so homepage shows the same
+                // size/design picker as /l/:slug (matches admin panel config).
+                const listingSlug = design001.listing_slug;
+                if (listingSlug && !cancelled) {
+                    const groups = await loadListingDesignGroups(listingSlug);
+                    if (groups.length && !cancelled) setDesignGroups(groups);
                 }
-                setTemplateLoading(false);
             })
-            .catch(() => { setTemplateLoading(false); });
+            .catch(() => {})
+            .finally(() => {
+                window.clearTimeout(bootstrapTimeout);
+                finishLoading();
+            });
+        return () => {
+            cancelled = true;
+            window.clearTimeout(bootstrapTimeout);
+            controller.abort();
+        };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Auto-save restore — offer to reload from localStorage on first mount (only if no template in URL)
     useEffect(() => {
-        if (templateId || slug) return; // template/listing URL overrides autosave
+        if (templateId || slug || designToken) return; // template/listing/design URL overrides autosave
         try {
             const raw = localStorage.getItem(AUTO_SAVE_KEY);
             if (!raw) return;
@@ -157,6 +252,37 @@ const MainLayout: React.FC = () => {
         });
     }, []);
 
+    // Helper: fetch a listing by slug and return its design groups.
+    // Used by the homepage auto-load AND the /t/:templateId route so the size picker
+    // always reflects what's configured in the admin panel.
+    const loadListingDesignGroups = useCallback(async (listingSlug: string): Promise<DesignGroup[]> => {
+        try {
+            const url = new URL(`${API_URL}/api/listings/${listingSlug}`, window.location.origin);
+            url.searchParams.set('ts', `${Date.now()}`);
+            const resp = await fetch(url.toString(), { cache: 'no-store' });
+            if (!resp.ok) return [];
+            const listing = await resp.json();
+            if (!listing?.templates?.length) return [];
+            const groupMap = new Map<string, DesignGroup>();
+            for (const t of listing.templates) {
+                const groupId: string = t.design_group_id || t.id;
+                const nameParts = (t.name as string).split(' — ');
+                const groupName = nameParts.length > 1 ? nameParts.slice(0, -1).join(' — ') : t.name;
+                const sizeLabel = nameParts.length > 1 ? nameParts[nameParts.length - 1] : t.fulfillment_size || t.name;
+                if (!groupMap.has(groupId)) {
+                    groupMap.set(groupId, { id: groupId, name: groupName, sizes: [] });
+                }
+                groupMap.get(groupId)!.sizes.push({
+                    id: t.id, name: sizeLabel,
+                    thumbnail_path: t.thumbnail_path,
+                    fulfillment_size: t.fulfillment_size,
+                    sell_price_cents: t.sell_price_cents,
+                });
+            }
+            return Array.from(groupMap.values());
+        } catch { return []; }
+    }, []);
+
     // ── Load template from URL ──────────────────────────────────────────────
     useEffect(() => {
         // Check for shared design state in ?d= query param first
@@ -190,6 +316,7 @@ const MainLayout: React.FC = () => {
                 if (c.dividerThickness != null) store.setDividerThickness(c.dividerThickness);
                 if (typeof c.showConstellations === 'boolean') store.setShowConstellations(c.showConstellations);
                 if (typeof c.showMilkyWay === 'boolean') store.setShowMilkyWay(c.showMilkyWay);
+                if (c.milkyWayOpacity != null) store.setMilkyWayOpacity(c.milkyWayOpacity);
                 if (typeof c.showGrid === 'boolean') store.setShowGrid(c.showGrid);
                 if (c.gridWidth != null) store.setGridWidth(c.gridWidth);
                 if (c.gridOpacity != null) store.setGridOpacity(c.gridOpacity);
@@ -250,6 +377,7 @@ const MainLayout: React.FC = () => {
                 // Names & text flags
                 if (typeof c.showNames === 'boolean') store.setShowNames(c.showNames);
                 if (typeof c.titleAllCaps === 'boolean') store.setTitleAllCaps(c.titleAllCaps);
+                if (typeof c.locationAllCaps === 'boolean') store.setLocationAllCaps(c.locationAllCaps);
                 // Shape
                 if (c.circleSize != null) store.setCircleSize(c.circleSize);
                 if (c.heartSize != null) store.setHeartSize(c.heartSize);
@@ -271,6 +399,11 @@ const MainLayout: React.FC = () => {
                 if (c.mapStyleUrl !== undefined) store.setMapStyleUrl(c.mapStyleUrl);
                 if (c.mapBgColor) store.setMapBgColor(c.mapBgColor);
                 if (c.mapStreetColor) store.setMapStreetColor(c.mapStreetColor);
+                if (c.mapWaterColor) store.setMapWaterColor(c.mapWaterColor);
+                if (c.mapLandColor) store.setMapLandColor(c.mapLandColor);
+                if (c.mapMainRoadColor) store.setMapMainRoadColor(c.mapMainRoadColor);
+                if (c.mapSmallRoadColor) store.setMapSmallRoadColor(c.mapSmallRoadColor);
+                if (c.mapDetailRoadColor) store.setMapDetailRoadColor(c.mapDetailRoadColor);
                 if (c.mapColorPreset) store.setMapColorPreset(c.mapColorPreset);
                 // Location pin
                 if (typeof c.showLocationPin === 'boolean') store.setShowLocationPin(c.showLocationPin);
@@ -288,14 +421,26 @@ const MainLayout: React.FC = () => {
             }
         }
         if (!encoded && templateId) {
-            fetchAndApplyTemplate(templateId).finally(() => setTemplateLoading(false));
+            fetchAndApplyTemplate(templateId)
+                .then(async () => {
+                    // After template loads, fetch its listing so the size picker shows
+                    // the same sizes configured in the admin panel (not the hardcoded generic list).
+                    const listingSlug = useStore.getState().selectedTemplateListingSlug;
+                    if (listingSlug) {
+                        const groups = await loadListingDesignGroups(listingSlug);
+                        if (groups.length) setDesignGroups(groups);
+                    }
+                })
+                .finally(() => setTemplateLoading(false));
             trackEvent('template_load', { templateId });
         }
         if (slug) {
             // Listing page — fetch design groups and auto-load the default (first 8x10) template.
             // When ?d= is present, still load the listing groups for the sidebar design picker,
             // but skip fetchAndApplyTemplate so the ?d= state isn't overwritten.
-            fetch(`${API_URL}/api/listings/${slug}`)
+            const listingUrl = new URL(`${API_URL}/api/listings/${slug}`, window.location.origin);
+            listingUrl.searchParams.set('ts', `${Date.now()}`);
+            fetch(listingUrl.toString(), { cache: 'no-store' })
                 .then(r => r.ok ? r.json() : null)
                 .then(listing => {
                     if (!listing?.templates?.length) return;
@@ -362,7 +507,7 @@ const MainLayout: React.FC = () => {
                 })
                 .catch(() => setTemplateLoading(false));
         }
-    }, [templateId, slug, designSlug]);
+    }, [templateId, slug, designSlug, loadListingDesignGroups]);
 
     // ── Street map capture ───────────────────────────────────────────────────
     const handleMapCapture = useCallback((dataUrl: string) => {
@@ -374,10 +519,12 @@ const MainLayout: React.FC = () => {
     }, [setMapBackgroundImage]);
 
     useEffect(() => {
-        if (posterType === 'starmap') {
-            setMapBackgroundImage(null);
+        if (posterType === 'starmap' || useVectorStreetMap) {
+            // Keep a designed in-shape background (asset URL); only clear transient street captures.
+            const bg = useStore.getState().mapBackgroundImage;
+            if (!bg || bg.startsWith('data:') || bg.startsWith('blob:')) setMapBackgroundImage(null);
         }
-    }, [posterType, setMapBackgroundImage]);
+    }, [posterType, setMapBackgroundImage, useVectorStreetMap]);
 
     // ── Preview dimensions ───────────────────────────────────────────────────
     useEffect(() => {
@@ -431,7 +578,8 @@ const MainLayout: React.FC = () => {
         if (e.button === 0 && !isInlineEditingRef.current) {
             // Don't start poster pan when clicking on SVG text/interactive elements —
             // those have their own D3 drag handlers and should not also pan the poster.
-            if ((e.target as Element).closest('#text-layer')) return;
+            const target = e.target as Element;
+            if (target.closest('#text-layer') || target.closest('#map-layer')) return;
             setIsDragging(true);
             setDragStart({ x: e.clientX - previewPanX, y: e.clientY - previewPanY });
         }
@@ -476,6 +624,8 @@ const MainLayout: React.FC = () => {
             setTouchStartDist(getTouchDist(e.touches));
             setTouchStartZoom(previewZoom);
         } else if (e.touches.length === 1 && !isInlineEditingRef.current) {
+            const target = e.target as Element;
+            if (target.closest('#text-layer') || target.closest('#map-layer')) return;
             setIsDragging(true);
             setDragStart({
                 x: e.touches[0].clientX - previewPanX,
@@ -562,7 +712,7 @@ const MainLayout: React.FC = () => {
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
-                bg="gray.50"
+                bg="#EAEEF2"
                 p={{ base: 3, md: 8 }}
                 overflow="hidden"
                 position={{ base: 'sticky', md: 'relative' }}
@@ -731,11 +881,36 @@ const MainLayout: React.FC = () => {
 
                 {/* Loading spinner for listing/template pages */}
                 {templateLoading && (
-                    <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" zIndex={200} bg="gray.50">
+                    <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" zIndex={200} bg="#EAEEF2">
                         <VStack spacing={3}>
                             <Box as="div" w="24px" h="24px" border="2px solid" borderColor="gray.300" borderTopColor="gray.600" borderRadius="full"
                                 animation="spin 0.6s linear infinite" />
                             <Text fontSize="xs" color="gray.400">Loading design...</Text>
+                        </VStack>
+                    </Box>
+                )}
+
+                {/* First-load map overlay — opaque, shown until the very first capture arrives
+                    and no active render is in progress. */}
+                {!templateLoading && isMapLoading && !isMapUpdating && (
+                    <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" zIndex={100} bg="white" borderRadius="sm">
+                        <VStack spacing={3}>
+                            <Box as="div" w="24px" h="24px" border="2px solid" borderColor="gray.200" borderTopColor="gray.500" borderRadius="full"
+                                animation="spin 0.6s linear infinite" />
+                            <Text fontSize="xs" color="gray.400">Loading map...</Text>
+                        </VStack>
+                    </Box>
+                )}
+
+                {/* Map updating (any mode) — semi-transparent so the old map stays visible,
+                    grayed out, with a spinner indicating the new view is still loading. */}
+                {!templateLoading && isMapUpdating && (
+                    <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center" zIndex={100}
+                        bg="whiteAlpha.700" borderRadius="sm" pointerEvents="none">
+                        <VStack spacing={3} bg="white" px={5} py={4} borderRadius="lg" boxShadow="md" border="1px solid" borderColor="gray.100">
+                            <Box as="div" w="24px" h="24px" border="2px solid" borderColor="gray.200" borderTopColor="gray.600" borderRadius="full"
+                                animation="spin 0.6s linear infinite" />
+                            <Text fontSize="xs" color="gray.500" fontWeight="500">Updating map…</Text>
                         </VStack>
                     </Box>
                 )}
@@ -759,40 +934,10 @@ const MainLayout: React.FC = () => {
                         opacity={templateLoading ? 0 : 1}
                     >
                         <VectorStarMap />
-                        {/* DEMO watermark overlay — matches the watermark baked into exports */}
-                        <Box
-                            position="absolute"
-                            inset={0}
-                            pointerEvents="none"
-                            overflow="hidden"
-                            zIndex={5}
-                            aria-hidden
-                        >
-                            {/* Diagonal DEMO tiles — same pattern as drawDemoWatermark in renderPoster.ts */}
-                            {Array.from({ length: 12 }).map((_, i) => (
-                                <Text
-                                    key={i}
-                                    position="absolute"
-                                    left={`${(i % 4) * 30 - 10}%`}
-                                    top={`${Math.floor(i / 4) * 36 - 5}%`}
-                                    fontSize="13%"
-                                    fontWeight="bold"
-                                    color="white"
-                                    opacity={0.18}
-                                    transform="rotate(-36deg)"
-                                    fontFamily="Arial, sans-serif"
-                                    letterSpacing="0.05em"
-                                    whiteSpace="nowrap"
-                                    userSelect="none"
-                                >
-                                    DEMO
-                                </Text>
-                            ))}
-                        </Box>
                 </Box>
 
                 {/* Offscreen street map renderer */}
-                {posterType !== 'starmap' && (
+                {!templateLoading && posterType !== 'starmap' && !useVectorStreetMap && (
                     <Box
                         position="fixed"
                         top="-9999px"
@@ -843,8 +988,22 @@ const MainLayout: React.FC = () => {
                     _hover={{ bg: 'blue.100', opacity: 0.6 }}
                     transition="background 0.15s"
                 />
-                <SidebarControls designGroups={designGroups} />
+                <SidebarControls designGroups={designGroups} isAdmin={adminExport} />
             </Box>
+            )}
+            {/* Email capture is a LEAD-CAPTURE prompt for prospects browsing a listing: it offers
+                to email them a link back to the design they're building. Never show it on
+                /d/:designToken — that visitor ALREADY has the link (they arrived through it), and
+                is typically a paying customer opening the design they bought. It fires on first
+                interaction, so on mobile it popped up and covered the whole screen the instant a
+                buyer tapped to edit — which is what blocked a real customer from editing her
+                purchased map. */}
+            {!designToken && (
+                <EmailCaptureModal
+                    listingSlug={slug || undefined}
+                    designGroupId={designSlug || null}
+                    designLabel={designSlug ? `your ${designSlug}` : null}
+                />
             )}
         </Flex>
         </>

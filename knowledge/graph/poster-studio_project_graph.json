@@ -1,0 +1,2718 @@
+{
+  "project": "poster-studio",
+  "format": "agentic-universe project graph v1",
+  "audit": "Expanded mapping 2026-09-09, explicitly authorized by the owner to exceed 40 nodes and cover the full project, new-listing workflow and existing-image cleaning/rerendering flow. Baseline e500b2bd73b8c21aba515c0781eeb06ae546f6e3. Local source, offline external factory/harness scripts and documentation were read; no live VPS/Etsy/credentials/runtime work. VPS remains ground truth for existing templates, orders and saved production data. Implemented components, required human gates, historical/deprecated paths and automation gaps are distinct. Five original question IDs are retained. The baseline had four scoped answers and one live-status unknown; this increment resolves the fifth as an evidence contract while leaving runtime unverified. Argument increment 2026-09-09: preserve all 80 prior nodes and 105 edges; add three non-feature concepts and evidence dependencies/challenges/refinements. Receipt and port existence/integration remain unverified. Add mapping-only local validator supporting refines and verification_state; no live or image work.",
+  "last_updated": "2026-09-09",
+  "nodes": [
+    {
+      "id": "ps__root",
+      "type": "component",
+      "label": "Poster Studio: customer poster designer and listing-image factory",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "React/Vite designer plus Express/SQLite order services and separate local listing tooling. Existing VPS templates, orders and saved production data are authoritative; local code inspection is not evidence of the currently deployed state.",
+      "derived_from": [
+        "package.json:6",
+        "server/index.js:123",
+        "server/db.js:18",
+        "docs/PROJECT_STATE.md"
+      ],
+      "tags": [
+        "root"
+      ]
+    },
+    {
+      "id": "ps__webapp",
+      "type": "component",
+      "label": "Frontend/API entry points and persisted design/order state",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "npm run api starts server/index.js; npm run server starts legacy save-server.js. Express mounts design, template, listing, verification and admin routes; server/db.js uses better-sqlite3 in WAL mode. Backend files inspected here are mostly Git-ignored, not evidence of deployment.",
+      "derived_from": [
+        "package.json:6",
+        "server/index.js:123",
+        "server/db.js:6"
+      ],
+      "tags": [
+        "customer",
+        "local-code"
+      ]
+    },
+    {
+      "id": "ps__svg_templates",
+      "type": "component",
+      "label": "Shared SVG design and standard PNG export",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "VectorStarMap renders poster artwork and celestial stars/constellations. DownloadButton prepares the high-resolution map and invokes renderPosterToBlob at 300 DPI using printSizeInches, then triggers the PNG download. A route-produced __posterPng is not proof of pressing this button.",
+      "derived_from": [
+        "src/components/VectorStarMap.tsx:441",
+        "src/components/VectorStarMap.tsx:1166",
+        "src/components/DownloadButton.tsx:262",
+        "src/utils/printSizes.ts:51"
+      ],
+      "tags": [
+        "render",
+        "local-code"
+      ]
+    },
+    {
+      "id": "ps__street_maps",
+      "type": "component",
+      "label": "Distinct monochrome-vector and MapLibre capture paths",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "vectorStreetMapRenderer decodes PBF vector tiles into road/water paths; its local source-zoom range is 10–14 with tile-budget backoff, 150-tile budget, concurrency 8 and retries 2. StreetMapCapture separately computes print-aware capture options at 300 DPI. Do not infer that all design families use identical paths or that current VPS rendering is healthy.",
+      "derived_from": [
+        "src/utils/vectorStreetMapRenderer.ts:1",
+        "src/utils/vectorStreetMapRenderer.ts:35",
+        "src/components/StreetMapCapture.tsx:665",
+        "src/components/StreetMapCapture.tsx:724"
+      ],
+      "tags": [
+        "maps",
+        "local-code"
+      ]
+    },
+    {
+      "id": "ps__fulfillment",
+      "type": "component",
+      "label": "Order render queue and browser render bridge",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "renderQueue claims SQLite jobs with an attempt increment and MAX_ATTEMPTS=3, calls renderOrder and sends poster-ready email on the eligible branch. renderLocal uses Puppeteer and reads window.__posterPng. This order pipeline is not the separate listing-factory cron.",
+      "derived_from": [
+        "server/services/renderQueue.js:9",
+        "server/services/renderQueue.js:104",
+        "server/services/renderLocal.js:107"
+      ],
+      "tags": [
+        "orders",
+        "local-code"
+      ]
+    },
+    {
+      "id": "ps__listing_factory",
+      "type": "component",
+      "label": "External staged listing factory with a repository draft CLI",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "The external Windows stage runner is now inspected directly: explicit one-stage invocation with a traveling manifest, Claude extraction, local import/preview/sync and draft CLI. Scene generation, cleaning, variants, critique and some human gates remain separately orchestrated, not implemented as a single complete stage004 handler.",
+      "derived_from": [
+        "docs/HANDOVER-2026-08-30-flow-resume.md:14",
+        "docs/HANDOVER-2026-08-30-flow-resume.md:35",
+        "docs/MOCKUP_AND_LISTING_IMAGE_WORKFLOW.md:5",
+        "server/scripts/factory-create-etsy-draft.js:207",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py"
+      ],
+      "tags": [
+        "factory",
+        "documented"
+      ]
+    },
+    {
+      "id": "ps__mockup_compositing",
+      "type": "component",
+      "label": "Reusable clean frames plus rank-specific composition adapter",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "scripts/composite-mockups.py references clean blank frames; compose-smbw001-listing-repair.py loads the external measured-profile harness and exact rank mapping, validates clean sources, preserves rank 01 and refuses nonempty destination overwrite. It is hardcoded to 4528873697 and ranks 01–17, not a general resumable recovery engine.",
+      "derived_from": [
+        "scripts/composite-mockups.py:21",
+        "scripts/compose-smbw001-listing-repair.py:18",
+        "scripts/compose-smbw001-listing-repair.py:55"
+      ],
+      "tags": [
+        "mockups",
+        "local-code"
+      ]
+    },
+    {
+      "id": "ps__review_board",
+      "type": "component",
+      "label": "Local image-level approval board: partially implemented v2",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "serve-listing-review.mjs configures localhost port 4175, 12 galleries, per-image comments/clipboard attachments, candidate IDs and serialized atomic JSON writes. Its active state path is on the Windows artifact mount. Code existence does not establish that the server is currently running or that v2 meets its acceptance gates.",
+      "derived_from": [
+        "scripts/serve-listing-review.mjs:14",
+        "scripts/serve-listing-review.mjs:27",
+        "scripts/serve-listing-review.mjs:141",
+        "scripts/serve-listing-review.mjs:291"
+      ],
+      "tags": [
+        "review",
+        "partial"
+      ]
+    },
+    {
+      "id": "ps__etsy_draft_writer",
+      "type": "component",
+      "label": "Draft creation, immediate ID recording and retry refusal",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "factory-create-etsy-draft.js supports --dry-run; an existing nonempty draft causes refusal to recreate. It records the new ID before uploads and reports failed uploads for manual recovery. A crash after the remote create but before ID persistence is not proven idempotent. Never run this CLI merely to inspect the map.",
+      "derived_from": [
+        "server/scripts/factory-create-etsy-draft.js:215",
+        "server/scripts/factory-create-etsy-draft.js:282",
+        "server/scripts/factory-create-etsy-draft.js:317",
+        "commit:913c895",
+        "commit:65e3a2d"
+      ],
+      "tags": [
+        "etsy",
+        "local-code"
+      ]
+    },
+    {
+      "id": "ps__cron_tasklist",
+      "type": "component",
+      "label": "Historical factory tasklist, not a runtime heartbeat",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "TASKLIST-listing-factory-active.md says it is reread each cron cycle and contains August 31/September 1 activity. It records draft expansion to 20 images and a 12-listing/231-image archive. These dated entries do not establish a currently active cron or current Etsy state.",
+      "derived_from": [
+        "docs/TASKLIST-listing-factory-active.md:3",
+        "docs/TASKLIST-listing-factory-active.md:1353",
+        "docs/TASKLIST-listing-factory-active.md:1373"
+      ],
+      "tags": [
+        "historical",
+        "queue"
+      ]
+    },
+    {
+      "id": "ps__contract_gate",
+      "type": "component",
+      "label": "Written agent and bounded AGY critique contracts",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "AGENT_CONTRACT and the listing critique contract require artifact evidence and bounded work. The AGY contract assigns one original/candidate pair, checkpoints and a report with NEEDS FIX/USER REVIEW/BLOCKED, never approval. A written contract is not proof of an installed machine gate; only sample Git hooks and no configured core.hooksPath were observed.",
+      "derived_from": [
+        "AGENT_CONTRACT.md:9",
+        "AGENT_CONTRACT.md:49",
+        "docs/AGY_LISTING_IMAGE_CRITIQUE_CONTRACT.md:20"
+      ],
+      "tags": [
+        "governance",
+        "documented"
+      ]
+    },
+    {
+      "id": "ps__d_prod_is_truth",
+      "type": "decision",
+      "label": "VPS is ground truth for existing templates, orders and production data",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "Existing VPS templates/defaults, orders and saved designs outrank local snapshots, guessed settings and historical notes. Local sync code is not authority to overwrite them. Listing variants must preserve the original template and use temporary design states; the latest user reaffirmed VPS authority on 2026-09-08. This mapping pass performs no production access or synchronization.",
+      "derived_from": [
+        "docs/AGENT_RUNBOOK.md:42",
+        "docs/PRODUCTION_DATA_AND_RESILIENCE_PLAN.md:129",
+        "docs/HANDOVER-2026-09-08-LISTING-IMAGE-RECOVERY.md:33",
+        "docs/PROJECT_STATE.md"
+      ],
+      "tags": [
+        "ground-truth"
+      ]
+    },
+    {
+      "id": "ps__d_clean_base_first",
+      "type": "decision",
+      "label": "Clean blank mockup bases before layering the design",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "Use clean, design-independent backgrounds with measured geometry, then composite the unprocessed native design export. The old final-only SynthID pass over finished lettering is a historical workflow, not the new-listing route: it mangles text. Detector-clear is not a visual approval.",
+      "derived_from": [
+        "docs/MOCKUP_AND_LISTING_IMAGE_WORKFLOW.md:5",
+        "docs/HANDOVER-2026-09-08-LISTING-IMAGE-RECOVERY.md:44"
+      ],
+      "tags": [
+        "synthid",
+        "mockups"
+      ]
+    },
+    {
+      "id": "ps__d_stop_at_draft",
+      "type": "decision",
+      "label": "Draft creation is distinct from publication and replacement approval",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "The draft CLI does not implement activation; its header separates the later publishing stage. For the present recovery incident no Etsy upload is authorized at all. Historical unattended-draft permission must not override the narrower current scope.",
+      "derived_from": [
+        "server/scripts/factory-create-etsy-draft.js:2",
+        "docs/HANDOVER-2026-09-08-LISTING-IMAGE-RECOVERY.md:18"
+      ],
+      "tags": [
+        "etsy",
+        "authority"
+      ]
+    },
+    {
+      "id": "ps__c_user_approval",
+      "type": "constraint",
+      "label": "Only the user approves exact candidate images",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "Generated files, detector results, hashes, agent critique and gallery badges are not user signoff. Preserve the 16 individually approved 4560493743 ranks 01,03,04,07–14,16–20 in their historical monochrome-repaired version. No whole replacement gallery is documented upload-ready; current artifact bytes were not inspected in this pass.",
+      "derived_from": [
+        "docs/HANDOVER-2026-09-08-LISTING-IMAGE-RECOVERY.md:33",
+        "docs/HANDOVER-2026-09-08-LISTING-IMAGE-RECOVERY.md:78",
+        "reports/listing-image-run-ledger-20260908.md:15"
+      ],
+      "tags": [
+        "approval",
+        "protected"
+      ]
+    },
+    {
+      "id": "ps__c_live_path_gated",
+      "type": "constraint",
+      "label": "No production/template/order/Etsy or credential access during mapping",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "This pass is restricted to two mapping artifacts and Git delivery. No deploy, DB sync, template save/sibling sync, order operation, Etsy mutation, runtime restart or credential inspection. Older generic deploy-to-complete instructions do not apply. Protection is an authority boundary, not a claim of automatic hook enforcement.",
+      "derived_from": [
+        "docs/HANDOVER-2026-09-08-LISTING-IMAGE-RECOVERY.md:33",
+        "AGENT_CONTRACT.md:49",
+        "docs/PROJECT_STATE.md"
+      ],
+      "tags": [
+        "scope",
+        "no-live-writes"
+      ]
+    },
+    {
+      "id": "ps__c_print_geometry",
+      "type": "constraint",
+      "label": "A4 physical ratio and native export cannot be faked by resizing",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "Canonical A4 is 210×297 mm; printSizeInches accepts both millimetres and already-normalized legacy inch values. Preserve native PNG rounding and template layout. Native adapter expects 2480×3508 while the recovery plan records other historical rounding; dimensions alone neither prove a standard export nor justify stretching. Evaluate projected frame geometry, not whether a photographed circle is round.",
+      "derived_from": [
+        "src/utils/printSizes.ts:16",
+        "src/utils/printSizes.ts:51",
+        "scripts/render-production-a4-native-win.mjs:29",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md:58"
+      ],
+      "tags": [
+        "a4",
+        "geometry"
+      ]
+    },
+    {
+      "id": "ps__c_external_runtime",
+      "type": "constraint",
+      "label": "Windows assets and external orchestration are separate dependencies",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "The compositor depends on external Windows archive/profile/harness paths and the native exporter loads Playwright from a WSL share while attaching Windows Chrome. Historical AdsPower/AGY runtime availability is not established here. GPU free-space and production disk percentages in old handovers are not current budgets.",
+      "derived_from": [
+        "scripts/compose-smbw001-listing-repair.py:18",
+        "scripts/render-production-a4-native-win.mjs:23",
+        "docs/HANDOVER-2026-08-30-flow-resume.md:5"
+      ],
+      "tags": [
+        "windows",
+        "runtime"
+      ]
+    },
+    {
+      "id": "ps__bug_visual_recovery",
+      "type": "bug",
+      "label": "Active replacement galleries remain rejected or unapproved",
+      "status": "open",
+      "confidence": 0.8,
+      "description": "The September 8 defect ledger records forest 4528873303 edge stripes, SMBW 4528873697 text position/casing/names hierarchy, colored-map water/street coverage and variety, star-map blend/name issues, wrong product in 4559850545 and four remaining CSM ranks. No fresh visual audit or repaired batch was performed by this mapping pass.",
+      "derived_from": [
+        "docs/HANDOVER-2026-09-08-LISTING-IMAGE-RECOVERY.md:109",
+        "reports/listing-image-run-ledger-20260908.md:62"
+      ],
+      "tags": [
+        "incident",
+        "visual"
+      ]
+    },
+    {
+      "id": "ps__bug_export_provenance",
+      "type": "bug",
+      "label": "Recovery exporter labels overstate native-button provenance",
+      "status": "open",
+      "confidence": 0.95,
+      "description": "render-production-a4.mjs still contains external map serialization/rasterization and a capture label naming 150-DPI normalization; it now requires --legacy-diagnostic. The native Windows adapter reads __posterPng rather than clicking PNG export and permits reused_dimension_only. The plan documents all 16 September 7 SMBW outputs as external-map/150-DPI exports resized to A4; that historical manifest was not re-opened during this pass.",
+      "derived_from": [
+        "scripts/render-production-a4.mjs:61",
+        "scripts/render-production-a4.mjs:315",
+        "scripts/render-production-a4.mjs:524",
+        "scripts/render-production-a4-native-win.mjs:216",
+        "scripts/render-production-a4-native-win.mjs:249",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md:41"
+      ],
+      "tags": [
+        "provenance",
+        "export"
+      ]
+    },
+    {
+      "id": "ps__bug_review_identity",
+      "type": "bug",
+      "label": "Candidate identity is cached metadata, not verified immutable bytes",
+      "status": "open",
+      "confidence": 0.95,
+      "description": "candidateInfo trusts manifest sha256 strings, falls back to size/mtime, and currentCandidates caches the result for process lifetime. Media URLs serve files by current path. Replacing bytes without refreshing metadata can leave an old approval attached to newly served content. Migration binds legacy decisions to whichever current roots are configured, without proving the historical version.",
+      "derived_from": [
+        "scripts/serve-listing-review.mjs:47",
+        "scripts/serve-listing-review.mjs:81",
+        "scripts/serve-listing-review.mjs:156",
+        "scripts/serve-listing-review.mjs:340"
+      ],
+      "tags": [
+        "review",
+        "identity"
+      ]
+    },
+    {
+      "id": "ps__bug_review_modal",
+      "type": "bug",
+      "label": "Reopened image modal looks up the attachment key as a decision key",
+      "status": "open",
+      "confidence": 0.95,
+      "description": "imageKey writes listingId@candidateId/file, but openImage reads saved.imageDecisions['image/'+listingId+'@'+candidateId+'/'+file]. The extra image/ prefix belongs only to attachments. Saved image notes/status can appear absent when reopening and a subsequent blank save can replace the note. This is a static code finding, not a reproduction against user comments.",
+      "derived_from": [
+        "scripts/serve-listing-review.mjs:93",
+        "scripts/serve-listing-review.mjs:291",
+        "scripts/serve-listing-review.mjs:378"
+      ],
+      "tags": [
+        "review",
+        "comments"
+      ]
+    },
+    {
+      "id": "ps__bug_review_transactions",
+      "type": "bug",
+      "label": "Serialized JSON writes do not fulfill the review transaction contract",
+      "status": "open",
+      "confidence": 0.95,
+      "description": "The writer serializes within one process and renames a temporary JSON file, but handlers have no expected review revision and overwrite each record note. Gallery eligibility is checked before the serialized mutation and uses only discovered files, so missing/all-empty rank coverage is not rejected. Migration retains legacyV1 but starts active attachments empty. These acceptance gaps remain despite earlier PR1-complete wording.",
+      "derived_from": [
+        "scripts/serve-listing-review.mjs:141",
+        "scripts/serve-listing-review.mjs:156",
+        "scripts/serve-listing-review.mjs:223",
+        "scripts/serve-listing-review.mjs:346",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md:109"
+      ],
+      "tags": [
+        "review",
+        "partial"
+      ]
+    },
+    {
+      "id": "ps__bug_prod_sync",
+      "type": "bug",
+      "label": "Production-pull script is not the documented WAL-safe snapshot recovery",
+      "status": "open",
+      "confidence": 0.95,
+      "description": "pull-production-state.sh still defaults to a historical host, backs up only the local main DB, scp-copies the remote main SQLite file and overwrites the local DB. It contains no VACUUM INTO, online backup API, WAL/SHM handling or integrity gate. server/db.js explicitly enables WAL. A documented one-time successful August 30 snapshot is not evidence this script became safe; do not execute it.",
+      "derived_from": [
+        "scripts/pull-production-state.sh:7",
+        "scripts/pull-production-state.sh:21",
+        "server/db.js:15",
+        "docs/HANDOVER-2026-08-30-flow-resume.md:27"
+      ],
+      "tags": [
+        "data-safety"
+      ]
+    },
+    {
+      "id": "ps__bug_git_stale_vs_cron",
+      "type": "bug",
+      "label": "Git history omits substantial working-tree and ignored implementation",
+      "status": "open",
+      "confidence": 0.95,
+      "description": "The pre-map HEAD is 65e3a2d dated August 30, nine days before this audit, not approximately one month. September recovery scripts/docs are untracked and .gitignore excludes most server files, including server/index.js and server/db.js. A mapping-only push does not publish that implementation or make a fresh clone runnable.",
+      "derived_from": [
+        "commit:65e3a2da58d7287834ace69bf3d1d77aacb453dc",
+        ".gitignore:6",
+        "reports/listing-image-run-ledger-20260908.md:5",
+        "docs/PROJECT_STATE.md"
+      ],
+      "tags": [
+        "reproducibility"
+      ]
+    },
+    {
+      "id": "ps__bug_agy_evidence",
+      "type": "bug",
+      "label": "Independent AGY critique is not established for current repairs",
+      "status": "open",
+      "confidence": 0.8,
+      "description": "The September 8 ledger explicitly reports no AGY critique report in that recovery slice. The contract requires real per-pair report checkpoints and bans agent approval. The implementation plan allows direct review under the user's fallback instruction with independent critique unavailable recorded, not a fabricated AGY pass. No AGY worker was dispatched for mapping.",
+      "derived_from": [
+        "reports/listing-image-run-ledger-20260908.md:62",
+        "docs/AGY_LISTING_IMAGE_CRITIQUE_CONTRACT.md:20",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md:169"
+      ],
+      "tags": [
+        "agy",
+        "evidence"
+      ]
+    },
+    {
+      "id": "ps__q_factory_running",
+      "type": "question",
+      "label": "Is the factory cron running, and what is the live draft/approval state?",
+      "status": "resolved",
+      "confidence": 0.95,
+      "description": "Resolved 2026-09-09 as an evidence-contract question: current runner writes timestamped manifest.history metadata, not the required output-hash receipt defined by ps__factory_run_receipt. No conforming receipt or live run was confirmed. Current cron activity and Etsy draft/publication state remain unknown; this scoped resolution is not a running-factory assertion. Historical August 31 draft status remains historical.",
+      "derived_from": [
+        "docs/TASKLIST-listing-factory-active.md:1353",
+        "reports/listing-image-run-ledger-20260908.md:15",
+        "server/index.js:198",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "docs/PROJECT_STATE.md"
+      ],
+      "tags": [
+        "question",
+        "live-state"
+      ],
+      "verification_state": "unverified"
+    },
+    {
+      "id": "ps__q_synthid_wanted",
+      "type": "question",
+      "label": "Is SynthID removal still intended, and on which inputs?",
+      "status": "resolved",
+      "confidence": 0.8,
+      "description": "Resolved 2026-09-08: yes for blank mockup backgrounds, not finished poster lettering. The current workflow explicitly requires clean raw white/calibration assets before design layering and deprecates the final-only order. The recovery handover forbids VAE/SynthID processing on completed poster designs. Visual quality and user signoff remain separate gates.",
+      "derived_from": [
+        "docs/MOCKUP_AND_LISTING_IMAGE_WORKFLOW.md:5",
+        "docs/HANDOVER-2026-09-08-LISTING-IMAGE-RECOVERY.md:44"
+      ],
+      "tags": [
+        "question",
+        "synthid"
+      ]
+    },
+    {
+      "id": "ps__q_relation_to_etsy_branches",
+      "type": "question",
+      "label": "What callable integration exists with the external Etsy orchestrator?",
+      "status": "resolved",
+      "confidence": 0.8,
+      "description": "Resolved 2026-09-08 (repository-side contract only): the concrete available seam is the candidate-directory draft CLI and documented external run_stage.py invocation configured by POSTER_STUDIO_ROOT, plus the app's existing design/template/render routes. Inspected package scripts and server route mounts contain no dedicated etsy-agentic-space adapter. The first-pass proposed shop-level integration is not evidence of a deployed orchestrator. External branch wiring was not verified; do not represent this answer as an end-to-end integration pass. Expanded evidence 2026-09-09: external run_stage.py was read directly and confirms the CLI seam, explicit stage invocation and absence of a daemon in that runner; no external shop-orchestrator runtime is certified.",
+      "derived_from": [
+        "server/scripts/factory-create-etsy-draft.js:10",
+        "docs/HANDOVER-2026-08-30-flow-resume.md:35",
+        "package.json:6",
+        "server/index.js:123",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py"
+      ],
+      "tags": [
+        "question",
+        "integration"
+      ]
+    },
+    {
+      "id": "ps__q_prod_db_sync_reliable",
+      "type": "question",
+      "label": "Is preserved-old-DB plus VACUUM INTO a reliable scripted procedure?",
+      "status": "resolved",
+      "confidence": 0.95,
+      "description": "Resolved 2026-09-08: not in the inspected production-pull script. A successful one-time VACUUM INTO repair is documented for August 30, but the npm prod:pull-state target still invokes a raw scp/cp script without WAL-safe snapshot or integrity validation. Treat reliability as unproven and this operational path as unsafe pending separate repair. No sync or DB access was performed.",
+      "derived_from": [
+        "package.json:18",
+        "scripts/pull-production-state.sh:21",
+        "docs/HANDOVER-2026-08-30-flow-resume.md:27",
+        "server/db.js:15"
+      ],
+      "tags": [
+        "question",
+        "data-safety"
+      ]
+    },
+    {
+      "id": "ps__q_next_listings",
+      "type": "question",
+      "label": "What should happen next; is Design004 the last completed work?",
+      "status": "resolved",
+      "confidence": 0.8,
+      "description": "Resolved 2026-09-08: the active effort is recovery of existing 12-listing/231-image candidates, not expansion to another new listing. First establish trustworthy image-version/comment review behavior with isolated fixtures: local v2 still has concrete identity, modal and transaction gaps. Then the documented bounded 4528873697/02 pilot is the next image repair, with 01 only a layout reference. Design004 has a historical 20-image draft record, not evidence of current user approval or an upload-ready replacement gallery; live status stays in q_factory_running.",
+      "derived_from": [
+        "docs/HANDOVER-2026-09-08-LISTING-IMAGE-RECOVERY.md:18",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md:109",
+        "scripts/serve-listing-review.mjs:291",
+        "docs/TASKLIST-listing-factory-active.md:1353"
+      ],
+      "tags": [
+        "question",
+        "next"
+      ]
+    },
+    {
+      "id": "ps__factory_queue",
+      "type": "component",
+      "label": "Factory candidate manifest and folder state machine",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "run_stage.py executes one explicit stage/candidate, not a daemon. manifest.stage/history travel with the folder; writes use temporary rename, then stage movement. Failures returned by a handler route to needs-attention. No durable worker lease or transactional folder/manifest movement is implemented.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py"
+      ],
+      "tags": [
+        "new-listing",
+        "queue"
+      ]
+    },
+    {
+      "id": "ps__source_competitor",
+      "type": "component",
+      "label": "N0: competitor API capture and candidate seeding",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "factory-source-competitor.mjs calls researchListing, downloads ranked references into competitor_images, seeds candidate manifest and copies rank-01 bytes to source.png (which can actually be JPEG). It refuses zero downloaded images. This supersedes the README's manual-only sourcing claim; the stage runner still expects a prepared source.png.",
+      "derived_from": [
+        "server/scripts/factory-source-competitor.mjs",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py"
+      ],
+      "tags": [
+        "new-listing",
+        "N0"
+      ]
+    },
+    {
+      "id": "ps__extraction",
+      "type": "component",
+      "label": "N1: source photo to editable extraction artifacts",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "Stage 001 invokes claude -p with a 590-second timeout and checks template.svg, template_manifest.json and font_guesses.json exist. Stage 002 checks referenced files only, then waits for human review. Current runner is Claude/Sonnet-based, not an AGY end-to-end generation engine.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py"
+      ],
+      "tags": [
+        "new-listing",
+        "N1"
+      ]
+    },
+    {
+      "id": "ps__font_resolution",
+      "type": "component",
+      "label": "N2: font files for real text comparison",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "Font guesses are resolved to files by factory-resolve-fonts.mjs; its comments require visual evaluation and flag commercial candidates requires_acquisition. The workflow compares actual design text against the source crop. File availability or an anonymized name is not evidence of a production license.",
+      "derived_from": [
+        "server/scripts/factory-resolve-fonts.mjs",
+        "AGENT_CONTRACT.md"
+      ],
+      "tags": [
+        "new-listing",
+        "N2"
+      ]
+    },
+    {
+      "id": "ps__font_confirmation",
+      "type": "constraint",
+      "label": "N2 gate: human chooses font before template work",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "AGENT_CONTRACT section 8 requires side-by-side source lettering and candidate fonts rendered on actual design text, followed by an explicit human choice. This is distinct from the later template and final-image approvals. The runner does not encode a separate font-choice approval record.",
+      "derived_from": [
+        "AGENT_CONTRACT.md",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py"
+      ],
+      "tags": [
+        "new-listing",
+        "human-gate"
+      ]
+    },
+    {
+      "id": "ps__font_corpus",
+      "type": "component",
+      "label": "Supporting font evaluation dataset and anonymized corpus",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "Factory README documents file resolution, blind specimen dataset with a private answer key and anonymized role names. These support identification/evaluation rather than constitute approval of a template. Private mapping/answer-key files were not opened; no font binaries were changed.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/README.md",
+        "server/scripts/factory-resolve-fonts.mjs"
+      ],
+      "tags": [
+        "new-listing",
+        "documented"
+      ]
+    },
+    {
+      "id": "ps__template_import",
+      "type": "component",
+      "label": "N3: extraction schema normalization and app-specific import",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "factory-normalize-extraction.cjs requires page/shape_mask/location_pin/text_roles. factory-create-template.cjs maps mm geometry into app-specific natural-flow offsets and template/group rows using local DB by default; this is not a lossless extraction-to-layout conversion. It replaces competitor example data with independent examples.",
+      "derived_from": [
+        "server/scripts/factory-normalize-extraction.cjs",
+        "server/scripts/factory-create-template.cjs"
+      ],
+      "tags": [
+        "new-listing",
+        "N3"
+      ]
+    },
+    {
+      "id": "ps__template_review",
+      "type": "constraint",
+      "label": "N3 gate: human reviews actual app template proof",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "After confirmed fonts, the new template is rendered through the actual app and reviewed by the human before mockups/draft work. Existing VPS templates must not be recreated from this importer during image repair. Local new-template creation and production promotion are separate authorities.",
+      "derived_from": [
+        "AGENT_CONTRACT.md",
+        "docs/LISTING_IMAGE_REPAIR_AND_VERIFICATION_PROTOCOL.md"
+      ],
+      "tags": [
+        "new-listing",
+        "human-gate"
+      ]
+    },
+    {
+      "id": "ps__catalog_expansion",
+      "type": "component",
+      "label": "N4: size expansion versus family-sibling linking",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "factory-expand-and-publish-listing.cjs creates an inactive standalone listing and 12 sizes despite its name. factory-link-design-to-family.cjs instead creates a sibling with the family's full roster and promoted group first. August 24 correction says loc001 belonged in the existing street-map family as Design004, not standalone. Choose deliberately; neither script is a read-only audit.",
+      "derived_from": [
+        "server/scripts/factory-expand-and-publish-listing.cjs",
+        "server/scripts/factory-link-design-to-family.cjs",
+        "docs/HANDOVER-2026-08-24-listing-factory-pipeline.md"
+      ],
+      "tags": [
+        "new-listing",
+        "N4"
+      ]
+    },
+    {
+      "id": "ps__catalog_parity",
+      "type": "constraint",
+      "label": "N4 gate: catalog linkage and thumbnails must match the intended design",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "Factory runner invokes sync-listing-state.cjs and looks for its success phrase; the script changes membership/defaults, it is not read-only. New-listing workflow also documents factory-audit-catalog.cjs checks for collisions/orphans. Card assets require both PNG and AVIF; success here is not image visual approval or permission to sync VPS.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "scripts/sync-listing-state.cjs",
+        "server/scripts/factory-make-thumbnail.mjs",
+        "docs/HANDOVER-2026-08-24-listing-factory-pipeline.md"
+      ],
+      "tags": [
+        "new-listing",
+        "catalog"
+      ]
+    },
+    {
+      "id": "ps__variant_stories",
+      "type": "component",
+      "label": "N5/R5: personalization variants independent of scene variation",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "factory-render-variants.mjs reads a local template and example pool, then uses the local /render route for stories. The recovery workflow instead requires VPS-grounded temporary A4 states, preserved layout and explicit semantic field mapping. Names/date/location/wording variation and room/scene variation are separate checks; no current popularity claim is established.",
+      "derived_from": [
+        "server/scripts/factory-render-variants.mjs",
+        "docs/LISTING_IMAGE_REGENERATION_VISUAL_CHECKLIST.md",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md"
+      ],
+      "tags": [
+        "new-listing",
+        "recovery",
+        "N5",
+        "R5"
+      ]
+    },
+    {
+      "id": "ps__prompt_map",
+      "type": "component",
+      "label": "N6: one competitor reference to one original scene prompt",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "The prompt-map validator checks reference count/filenames, unique ranks, meaningful analysis/prompt text and unique normalized prompts. The spec forbids uploading competitor artwork/text/branding to Flow. QA being a dictionary passes structural validation; it does not prove images exist or visual QA passed.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/docs/COMPETITOR-PROMPT-MAP-SPEC.md",
+        "/mnt/c/Agents/hermes-local/listing-factory/scripts/validate_competitor_prompt_map.py"
+      ],
+      "tags": [
+        "new-listing",
+        "N6"
+      ]
+    },
+    {
+      "id": "ps__flow_scene",
+      "type": "component",
+      "label": "N7: native Flow scene and green calibration generation",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "flow_fresh_generate_mockup.py imports AdsPower/Playwright automation and logs prompts. The workflow requires a fresh white scene per prompt followed by green calibration, native 16:9/2K. It is a separate GUI/browser activity, not executed by stage_004_rendered; desktop/auth/model availability is not verified in this map.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/flow_fresh_generate_mockup.py",
+        "docs/MOCKUP_AND_LISTING_IMAGE_WORKFLOW.md",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py"
+      ],
+      "tags": [
+        "new-listing",
+        "N7"
+      ]
+    },
+    {
+      "id": "ps__agy_generation_role",
+      "type": "component",
+      "label": "AGY generation/calibration adapter versus independent critique",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "antigravity_green_mask_preprocess.py can send a prompt through Windows pmux to a named AGY session, wait for a green edit, then run a detector. --existing-green-edit skips AGY generation. This older generation role is separate from recovery's read-only critique role and from Claude extraction. A pmux default name does not establish a healthy Polybot fleet worker or required model.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/antigravity_green_mask_preprocess.py",
+        "docs/AGY_LISTING_IMAGE_CRITIQUE_CONTRACT.md",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py"
+      ],
+      "tags": [
+        "agy",
+        "new-listing"
+      ]
+    },
+    {
+      "id": "ps__synthid_engine",
+      "type": "component",
+      "label": "N8/R3: isolated asset-cleaning and detector evidence wrapper",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "synthid_final_pass.py imports external detector/codebook/bypasser modules, loads them once per batch, records before/after V3/V4 outcomes, dimensions, PSNR/SSIM and sidecars. Detector errors/nonclear results prevent removed_verified. Inputs and outputs must differ. This is inspected wrapper behavior, not a new cleaning run or proof of current runtime models.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/synthid_final_pass.py"
+      ],
+      "tags": [
+        "new-listing",
+        "recovery",
+        "N8",
+        "R3"
+      ]
+    },
+    {
+      "id": "ps__synthid_retry",
+      "type": "component",
+      "label": "Cleaning retries reuse status sidecars and rebuild batch evidence",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "The wrapper --retry-unverified skips sidecars marked removed_verified and rebuilds the manifest from all input sidecars. Otherwise any existing sidecar is skipped. There is no input-content fingerprint in that resume check, so status reuse alone does not prove the current input/output bytes are those assessed.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/synthid_final_pass.py"
+      ],
+      "tags": [
+        "recovery",
+        "resume"
+      ]
+    },
+    {
+      "id": "ps__legacy_clean_bases",
+      "type": "component",
+      "label": "R3: select exact profiled legacy blank backgrounds",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "prepare_clean_legacy_mockups.py selects names from the verified profile set (documented canonical 22), refuses unexpected staged image names, copies source blanks into separate staging and invokes the wrapper with input-stage blank-mockup. Historical 83-mockup archive and 231 finished listing images are different inventories; neither should be confused with these profiled bases.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/prepare_clean_legacy_mockups.py",
+        "docs/ETSY-LISTING-IMAGE-CLEANUP-2026-09-01.md"
+      ],
+      "tags": [
+        "recovery",
+        "R3"
+      ]
+    },
+    {
+      "id": "ps__reusable_geometry",
+      "type": "component",
+      "label": "N9: crop clean Flow pair and remeasure reusable frame geometry",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "build_reusable_mockup.py crops around frame center to 4:3, rejects clipping/badge-zone problems, reruns green detector on cropped clean assets and saves quad/mask/overlay/manifest. Actual implementation requires --design, renders a white_bg composite and expands the quad; its optional-composite docstring is inaccurate. It is not a universal dark-frame compositor.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/build_reusable_mockup.py"
+      ],
+      "tags": [
+        "new-listing",
+        "N9"
+      ]
+    },
+    {
+      "id": "ps__clean_base_gate",
+      "type": "constraint",
+      "label": "N9/R4 gate: refuse legacy unclean background roots",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "etsy_mockup_pipeline_v3.assert_synthid_clean_manifest requires all-clear status, exact profile-name coverage, blank-mockup stage, unchanged dimensions, correct clean output path and file existence. Main enforces it unless the explicit unsafe debug path is selected. These metadata checks do not verify content hashes or supersede visual review. Flow-raw reusable-builder evidence has a different schema and cannot be treated as a blank-mockup manifest automatically.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/etsy_mockup_pipeline_v3.py",
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/build_reusable_mockup.py"
+      ],
+      "tags": [
+        "recovery",
+        "new-listing",
+        "R4"
+      ]
+    },
+    {
+      "id": "ps__composition_core",
+      "type": "component",
+      "label": "N10/R7: measured perspective warp, masks, blend and labels",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "The shared harness loads profiles, classifies white/dark designs, warps to quads, applies masks and blend treatments, draws labels and emits QA. Keep explicit design number distinct from story/rank number: the loc001 historical correction fixed variants incorrectly labeled Design1–20. Bleed, crop and border stripping require per-frame visual acceptance, especially dark forest frames.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/etsy_mockup_pipeline_v3.py",
+        "docs/HANDOVER-2026-08-24-listing-factory-pipeline.md"
+      ],
+      "tags": [
+        "new-listing",
+        "recovery",
+        "N10",
+        "R7"
+      ]
+    },
+    {
+      "id": "ps__seo_copy",
+      "type": "component",
+      "label": "N11: original listing copy and draft metadata",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "factory-generate-listing-copy.mjs uses the LLM service and generic tag vocabulary with 140-character title, 13-tag, 20-character-tag code limits. The August 24 record documents generated listing_copy.json and anti-copy gates; the draft CLI prefers that file but retains fallback copy. These are local code constraints, not a fresh verification of Etsy policy.",
+      "derived_from": [
+        "server/scripts/factory-generate-listing-copy.mjs",
+        "server/scripts/factory-create-etsy-draft.js",
+        "docs/HANDOVER-2026-08-24-listing-factory-pipeline.md"
+      ],
+      "tags": [
+        "new-listing",
+        "N11"
+      ]
+    },
+    {
+      "id": "ps__listing_video",
+      "type": "component",
+      "label": "N12: optional listing video generation",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "Two distinct tools exist: factory-make-listing-video.mjs produces ffmpeg motion/crossfade video from stills; flow_video_generate.py automates Flow via AdsPower. Historical correction requires blank-frame Flow inputs rather than generative processing of finished lettering, followed by proper artwork composition. Clip existence/spec checks do not establish text integrity; no new video was generated. factory-upload-etsy-video.mjs is a separate live upload without state change; it can skip local revalidation if ffprobe is absent. Upload needs its own authorization and prior validated media, not an assumption that the stage runner handled it.",
+      "derived_from": [
+        "server/scripts/factory-make-listing-video.mjs",
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/flow_video_generate.py",
+        "docs/HANDOVER-2026-08-24-listing-factory-pipeline.md",
+        "server/scripts/factory-upload-etsy-video.mjs"
+      ],
+      "tags": [
+        "new-listing",
+        "N12"
+      ]
+    },
+    {
+      "id": "ps__publish_gate",
+      "type": "constraint",
+      "label": "N14: human publication, never inferred from folder stage",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "Stage 005 remains a draft stop. Stage 006 checks only a draft ID then returns 'published by human gate' and advances to 007; it neither invokes nor verifies an Etsy activation. Explicit human publication and authoritative remote evidence are required separately. Current mapping/recovery authorizes no mutation.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "AGENT_CONTRACT.md"
+      ],
+      "tags": [
+        "new-listing",
+        "N14"
+      ]
+    },
+    {
+      "id": "ps__pinterest_derivatives",
+      "type": "component",
+      "label": "N15: local Pinterest derivatives after published URL",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "Stage 007 requires etsy.listing_url (or url), invokes pinterest_export.py and records its pin manifest. The exporter targets 1000×1500 2:3 assets and does not post Pins. Published-URL presence is a prerequisite, not itself verified publication.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/pinterest_export.py"
+      ],
+      "tags": [
+        "new-listing",
+        "N15"
+      ]
+    },
+    {
+      "id": "ps__repair_inventory",
+      "type": "component",
+      "label": "R0: archived listing IDs, ranks and original imagery",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "September 1 cleanup document records 12 listings/231 regular JPEG inputs with per-listing counts and a separate 83-mockup historical set. Preserve original image identity/rank for exact matching. archive-listings.js is a different physical-listing archive script with different default IDs; do not substitute it for the existing active archive or run it during mapping.",
+      "derived_from": [
+        "docs/ETSY-LISTING-IMAGE-CLEANUP-2026-09-01.md",
+        "server/scripts/archive-listings.js"
+      ],
+      "tags": [
+        "recovery",
+        "R0"
+      ]
+    },
+    {
+      "id": "ps__legacy_final_cleanup",
+      "type": "decision",
+      "label": "Deprecated: process completed listing images as the final cleanup",
+      "status": "deprecated",
+      "confidence": 0.8,
+      "description": "The original September 1 workflow processed 231 finished JPEGs and waited for removed_verified sidecars before replacement. Later user feedback rejected text damage; current workflow only cleans blank bases and rerenders pristine designs. Keep historical outputs/evidence, but never resume final-image VAE merely because old sidecars are pending.",
+      "derived_from": [
+        "docs/ETSY-LISTING-IMAGE-CLEANUP-2026-09-01.md",
+        "docs/LISTING_IMAGE_REGENERATION_VISUAL_CHECKLIST.md"
+      ],
+      "tags": [
+        "recovery",
+        "legacy"
+      ]
+    },
+    {
+      "id": "ps__repair_feedback",
+      "type": "component",
+      "label": "R1: per-rank feedback and protected-approval ledger",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "Repair protocol ingests every gallery/image complaint including blank-note Needs Fix, freezes affected ranks and preserves exact approved versions. The graph does not substitute gallery IDs for individual issue scope. Current JSON/board machinery is partial; an immutable issue importer/job ledger remains planned.",
+      "derived_from": [
+        "docs/LISTING_IMAGE_REPAIR_AND_VERIFICATION_PROTOCOL.md",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md"
+      ],
+      "tags": [
+        "recovery",
+        "R1"
+      ]
+    },
+    {
+      "id": "ps__repair_mapping",
+      "type": "constraint",
+      "label": "R2: original/candidate/template/background/quad identity must be exact",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "Freeze the archived same-listing/same-rank original, current candidate, correct actual design, clean background and profile. Cross-design images within a star gallery must not inherit its hero's template blindly. Unknown mapping blocks that rank; no lookalike source or arbitrary frame fit. The source replacement-package path is consumed by the dated compositors.",
+      "derived_from": [
+        "docs/LISTING_IMAGE_REPAIR_AND_VERIFICATION_PROTOCOL.md",
+        "scripts/compose-production-grounded-listings.py",
+        "scripts/compose-smbw001-listing-repair.py"
+      ],
+      "tags": [
+        "recovery",
+        "R2"
+      ]
+    },
+    {
+      "id": "ps__native_export_contract",
+      "type": "constraint",
+      "label": "R6: standard PNG button on VPS-grounded temporary A4 design",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "Required final route is native Windows Chrome interacting with the standard PNG export, after correct template/state/font/map readiness; preserve downloaded bytes and source/layout fingerprints. Do not modify VPS defaults or silently substitute external SVG/raster paths. The compliant adapter is planned, not proven implemented by the existing __posterPng reader.",
+      "derived_from": [
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md",
+        "scripts/render-production-a4-native-win.mjs",
+        "src/components/DownloadButton.tsx"
+      ],
+      "tags": [
+        "recovery",
+        "R6",
+        "planned-adapter"
+      ]
+    },
+    {
+      "id": "ps__map_visual_gate",
+      "type": "constraint",
+      "label": "R6 gate: settled map coverage and original visual style",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "Monochrome maps need coherent same-view streets/water, fine print-aware detail and unclamped pan with loading. Colored variants need interesting visible blue water AND streets. Stars must preserve intended count/constellations. Neither network quiet, a fixed delay nor the render-ready marker proves the required visual result.",
+      "derived_from": [
+        "docs/LISTING_IMAGE_REGENERATION_VISUAL_CHECKLIST.md",
+        "src/components/PosterRenderPage.tsx"
+      ],
+      "tags": [
+        "recovery",
+        "map-qa"
+      ]
+    },
+    {
+      "id": "ps__dated_compositors",
+      "type": "component",
+      "label": "R7 historical adapters and their limited scope",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "compose-production-grounded-listings.py selects date-specific source roots and per-rank sibling star designs; compose-monochrome-repaired-listings.py handles SMBW/CSM; compose-smbw001-listing-repair.py rebuilds only SMBW 02–17 preserving hero. Existing scripts are historical candidate producers, not a release-approved generic runner.",
+      "derived_from": [
+        "scripts/compose-production-grounded-listings.py",
+        "scripts/compose-monochrome-repaired-listings.py",
+        "scripts/compose-smbw001-listing-repair.py"
+      ],
+      "tags": [
+        "recovery",
+        "R7"
+      ]
+    },
+    {
+      "id": "ps__pair_critique",
+      "type": "constraint",
+      "label": "R8: bounded AGY original/candidate critique or recorded direct fallback",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "Freeze exact pair and design layer; dispatch acceptance, evidence and self-audit checkpoints to an identified isolated worker. Reports must exist and say NEEDS FIX, USER REVIEW or BLOCKED, never APPROVED. After failed checkpoints use authorized direct review with independent critique unavailable explicitly recorded. Older AGY generation sessions are not interchangeable with critique workers.",
+      "derived_from": [
+        "docs/AGY_LISTING_IMAGE_CRITIQUE_CONTRACT.md",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md"
+      ],
+      "tags": [
+        "recovery",
+        "R8"
+      ]
+    },
+    {
+      "id": "ps__fullsize_review",
+      "type": "constraint",
+      "label": "R9: native-pixel inspection and individual user decision",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "Inspect every changed image for scene identity, product, typography, names, spacing, tiles, water, geometric fit, seams, blend and genuine variation. Full-size zoom plus per-image text/clipboard comments on the board are required; contact sheets cannot substitute. User decisions must bind to exact immutable versions before gallery release.",
+      "derived_from": [
+        "docs/LISTING_IMAGE_REPAIR_AND_VERIFICATION_PROTOCOL.md",
+        "docs/LISTING_IMAGE_REGENERATION_VISUAL_CHECKLIST.md",
+        "scripts/serve-listing-review.mjs"
+      ],
+      "tags": [
+        "recovery",
+        "R9"
+      ]
+    },
+    {
+      "id": "ps__repair_resume",
+      "type": "constraint",
+      "label": "R10 planned: fingerprinted jobs and crash reconciliation",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "PR3/PR5 propose input fingerprints, bounded job attempts/leases, atomic output promotion, per-rank checkpoints and Windows backups with restart reconciliation. Existing wrappers have partial file/sidecar reuse, not this full control loop. Generated, inspected, awaiting-user and approved must stay distinct.",
+      "derived_from": [
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md",
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/synthid_final_pass.py"
+      ],
+      "tags": [
+        "recovery",
+        "planned"
+      ]
+    },
+    {
+      "id": "ps__release_package",
+      "type": "constraint",
+      "label": "R10 planned: exact user-approved release manifest",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "PR5 requires complete original rank order, source/template/base/profile/output provenance, resolved issues and exact per-image/gallery version approvals. Package only those hashes with Windows-openable paths. A hash-valid folder is not an approved release; no package or upload is created in this map.",
+      "derived_from": [
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md",
+        "docs/LISTING_IMAGE_REPAIR_AND_VERIFICATION_PROTOCOL.md"
+      ],
+      "tags": [
+        "recovery",
+        "R10",
+        "planned"
+      ]
+    },
+    {
+      "id": "ps__anchor_updater",
+      "type": "component",
+      "label": "R11 gated: replace existing Etsy images without emptying the listing",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "factory-update-etsy-images.js retains an existing anchor, prunes other old images, uploads up to 19, removes anchor, uploads remainder and verifies count/ranks. It refuses empty input/live anchor and optional EXPECTED_COUNT mismatch. It directly mutates Etsy and does not validate user approvals or candidate hashes; a separately authorized release gate must wrap it. The script's 20-image limit is inspected code, not a current API-policy claim.",
+      "derived_from": [
+        "server/scripts/factory-update-etsy-images.js",
+        "docs/ETSY-LISTING-IMAGE-CLEANUP-2026-09-01.md"
+      ],
+      "tags": [
+        "recovery",
+        "R11",
+        "etsy"
+      ]
+    },
+    {
+      "id": "ps__bug_factory_gates",
+      "type": "bug",
+      "label": "Required font/template/gallery gates are not fully encoded by runner",
+      "status": "open",
+      "confidence": 0.95,
+      "description": "Stage003 checks only an extraction record; stage004 runs template import, preview and mutating sync, then auto-advances to005. It does not run the complete Flow/clean/composition/critique chain or record separate human font/template approval. Prompt-map validation is skipped when source.reference_dir is absent. Do not infer full workflow completion from runner success. A handled failure routes to needs-attention but cmd_run does not set a nonzero exit status; subprocess exceptions can bypass the handled-failure history path. Exit code alone is insufficient.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "AGENT_CONTRACT.md"
+      ],
+      "tags": [
+        "new-listing",
+        "gap"
+      ]
+    },
+    {
+      "id": "ps__bug_published_claim",
+      "type": "bug",
+      "label": "Stage006 can record publication without any remote evidence",
+      "status": "open",
+      "confidence": 0.95,
+      "description": "stage_006_published returns success based only on draft_listing_id. The history text and stage move can therefore say published without an activation or readback. Keep publication external/human-gated and never use this manifest alone as evidence.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py"
+      ],
+      "tags": [
+        "new-listing",
+        "gap"
+      ]
+    },
+    {
+      "id": "ps__bug_clean_attestation",
+      "type": "bug",
+      "label": "Clean-base metadata and sidecar resume are not content attestations",
+      "status": "open",
+      "confidence": 0.95,
+      "description": "Cleaning resume keys on sidecar status; the compositing gate checks metadata/path/dimensions but not input/output content hashes. build_reusable_mockup accepts optional detector JSON and does not itself enforce detector-clear status before composing. Thus upstream verification and immutable byte binding are still necessary, even though a different shared-harness path has a stronger metadata gate.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/synthid_final_pass.py",
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/etsy_mockup_pipeline_v3.py",
+        "/mnt/c/Agents/hermes-local/mockup_harness/bin/build_reusable_mockup.py"
+      ],
+      "tags": [
+        "recovery",
+        "new-listing",
+        "gap"
+      ]
+    },
+    {
+      "id": "ps__saved_design_api",
+      "type": "component",
+      "label": "Customer design save/share and template hydration",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "Design routes expose POST save-design and GET design/:token; template routes expose public reads and admin writes, including settings and sync-to-siblings. These are different data domains: temporary saved designs are not default templates. Existing records on VPS remain authoritative.",
+      "derived_from": [
+        "server/routes/designs.js",
+        "server/routes/templates.js",
+        "src/utils/applyTemplate.ts"
+      ],
+      "tags": [
+        "application"
+      ]
+    },
+    {
+      "id": "ps__catalog_api",
+      "type": "component",
+      "label": "Listings, groups, template order and short links",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "listings.js serves customer slugs and admin listing/group creation, template membership and reordering. shortLinks.js resolves/creates /go targets. This connects Etsy copy/customer entry points to the exact family/template. Factory linking must preserve roster and positions, not orphan designs.",
+      "derived_from": [
+        "server/routes/listings.js",
+        "server/services/shortLinks.js"
+      ],
+      "tags": [
+        "application"
+      ]
+    },
+    {
+      "id": "ps__order_intake",
+      "type": "component",
+      "label": "Etsy paid-order intake and recovery",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "etsy.js pollAndFulfill extracts a design token and can invoke orderRecovery; personalizationParser handles deterministic parsing with optional LLM assistance. Recovered order states and queued work are customer data, distinct from synthetic listing examples and candidate manifests.",
+      "derived_from": [
+        "server/services/etsy.js",
+        "server/services/orderRecovery.js",
+        "server/services/personalizationParser.js"
+      ],
+      "tags": [
+        "application",
+        "orders"
+      ]
+    },
+    {
+      "id": "ps__order_size",
+      "type": "component",
+      "label": "Purchased-size enforcement and confirmation",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "sizeAdapt defines lockable sizes and needsSizeConfirm; render.js enforces purchased size before rendering and validates output/resources. A4 unit normalization in printSizes is shared. Existing order sizes must never be overwritten as part of listing mockup work.",
+      "derived_from": [
+        "server/services/sizeAdapt.js",
+        "server/services/render.js",
+        "src/utils/printSizes.ts"
+      ],
+      "tags": [
+        "application",
+        "orders"
+      ]
+    },
+    {
+      "id": "ps__download_revision",
+      "type": "component",
+      "label": "Verification, downloads, edits and rendering endpoints",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "verify.js exposes verify-order, signed download-file route, status, confirm-order, render-now and order-edit. These are the customer delivery/revision boundary, not a safe generic listing renderer API. Endpoint existence is source evidence, not a current delivery success test.",
+      "derived_from": [
+        "server/routes/verify.js"
+      ],
+      "tags": [
+        "application",
+        "orders"
+      ]
+    },
+    {
+      "id": "ps__print_fulfillment",
+      "type": "component",
+      "label": "Physical-print quote, submission and release code",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "prodigi.js exposes quote/assess, submit, release and fulfill operations; profitability.js computes margin assessments. This implemented capability must not be mistaken for current shop offering configuration: the factory draft script creates digital listings, and current VPS/shop state was not queried.",
+      "derived_from": [
+        "server/services/prodigi.js",
+        "server/services/profitability.js",
+        "server/scripts/factory-create-etsy-draft.js"
+      ],
+      "tags": [
+        "application",
+        "orders"
+      ]
+    },
+    {
+      "id": "ps__communications",
+      "type": "component",
+      "label": "Lead capture, inbound messages, webhooks and analytics",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "email-capture route captures leads; admin-inbox serves inbound messages/attachments; messageTriage processes inbound bodies; webhooks handle provider and email events; analytics records events and serves admin views. These contain customer-facing data paths, excluded from listing example generation and this map's runtime access.",
+      "derived_from": [
+        "server/routes/email-capture.js",
+        "server/routes/admin-inbox.js",
+        "server/services/messageTriage.js",
+        "server/routes/webhooks.js",
+        "server/routes/analytics.js"
+      ],
+      "tags": [
+        "application"
+      ]
+    },
+    {
+      "id": "ps__admin_assets_auth",
+      "type": "component",
+      "label": "Admin authorization and uploaded font/image assets",
+      "status": "active",
+      "confidence": 0.9,
+      "description": "auth middleware uses JWT/admin checks and bcrypt login handling. admin-assets exposes guarded upload/delete and public font/CSS endpoints. Listing typography depends on resolvable fonts, but mapping inspects no account secrets or uploaded private assets.",
+      "derived_from": [
+        "server/middleware/auth.js",
+        "server/routes/admin-assets.js"
+      ],
+      "tags": [
+        "application"
+      ]
+    },
+    {
+      "id": "ps__test_surface",
+      "type": "component",
+      "label": "Local browser/unit tests versus production verification",
+      "status": "active",
+      "confidence": 0.95,
+      "description": "playwright.config.ts uses local preview4173, one Chromium worker and screenshot traces. package scripts include Playwright and Vitest. Mapping validation does not run customer/production tests; historical visual snapshots or file-size checks cannot certify current listing images.",
+      "derived_from": [
+        "playwright.config.ts",
+        "package.json"
+      ],
+      "tags": [
+        "application",
+        "tests"
+      ]
+    },
+    {
+      "id": "ps__deployment_boundary",
+      "type": "constraint",
+      "label": "Deployment preserves VPS data and unmanaged thumbnails",
+      "status": "active",
+      "confidence": 0.8,
+      "description": "AGENTS deployment instructions distinguish static dist from server application code and require preserving designs thumbnails; data/env are excluded from server sync. These are documented boundaries, not permission to deploy this dirty checkout. Snapshot-source authority and unsafe pull script remain separately mapped.",
+      "derived_from": [
+        "AGENTS.md",
+        "scripts/pull-production-state.sh"
+      ],
+      "tags": [
+        "application",
+        "deployment"
+      ]
+    },
+    {
+      "id": "ps__failure_completion_label",
+      "type": "bug",
+      "label": "a completion label is not evidence of completion — metadata checks do not read the artifact",
+      "status": "open",
+      "confidence": 0.98,
+      "description": "AU attack_fake_completion_via_done_annotation demonstrates a done board annotation while the ledger remains pending. gates._evidence_basis returns None for missing measurements, not a plausible score. Poster has analogous publication labels and metadata-only cleaning/approval checks. Require direct artifact inspection, hash-bound results and external readback where relevant; neither a hash nor a label proves visual correctness.",
+      "derived_from": [
+        "/mnt/c/Agents/agentic-universe/repo/tools/probe_substrate_adversarial.py:109",
+        "/mnt/c/Agents/agentic-universe/repo/tools/gates.py:88",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "scripts/serve-listing-review.mjs"
+      ],
+      "tags": [
+        "failure-mode",
+        "evidence",
+        "fake-completion"
+      ]
+    },
+    {
+      "id": "ps__factory_run_receipt",
+      "type": "constraint",
+      "label": "Required per-run receipt: timestamps plus hashes of actual output bytes",
+      "status": "to_fill",
+      "confidence": 0.95,
+      "verification_state": "unverified",
+      "description": "Defined contract, not an observed file: candidate/receipts/<run-id>.json must record run_id, candidate_id, stage, started_at, finished_at, executor/version, exit_status, input hashes, outputs [{path,sha256,bytes}], checks and approval references bound to output hashes. Hashes must be computed by reading outputs after execution. Failed/incomplete receipts cannot claim completion; publication additionally needs authorized remote readback. Current run_stage.py writes manifest.history [{stage,at,ok,note}] via append_history/save_manifest; no output-hash receipt emitter was found there. No matching receipt or currently running job was verified. Runtime remains unknown.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "docs/PROJECT_STATE.md"
+      ],
+      "tags": [
+        "receipt-contract",
+        "unverified",
+        "factory"
+      ]
+    },
+    {
+      "id": "ps__port_au_ledger_gates",
+      "type": "decision",
+      "label": "WOULD-CHANGE: port AU task ledger and gates with per-artifact human approval adapters",
+      "status": "to_fill",
+      "confidence": 0.95,
+      "verification_state": "unverified",
+      "description": "Concrete proposed port of tools/task_ledger.py and tools/gates.py (with its pheromone dependency), not implemented here. Use deterministic dependency scheduling, stale-claim recovery and audit history; adapt G1 evidence and G4 release checks to per-listing/rank/version tasks, actual output-hash receipts and explicit owner approval. Ledger.complete currently trusts caller result_ref, and G4 accepts caller computable_ok; neither reads/validates Poster images automatically. Add byte verification, concurrency/version guards and real checks before marking tasks done. Independent critique/quorum never replaces user approval. Unknown evidence must remain unknown.",
+      "derived_from": [
+        "/mnt/c/Agents/agentic-universe/repo/tools/task_ledger.py",
+        "/mnt/c/Agents/agentic-universe/repo/tools/gates.py",
+        "/mnt/c/Agents/agentic-universe/repo/tools/pheromone.py",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md"
+      ],
+      "tags": [
+        "would-change",
+        "proposed-port",
+        "human-gates"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "ps__e1",
+      "source": "ps__webapp",
+      "target": "ps__root",
+      "type": "implements",
+      "description": "The frontend/API is the customer product."
+    },
+    {
+      "id": "ps__e2",
+      "source": "ps__svg_templates",
+      "target": "ps__webapp",
+      "type": "implements",
+      "description": "The shared renderer implements poster design and download."
+    },
+    {
+      "id": "ps__e3",
+      "source": "ps__street_maps",
+      "target": "ps__svg_templates",
+      "type": "implements",
+      "description": "Street geometry/capture supplies the map layer."
+    },
+    {
+      "id": "ps__e4",
+      "source": "ps__fulfillment",
+      "target": "ps__webapp",
+      "type": "depends_on",
+      "description": "Order rendering depends on saved design data and the browser route."
+    },
+    {
+      "id": "ps__e5",
+      "source": "ps__listing_factory",
+      "target": "ps__root",
+      "type": "implements",
+      "description": "The separate pipeline prepares listing drafts."
+    },
+    {
+      "id": "ps__e6",
+      "source": "ps__listing_factory",
+      "target": "ps__mockup_compositing",
+      "type": "depends_on",
+      "description": "Listing preparation consumes composited mockups."
+    },
+    {
+      "id": "ps__e7",
+      "source": "ps__listing_factory",
+      "target": "ps__etsy_draft_writer",
+      "type": "depends_on",
+      "description": "Stage 005 delegates draft creation to the CLI."
+    },
+    {
+      "id": "ps__e8",
+      "source": "ps__mockup_compositing",
+      "target": "ps__svg_templates",
+      "type": "depends_on",
+      "description": "Composition requires a verified design PNG."
+    },
+    {
+      "id": "ps__e9",
+      "source": "ps__review_board",
+      "target": "ps__listing_factory",
+      "type": "records",
+      "description": "The board records image decisions for the recovery pipeline."
+    },
+    {
+      "id": "ps__e10",
+      "source": "ps__cron_tasklist",
+      "target": "ps__listing_factory",
+      "type": "records",
+      "description": "The dated tasklist records historical factory activity."
+    },
+    {
+      "id": "ps__e11",
+      "source": "ps__contract_gate",
+      "target": "ps__listing_factory",
+      "type": "records",
+      "description": "Written contracts define evidence and critique requirements."
+    },
+    {
+      "id": "ps__e12",
+      "source": "ps__d_prod_is_truth",
+      "target": "ps__webapp",
+      "type": "records",
+      "description": "VPS production data has authority over local snapshots."
+    },
+    {
+      "id": "ps__e13",
+      "source": "ps__d_clean_base_first",
+      "target": "ps__mockup_compositing",
+      "type": "records",
+      "description": "Designs are layered only after the clean-background gate."
+    },
+    {
+      "id": "ps__e14",
+      "source": "ps__d_stop_at_draft",
+      "target": "ps__etsy_draft_writer",
+      "type": "records",
+      "description": "Draft creation is not publication or recovery upload permission."
+    },
+    {
+      "id": "ps__e15",
+      "source": "ps__c_user_approval",
+      "target": "ps__listing_factory",
+      "type": "blocks",
+      "description": "Absent exact user approval, no recovery package can be released."
+    },
+    {
+      "id": "ps__e16",
+      "source": "ps__c_live_path_gated",
+      "target": "ps__webapp",
+      "type": "blocks",
+      "description": "Mapping forbids production operations and credential access."
+    },
+    {
+      "id": "ps__e17",
+      "source": "ps__c_print_geometry",
+      "target": "ps__svg_templates",
+      "type": "blocks",
+      "description": "Final design export must preserve physical aspect and template layout."
+    },
+    {
+      "id": "ps__e18",
+      "source": "ps__c_external_runtime",
+      "target": "ps__mockup_compositing",
+      "type": "blocks",
+      "description": "The adapter cannot work without its externally stored inputs."
+    },
+    {
+      "id": "ps__e19",
+      "source": "ps__bug_visual_recovery",
+      "target": "ps__listing_factory",
+      "type": "blocks",
+      "description": "Rejected imagery prevents recovery completion."
+    },
+    {
+      "id": "ps__e20",
+      "source": "ps__bug_export_provenance",
+      "target": "ps__svg_templates",
+      "type": "challenges",
+      "description": "Recovery adapters do not demonstrate the required standard-button export."
+    },
+    {
+      "id": "ps__e21",
+      "source": "ps__bug_review_identity",
+      "target": "ps__review_board",
+      "type": "challenges",
+      "description": "Cached metadata does not bind approval to immutable served bytes."
+    },
+    {
+      "id": "ps__e22",
+      "source": "ps__bug_review_modal",
+      "target": "ps__review_board",
+      "type": "challenges",
+      "description": "Decision key mismatch hides previously saved notes."
+    },
+    {
+      "id": "ps__e23",
+      "source": "ps__bug_review_transactions",
+      "target": "ps__review_board",
+      "type": "challenges",
+      "description": "Serialization alone does not satisfy conflict and gallery coverage gates."
+    },
+    {
+      "id": "ps__e24",
+      "source": "ps__bug_prod_sync",
+      "target": "ps__d_prod_is_truth",
+      "type": "challenges",
+      "description": "An unsafe snapshot transfer cannot establish reliable local parity."
+    },
+    {
+      "id": "ps__e25",
+      "source": "ps__bug_git_stale_vs_cron",
+      "target": "ps__root",
+      "type": "challenges",
+      "description": "The Git tree is not a complete snapshot of the inspected application."
+    },
+    {
+      "id": "ps__e26",
+      "source": "ps__bug_agy_evidence",
+      "target": "ps__contract_gate",
+      "type": "challenges",
+      "description": "A contract does not establish that independent review occurred."
+    },
+    {
+      "id": "ps__e27",
+      "source": "ps__q_factory_running",
+      "target": "ps__cron_tasklist",
+      "type": "records",
+      "description": "Records the unresolved live-state boundary."
+    },
+    {
+      "id": "ps__e28",
+      "source": "ps__q_synthid_wanted",
+      "target": "ps__d_clean_base_first",
+      "type": "records",
+      "description": "Answers where cleaning is intended in the current workflow."
+    },
+    {
+      "id": "ps__e29",
+      "source": "ps__q_relation_to_etsy_branches",
+      "target": "ps__listing_factory",
+      "type": "records",
+      "description": "Bounds the known callable interface to repository evidence."
+    },
+    {
+      "id": "ps__e30",
+      "source": "ps__q_prod_db_sync_reliable",
+      "target": "ps__bug_prod_sync",
+      "type": "records",
+      "description": "Answers the reliability question without concealing the remaining defect."
+    },
+    {
+      "id": "ps__e31",
+      "source": "ps__q_next_listings",
+      "target": "ps__review_board",
+      "type": "records",
+      "description": "The next move is to prove reliable review behavior before repair batching."
+    },
+    {
+      "id": "ps__e32",
+      "source": "ps__bug_review_identity",
+      "target": "ps__q_next_listings",
+      "type": "blocks",
+      "description": "Identity gaps must be resolved before review results can be trusted."
+    },
+    {
+      "id": "ps__e33",
+      "source": "ps__c_user_approval",
+      "target": "ps__review_board",
+      "type": "records",
+      "description": "Human review is authority; automated labels are not."
+    },
+    {
+      "id": "ps__e34",
+      "source": "ps__d_prod_is_truth",
+      "target": "ps__fulfillment",
+      "type": "records",
+      "description": "Existing orders and saved designs are VPS-owned data."
+    },
+    {
+      "id": "ps__e35",
+      "source": "ps__c_live_path_gated",
+      "target": "ps__etsy_draft_writer",
+      "type": "blocks",
+      "description": "Even a draft-writing CLI is outside this mapping pass."
+    },
+    {
+      "id": "ps__e36",
+      "source": "ps__bug_visual_recovery",
+      "target": "ps__c_user_approval",
+      "type": "challenges",
+      "description": "Historical counts and mechanical QA cannot establish user approval."
+    },
+    {
+      "id": "ps__e37",
+      "source": "ps__factory_queue",
+      "target": "ps__listing_factory",
+      "type": "implements",
+      "description": "Factory candidate manifest and folder state machine — connects to listing_factory."
+    },
+    {
+      "id": "ps__e38",
+      "source": "ps__source_competitor",
+      "target": "ps__factory_queue",
+      "type": "implements",
+      "description": "N0: competitor API capture and candidate seeding — connects to factory_queue."
+    },
+    {
+      "id": "ps__e39",
+      "source": "ps__extraction",
+      "target": "ps__factory_queue",
+      "type": "implements",
+      "description": "N1: source photo to editable extraction artifacts — connects to factory_queue."
+    },
+    {
+      "id": "ps__e40",
+      "source": "ps__font_resolution",
+      "target": "ps__extraction",
+      "type": "depends_on",
+      "description": "N2: font files for real text comparison — connects to extraction."
+    },
+    {
+      "id": "ps__e41",
+      "source": "ps__font_confirmation",
+      "target": "ps__extraction",
+      "type": "blocks",
+      "description": "N2 gate: human chooses font before template work — gates extraction."
+    },
+    {
+      "id": "ps__e42",
+      "source": "ps__font_corpus",
+      "target": "ps__font_resolution",
+      "type": "implements",
+      "description": "Supporting font evaluation dataset and anonymized corpus — connects to font_resolution."
+    },
+    {
+      "id": "ps__e43",
+      "source": "ps__template_import",
+      "target": "ps__svg_templates",
+      "type": "implements",
+      "description": "N3: extraction schema normalization and app-specific import — connects to svg_templates."
+    },
+    {
+      "id": "ps__e44",
+      "source": "ps__template_review",
+      "target": "ps__template_import",
+      "type": "blocks",
+      "description": "N3 gate: human reviews actual app template proof — gates template_import."
+    },
+    {
+      "id": "ps__e45",
+      "source": "ps__catalog_expansion",
+      "target": "ps__template_import",
+      "type": "depends_on",
+      "description": "N4: size expansion versus family-sibling linking — connects to template_import."
+    },
+    {
+      "id": "ps__e46",
+      "source": "ps__catalog_parity",
+      "target": "ps__catalog_expansion",
+      "type": "blocks",
+      "description": "N4 gate: catalog linkage and thumbnails must match the intended design — gates catalog_expansion."
+    },
+    {
+      "id": "ps__e47",
+      "source": "ps__variant_stories",
+      "target": "ps__svg_templates",
+      "type": "depends_on",
+      "description": "N5/R5: personalization variants independent of scene variation — connects to svg_templates."
+    },
+    {
+      "id": "ps__e48",
+      "source": "ps__prompt_map",
+      "target": "ps__listing_factory",
+      "type": "implements",
+      "description": "N6: one competitor reference to one original scene prompt — connects to listing_factory."
+    },
+    {
+      "id": "ps__e49",
+      "source": "ps__flow_scene",
+      "target": "ps__prompt_map",
+      "type": "depends_on",
+      "description": "N7: native Flow scene and green calibration generation — connects to prompt_map."
+    },
+    {
+      "id": "ps__e50",
+      "source": "ps__agy_generation_role",
+      "target": "ps__flow_scene",
+      "type": "implements",
+      "description": "AGY generation/calibration adapter versus independent critique — connects to flow_scene."
+    },
+    {
+      "id": "ps__e51",
+      "source": "ps__synthid_engine",
+      "target": "ps__d_clean_base_first",
+      "type": "implements",
+      "description": "N8/R3: isolated asset-cleaning and detector evidence wrapper — connects to d_clean_base_first."
+    },
+    {
+      "id": "ps__e52",
+      "source": "ps__synthid_retry",
+      "target": "ps__synthid_engine",
+      "type": "implements",
+      "description": "Cleaning retries reuse status sidecars and rebuild batch evidence — connects to synthid_engine."
+    },
+    {
+      "id": "ps__e53",
+      "source": "ps__legacy_clean_bases",
+      "target": "ps__synthid_engine",
+      "type": "implements",
+      "description": "R3: select exact profiled legacy blank backgrounds — connects to synthid_engine."
+    },
+    {
+      "id": "ps__e54",
+      "source": "ps__reusable_geometry",
+      "target": "ps__mockup_compositing",
+      "type": "implements",
+      "description": "N9: crop clean Flow pair and remeasure reusable frame geometry — connects to mockup_compositing."
+    },
+    {
+      "id": "ps__e55",
+      "source": "ps__clean_base_gate",
+      "target": "ps__mockup_compositing",
+      "type": "blocks",
+      "description": "N9/R4 gate: refuse legacy unclean background roots — gates mockup_compositing."
+    },
+    {
+      "id": "ps__e56",
+      "source": "ps__composition_core",
+      "target": "ps__mockup_compositing",
+      "type": "implements",
+      "description": "N10/R7: measured perspective warp, masks, blend and labels — connects to mockup_compositing."
+    },
+    {
+      "id": "ps__e57",
+      "source": "ps__seo_copy",
+      "target": "ps__etsy_draft_writer",
+      "type": "implements",
+      "description": "N11: original listing copy and draft metadata — connects to etsy_draft_writer."
+    },
+    {
+      "id": "ps__e58",
+      "source": "ps__listing_video",
+      "target": "ps__listing_factory",
+      "type": "implements",
+      "description": "N12: optional listing video generation — connects to listing_factory."
+    },
+    {
+      "id": "ps__e59",
+      "source": "ps__publish_gate",
+      "target": "ps__etsy_draft_writer",
+      "type": "blocks",
+      "description": "N14: human publication, never inferred from folder stage — gates etsy_draft_writer."
+    },
+    {
+      "id": "ps__e60",
+      "source": "ps__pinterest_derivatives",
+      "target": "ps__publish_gate",
+      "type": "depends_on",
+      "description": "N15: local Pinterest derivatives after published URL — connects to publish_gate."
+    },
+    {
+      "id": "ps__e61",
+      "source": "ps__repair_inventory",
+      "target": "ps__listing_factory",
+      "type": "implements",
+      "description": "R0: archived listing IDs, ranks and original imagery — connects to listing_factory."
+    },
+    {
+      "id": "ps__e62",
+      "source": "ps__legacy_final_cleanup",
+      "target": "ps__d_clean_base_first",
+      "type": "challenges",
+      "description": "Deprecated: process completed listing images as the final cleanup — connects to d_clean_base_first."
+    },
+    {
+      "id": "ps__e63",
+      "source": "ps__repair_feedback",
+      "target": "ps__review_board",
+      "type": "implements",
+      "description": "R1: per-rank feedback and protected-approval ledger — connects to review_board."
+    },
+    {
+      "id": "ps__e64",
+      "source": "ps__repair_mapping",
+      "target": "ps__mockup_compositing",
+      "type": "blocks",
+      "description": "R2: original/candidate/template/background/quad identity must be exact — gates mockup_compositing."
+    },
+    {
+      "id": "ps__e65",
+      "source": "ps__native_export_contract",
+      "target": "ps__svg_templates",
+      "type": "blocks",
+      "description": "R6: standard PNG button on VPS-grounded temporary A4 design — gates svg_templates."
+    },
+    {
+      "id": "ps__e66",
+      "source": "ps__map_visual_gate",
+      "target": "ps__native_export_contract",
+      "type": "blocks",
+      "description": "R6 gate: settled map coverage and original visual style — gates native_export_contract."
+    },
+    {
+      "id": "ps__e67",
+      "source": "ps__dated_compositors",
+      "target": "ps__composition_core",
+      "type": "implements",
+      "description": "R7 historical adapters and their limited scope — connects to composition_core."
+    },
+    {
+      "id": "ps__e68",
+      "source": "ps__pair_critique",
+      "target": "ps__contract_gate",
+      "type": "implements",
+      "description": "R8: bounded AGY original/candidate critique or recorded direct fallback — connects to contract_gate."
+    },
+    {
+      "id": "ps__e69",
+      "source": "ps__fullsize_review",
+      "target": "ps__review_board",
+      "type": "blocks",
+      "description": "R9: native-pixel inspection and individual user decision — gates review_board."
+    },
+    {
+      "id": "ps__e70",
+      "source": "ps__repair_resume",
+      "target": "ps__listing_factory",
+      "type": "blocks",
+      "description": "R10 planned: fingerprinted jobs and crash reconciliation — gates listing_factory."
+    },
+    {
+      "id": "ps__e71",
+      "source": "ps__release_package",
+      "target": "ps__c_user_approval",
+      "type": "implements",
+      "description": "R10 planned: exact user-approved release manifest — connects to c_user_approval."
+    },
+    {
+      "id": "ps__e72",
+      "source": "ps__anchor_updater",
+      "target": "ps__release_package",
+      "type": "depends_on",
+      "description": "R11 gated: replace existing Etsy images without emptying the listing — connects to release_package."
+    },
+    {
+      "id": "ps__e73",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__factory_queue",
+      "type": "challenges",
+      "description": "Required font/template/gallery gates are not fully encoded by runner — connects to factory_queue."
+    },
+    {
+      "id": "ps__e74",
+      "source": "ps__bug_published_claim",
+      "target": "ps__publish_gate",
+      "type": "challenges",
+      "description": "Stage006 can record publication without any remote evidence — connects to publish_gate."
+    },
+    {
+      "id": "ps__e75",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__clean_base_gate",
+      "type": "challenges",
+      "description": "Clean-base metadata and sidecar resume are not content attestations — connects to clean_base_gate."
+    },
+    {
+      "id": "ps__e76",
+      "source": "ps__saved_design_api",
+      "target": "ps__webapp",
+      "type": "implements",
+      "description": "Customer design save/share and template hydration — connects to webapp."
+    },
+    {
+      "id": "ps__e77",
+      "source": "ps__catalog_api",
+      "target": "ps__webapp",
+      "type": "implements",
+      "description": "Listings, groups, template order and short links — connects to webapp."
+    },
+    {
+      "id": "ps__e78",
+      "source": "ps__order_intake",
+      "target": "ps__fulfillment",
+      "type": "implements",
+      "description": "Etsy paid-order intake and recovery — connects to fulfillment."
+    },
+    {
+      "id": "ps__e79",
+      "source": "ps__order_size",
+      "target": "ps__fulfillment",
+      "type": "implements",
+      "description": "Purchased-size enforcement and confirmation — connects to fulfillment."
+    },
+    {
+      "id": "ps__e80",
+      "source": "ps__download_revision",
+      "target": "ps__fulfillment",
+      "type": "implements",
+      "description": "Verification, downloads, edits and rendering endpoints — connects to fulfillment."
+    },
+    {
+      "id": "ps__e81",
+      "source": "ps__print_fulfillment",
+      "target": "ps__fulfillment",
+      "type": "implements",
+      "description": "Physical-print quote, submission and release code — connects to fulfillment."
+    },
+    {
+      "id": "ps__e82",
+      "source": "ps__communications",
+      "target": "ps__webapp",
+      "type": "implements",
+      "description": "Lead capture, inbound messages, webhooks and analytics — connects to webapp."
+    },
+    {
+      "id": "ps__e83",
+      "source": "ps__admin_assets_auth",
+      "target": "ps__webapp",
+      "type": "implements",
+      "description": "Admin authorization and uploaded font/image assets — connects to webapp."
+    },
+    {
+      "id": "ps__e84",
+      "source": "ps__test_surface",
+      "target": "ps__webapp",
+      "type": "records",
+      "description": "Local browser/unit tests versus production verification — connects to webapp."
+    },
+    {
+      "id": "ps__e85",
+      "source": "ps__deployment_boundary",
+      "target": "ps__webapp",
+      "type": "blocks",
+      "description": "Deployment preserves VPS data and unmanaged thumbnails — gates webapp."
+    },
+    {
+      "id": "ps__e86",
+      "source": "ps__extraction",
+      "target": "ps__source_competitor",
+      "type": "depends_on",
+      "description": "Extraction consumes the frozen source photo."
+    },
+    {
+      "id": "ps__e87",
+      "source": "ps__template_import",
+      "target": "ps__font_confirmation",
+      "type": "depends_on",
+      "description": "Import follows actual font choice."
+    },
+    {
+      "id": "ps__e88",
+      "source": "ps__catalog_expansion",
+      "target": "ps__template_review",
+      "type": "depends_on",
+      "description": "Approved template precedes catalog expansion."
+    },
+    {
+      "id": "ps__e89",
+      "source": "ps__variant_stories",
+      "target": "ps__template_review",
+      "type": "depends_on",
+      "description": "Variants preserve the approved template layout."
+    },
+    {
+      "id": "ps__e90",
+      "source": "ps__synthid_engine",
+      "target": "ps__flow_scene",
+      "type": "depends_on",
+      "description": "New-base cleaning consumes raw scene/calibration assets."
+    },
+    {
+      "id": "ps__e91",
+      "source": "ps__reusable_geometry",
+      "target": "ps__synthid_engine",
+      "type": "depends_on",
+      "description": "Crop/geometry work consumes cleaned Flow assets."
+    },
+    {
+      "id": "ps__e92",
+      "source": "ps__composition_core",
+      "target": "ps__variant_stories",
+      "type": "depends_on",
+      "description": "Scenes receive independently varied designs."
+    },
+    {
+      "id": "ps__e93",
+      "source": "ps__composition_core",
+      "target": "ps__clean_base_gate",
+      "type": "depends_on",
+      "description": "Legacy-frame composition requires clean-base evidence."
+    },
+    {
+      "id": "ps__e94",
+      "source": "ps__etsy_draft_writer",
+      "target": "ps__fullsize_review",
+      "type": "depends_on",
+      "description": "Required workflow review precedes accepted listing preparation; CLI does not enforce all gates."
+    },
+    {
+      "id": "ps__e95",
+      "source": "ps__seo_copy",
+      "target": "ps__catalog_api",
+      "type": "depends_on",
+      "description": "Copy requires correct customer destination links."
+    },
+    {
+      "id": "ps__e96",
+      "source": "ps__repair_feedback",
+      "target": "ps__repair_inventory",
+      "type": "depends_on",
+      "description": "Feedback is attached to archived rank identity."
+    },
+    {
+      "id": "ps__e97",
+      "source": "ps__repair_mapping",
+      "target": "ps__repair_feedback",
+      "type": "depends_on",
+      "description": "Mapping selects exact complained-about sources."
+    },
+    {
+      "id": "ps__e98",
+      "source": "ps__legacy_clean_bases",
+      "target": "ps__repair_mapping",
+      "type": "depends_on",
+      "description": "Select correct mapped blank source, not a lookalike."
+    },
+    {
+      "id": "ps__e99",
+      "source": "ps__native_export_contract",
+      "target": "ps__variant_stories",
+      "type": "depends_on",
+      "description": "Native exports consume approved-field temporary variants."
+    },
+    {
+      "id": "ps__e100",
+      "source": "ps__dated_compositors",
+      "target": "ps__native_export_contract",
+      "type": "depends_on",
+      "description": "Final repairs require compliant native designs, not historical approximations."
+    },
+    {
+      "id": "ps__e101",
+      "source": "ps__pair_critique",
+      "target": "ps__dated_compositors",
+      "type": "depends_on",
+      "description": "Critique examines actual candidate files after composition."
+    },
+    {
+      "id": "ps__e102",
+      "source": "ps__fullsize_review",
+      "target": "ps__pair_critique",
+      "type": "depends_on",
+      "description": "Critique/fallback evidence precedes final human review."
+    },
+    {
+      "id": "ps__e103",
+      "source": "ps__release_package",
+      "target": "ps__fullsize_review",
+      "type": "depends_on",
+      "description": "Release consumes only exact human-reviewed versions."
+    },
+    {
+      "id": "ps__e104",
+      "source": "ps__release_package",
+      "target": "ps__repair_resume",
+      "type": "depends_on",
+      "description": "Complete per-rank state and provenance support packaging."
+    },
+    {
+      "id": "ps__e105",
+      "source": "ps__download_revision",
+      "target": "ps__order_intake",
+      "type": "depends_on",
+      "description": "Delivery is associated with actual customer orders."
+    },
+    {
+      "id": "ps__argument_106",
+      "source": "ps__extraction",
+      "target": "ps__font_confirmation",
+      "type": "depends_on",
+      "description": "Extraction cannot be accepted as finished before explicit font confirmation; this is a required human gate, not stage002 enforcement. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_107",
+      "source": "ps__factory_queue",
+      "target": "ps__source_competitor",
+      "type": "depends_on",
+      "description": "Stage001 assumes a captured source reference; directory placement alone is not extraction evidence. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_108",
+      "source": "ps__template_import",
+      "target": "ps__extraction",
+      "type": "depends_on",
+      "description": "Stage003 consumes the extracted settings artifact; import success cannot substitute for inspecting its contents. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_109",
+      "source": "ps__template_review",
+      "target": "ps__template_import",
+      "type": "depends_on",
+      "description": "Human template review requires the actual imported template preview, not merely an import status. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_110",
+      "source": "ps__font_confirmation",
+      "target": "ps__font_resolution",
+      "type": "depends_on",
+      "description": "The font gate needs resolved font candidates and their visual evidence. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_111",
+      "source": "ps__variant_stories",
+      "target": "ps__d_prod_is_truth",
+      "type": "depends_on",
+      "description": "Variants assume active VPS template settings; local defaults are not authoritative. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_112",
+      "source": "ps__prompt_map",
+      "target": "ps__variant_stories",
+      "type": "depends_on",
+      "description": "Scene-to-design prompt mapping requires the intended per-listing variants; prompts do not establish successful rendering. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_113",
+      "source": "ps__flow_scene",
+      "target": "ps__template_review",
+      "type": "depends_on",
+      "description": "Required workflow: scene generation must use a reviewed template, although stage004 does not enforce this chain. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_114",
+      "source": "ps__clean_base_gate",
+      "target": "ps__synthid_engine",
+      "type": "depends_on",
+      "description": "Cleaning acceptance requires detector evidence for the actual cleaned output artifact. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_115",
+      "source": "ps__clean_base_gate",
+      "target": "ps__legacy_clean_bases",
+      "type": "depends_on",
+      "description": "Recovery acceptance must reference the selected cleaned blank base, not a finished text-bearing listing image. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_116",
+      "source": "ps__composition_core",
+      "target": "ps__reusable_geometry",
+      "type": "depends_on",
+      "description": "Composition consumes measured frame geometry; a clean label does not establish placement. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_117",
+      "source": "ps__composition_core",
+      "target": "ps__repair_mapping",
+      "type": "depends_on",
+      "description": "Recovery composition assumes the original-to-mockup mapping has been verified per rank. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_118",
+      "source": "ps__listing_video",
+      "target": "ps__fullsize_review",
+      "type": "depends_on",
+      "description": "Required release contract: video derivatives must use approved image versions, not unreviewed generated stills. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_119",
+      "source": "ps__etsy_draft_writer",
+      "target": "ps__composition_core",
+      "type": "depends_on",
+      "description": "Stage005 requires prepared listing image artifacts; composing them is outside the stage005 runner. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_120",
+      "source": "ps__etsy_draft_writer",
+      "target": "ps__seo_copy",
+      "type": "depends_on",
+      "description": "Draft creation consumes listing copy as well as image files. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_121",
+      "source": "ps__publish_gate",
+      "target": "ps__etsy_draft_writer",
+      "type": "depends_on",
+      "description": "Stage006 assumes an existing Etsy draft identifier from stage005; that identifier is not publication proof. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_122",
+      "source": "ps__publish_gate",
+      "target": "ps__c_user_approval",
+      "type": "depends_on",
+      "description": "Publication requires explicit human approval; stage006 does not verify that approval. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_123",
+      "source": "ps__pinterest_derivatives",
+      "target": "ps__etsy_draft_writer",
+      "type": "depends_on",
+      "description": "Stage007 assumes a listing URL recorded after draft creation; a URL string does not prove an active listing. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_124",
+      "source": "ps__repair_mapping",
+      "target": "ps__repair_inventory",
+      "type": "depends_on",
+      "description": "Rank mapping depends on original inventory coverage, not just feedback text. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_125",
+      "source": "ps__native_export_contract",
+      "target": "ps__d_prod_is_truth",
+      "type": "depends_on",
+      "description": "Native exports must start from authoritative VPS template settings without overwriting them. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_126",
+      "source": "ps__dated_compositors",
+      "target": "ps__legacy_clean_bases",
+      "type": "depends_on",
+      "description": "Recovery composites assume a verified clean blank background matched to the rank. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_127",
+      "source": "ps__dated_compositors",
+      "target": "ps__reusable_geometry",
+      "type": "depends_on",
+      "description": "Recovery compositors consume measured frame quads and must preserve design aspect. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_128",
+      "source": "ps__pair_critique",
+      "target": "ps__repair_inventory",
+      "type": "depends_on",
+      "description": "Original-versus-candidate critique requires the original rank artifact. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_129",
+      "source": "ps__fullsize_review",
+      "target": "ps__repair_feedback",
+      "type": "depends_on",
+      "description": "Review must preserve unresolved owner complaints and their per-image scope. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_130",
+      "source": "ps__release_package",
+      "target": "ps__c_user_approval",
+      "type": "depends_on",
+      "description": "Packaging is permitted only for exact user-approved bytes; a folder-level stage is insufficient. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_131",
+      "source": "ps__anchor_updater",
+      "target": "ps__publish_gate",
+      "type": "depends_on",
+      "description": "Existing-listing update assumes a real remote listing and separately authorized release, not merely a local package. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_132",
+      "source": "ps__repair_resume",
+      "target": "ps__repair_feedback",
+      "type": "depends_on",
+      "description": "Resume must restore the unresolved repair queue and decisions, not infer completion from existing files. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_133",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__listing_factory",
+      "type": "challenges",
+      "description": "Fragmented orchestration: run_stage.py stage004 omits Flow, cleaning, composition and critique; successful stage advancement cannot establish a coherent end-to-end workflow."
+    },
+    {
+      "id": "ps__argument_134",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__cron_tasklist",
+      "type": "challenges",
+      "description": "Fragmented orchestration: run_stage.py stage004 omits Flow, cleaning, composition and critique; successful stage advancement cannot establish a coherent end-to-end workflow."
+    },
+    {
+      "id": "ps__argument_135",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__contract_gate",
+      "type": "challenges",
+      "description": "Fragmented orchestration: run_stage.py stage004 omits Flow, cleaning, composition and critique; successful stage advancement cannot establish a coherent end-to-end workflow."
+    },
+    {
+      "id": "ps__argument_136",
+      "source": "ps__bug_published_claim",
+      "target": "ps__factory_queue",
+      "type": "challenges",
+      "description": "run_stage.py stage_006_published checks draft_listing_id only; its success/history label supplies no Etsy publication readback."
+    },
+    {
+      "id": "ps__argument_137",
+      "source": "ps__bug_published_claim",
+      "target": "ps__cron_tasklist",
+      "type": "challenges",
+      "description": "run_stage.py stage_006_published checks draft_listing_id only; its success/history label supplies no Etsy publication readback."
+    },
+    {
+      "id": "ps__argument_138",
+      "source": "ps__bug_published_claim",
+      "target": "ps__listing_factory",
+      "type": "challenges",
+      "description": "run_stage.py stage_006_published checks draft_listing_id only; its success/history label supplies no Etsy publication readback."
+    },
+    {
+      "id": "ps__argument_139",
+      "source": "ps__bug_published_claim",
+      "target": "ps__pinterest_derivatives",
+      "type": "challenges",
+      "description": "run_stage.py stage_006_published checks draft_listing_id only; its success/history label supplies no Etsy publication readback."
+    },
+    {
+      "id": "ps__argument_140",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__synthid_engine",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_141",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__synthid_retry",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_142",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__legacy_clean_bases",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_143",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__reusable_geometry",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_144",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__composition_core",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_145",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__release_package",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_146",
+      "source": "ps__bug_review_identity",
+      "target": "ps__fullsize_review",
+      "type": "challenges",
+      "description": "serve-listing-review.mjs candidateInfo/currentCandidates trust cached metadata; a recorded approval cannot prove the currently served/uploaded bytes are approved."
+    },
+    {
+      "id": "ps__argument_147",
+      "source": "ps__bug_review_identity",
+      "target": "ps__release_package",
+      "type": "challenges",
+      "description": "serve-listing-review.mjs candidateInfo/currentCandidates trust cached metadata; a recorded approval cannot prove the currently served/uploaded bytes are approved."
+    },
+    {
+      "id": "ps__argument_148",
+      "source": "ps__bug_review_identity",
+      "target": "ps__c_user_approval",
+      "type": "challenges",
+      "description": "serve-listing-review.mjs candidateInfo/currentCandidates trust cached metadata; a recorded approval cannot prove the currently served/uploaded bytes are approved."
+    },
+    {
+      "id": "ps__argument_149",
+      "source": "ps__bug_review_identity",
+      "target": "ps__etsy_draft_writer",
+      "type": "challenges",
+      "description": "serve-listing-review.mjs candidateInfo/currentCandidates trust cached metadata; a recorded approval cannot prove the currently served/uploaded bytes are approved."
+    },
+    {
+      "id": "ps__argument_150",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__listing_factory",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: Stage003 checks only an extraction record; stage004 runs template import, preview and mutating sync, then auto-advances to005. It does not run the complete Flow/clean/composition/critique chain or record separate human font/template approval. Prompt-map validation is skipped when source.reference_dir is absent. Do not infer full workflow completion from runner success. A handled failure routes to needs-attention but cmd_run does not set a nonzero exit status; subprocess exceptions can bypass the handled-failure history path. Exit code alone is insufficient."
+    },
+    {
+      "id": "ps__argument_151",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__factory_queue",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: Stage003 checks only an extraction record; stage004 runs template import, preview and mutating sync, then auto-advances to005. It does not run the complete Flow/clean/composition/critique chain or record separate human font/template approval. Prompt-map validation is skipped when source.reference_dir is absent. Do not infer full workflow completion from runner success. A handled failure routes to needs-attention but cmd_run does not set a nonzero exit status; subprocess exceptions can bypass the handled-failure history path. Exit code alone is insufficient."
+    },
+    {
+      "id": "ps__argument_152",
+      "source": "ps__bug_published_claim",
+      "target": "ps__publish_gate",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: stage_006_published returns success based only on draft_listing_id. The history text and stage move can therefore say published without an activation or readback. Keep publication external/human-gated and never use this manifest alone as evidence."
+    },
+    {
+      "id": "ps__argument_153",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__clean_base_gate",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: Cleaning resume keys on sidecar status; the compositing gate checks metadata/path/dimensions but not input/output content hashes. build_reusable_mockup accepts optional detector JSON and does not itself enforce detector-clear status before composing. Thus upstream verification and immutable byte binding are still necessary, even though a different shared-harness path has a stronger metadata gate."
+    },
+    {
+      "id": "ps__argument_154",
+      "source": "ps__bug_review_identity",
+      "target": "ps__review_board",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: candidateInfo trusts manifest sha256 strings, falls back to size/mtime, and currentCandidates caches the result for process lifetime. Media URLs serve files by current path. Replacing bytes without refreshing metadata can leave an old approval attached to newly served content. Migration binds legacy decisions to whichever current roots are configured, without proving the historical version."
+    },
+    {
+      "id": "ps__argument_155",
+      "source": "ps__d_clean_base_first",
+      "target": "ps__legacy_final_cleanup",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: Use clean, design-independent backgrounds with measured geometry, then composite the unprocessed native design export. The old final-only SynthID pass over finished lettering is a historical workflow, not the new-listing route: it mangles text. Detector-clear is not a visual approval."
+    },
+    {
+      "id": "ps__argument_156",
+      "source": "ps__failure_completion_label",
+      "target": "ps__font_confirmation",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_157",
+      "source": "ps__failure_completion_label",
+      "target": "ps__template_review",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_158",
+      "source": "ps__failure_completion_label",
+      "target": "ps__catalog_parity",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_159",
+      "source": "ps__failure_completion_label",
+      "target": "ps__clean_base_gate",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_160",
+      "source": "ps__failure_completion_label",
+      "target": "ps__synthid_engine",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_161",
+      "source": "ps__failure_completion_label",
+      "target": "ps__synthid_retry",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_162",
+      "source": "ps__failure_completion_label",
+      "target": "ps__legacy_clean_bases",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_163",
+      "source": "ps__failure_completion_label",
+      "target": "ps__reusable_geometry",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_164",
+      "source": "ps__failure_completion_label",
+      "target": "ps__fullsize_review",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_165",
+      "source": "ps__failure_completion_label",
+      "target": "ps__review_board",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_166",
+      "source": "ps__failure_completion_label",
+      "target": "ps__c_user_approval",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_167",
+      "source": "ps__failure_completion_label",
+      "target": "ps__release_package",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_168",
+      "source": "ps__failure_completion_label",
+      "target": "ps__publish_gate",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_169",
+      "source": "ps__failure_completion_label",
+      "target": "ps__etsy_draft_writer",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_170",
+      "source": "ps__failure_completion_label",
+      "target": "ps__pinterest_derivatives",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_171",
+      "source": "ps__failure_completion_label",
+      "target": "ps__anchor_updater",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_172",
+      "source": "ps__failure_completion_label",
+      "target": "ps__contract_gate",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_173",
+      "source": "ps__factory_run_receipt",
+      "target": "ps__factory_queue",
+      "type": "records",
+      "description": "Defines the missing byte-bound run evidence contract for runner stage execution; existence remains unverified."
+    },
+    {
+      "id": "ps__argument_174",
+      "source": "ps__q_factory_running",
+      "target": "ps__factory_run_receipt",
+      "type": "depends_on",
+      "description": "Liveness/completion claims require timestamped output-hash receipts; historical manifest history does not meet this contract."
+    },
+    {
+      "id": "ps__argument_175",
+      "source": "ps__failure_completion_label",
+      "target": "ps__factory_run_receipt",
+      "type": "challenges",
+      "description": "A receipt schema or a self-reported hash is not a measured receipt; recompute artifact hashes and inspect checks."
+    },
+    {
+      "id": "ps__argument_176",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_factory_gates",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_177",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_review_identity",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_178",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_review_transactions",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_179",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_agy_evidence",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_180",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_clean_attestation",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_181",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_published_claim",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_182",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__repair_resume",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_183",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__failure_completion_label",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_184",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__factory_run_receipt",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_185",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__c_user_approval",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_186",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__listing_factory",
+      "type": "refines",
+      "description": "Replace the implied unified stage runner with an explicit durable, per-artifact orchestration contract; proposed only."
+    }
+  ]
+}

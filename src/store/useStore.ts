@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { MapExportTarget } from '../utils/mapExportSizing';
 
 // ── History helpers ──────────────────────────────────────────────────────────
 
@@ -7,7 +8,7 @@ const MAX_HISTORY = 30;
 // Design-affecting fields (excludes UI/preview state and history itself)
 const DESIGN_FIELDS = [
     'title', 'subtitle', 'date', 'time', 'location', 'lat', 'lng',
-    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity',
+    'starScale', 'lineWeight', 'gridWidth', 'glowIntensity', 'gridOpacity', 'milkyWayOpacity',
     'showBorder', 'posterColor', 'textColor', 'starColor', 'mapInteriorColor',
     'showFrame', 'frameInset', 'frameWidth', 'finelineWidth',
     'circleSize', 'heartSize', 'houseSize', 'shapeOutlineWidth', 'shapeOffsetY', 'shapeOffsetX', 'snapEnabled',
@@ -18,16 +19,19 @@ const DESIGN_FIELDS = [
     'titleOffsetX', 'titleOffsetY', 'subtitleOffsetY', 'detailsOffsetY', 'dedicationOffsetY', 'namesOffsetY',
     'heartDecorOffsetY', 'dividerOffsetY', 'showDivider', 'dividerLength', 'dividerThickness', 'vertSepOffsetY', 'showVertSep', 'vertSepHeight', 'vertSepThickness',
     'showNames',
-    'showConstellations', 'showMilkyWay', 'showGrid', 'showLocation', 'showDate', 'showCoords',
+    'showConstellations', 'showMilkyWay', 'showGrid', 'showLocation', 'showDate', 'showCoords', 'detailsDateFirst',
     'maskShape', 'isLightMode', 'designStyle', 'borderStyle',
     'titleFont', 'subtitleFont', 'detailsFont', 'dedicationFont', 'namesFont',
-    'titleKerning', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
-    'titleAllCaps',
+    'titleKerning', 'titleLineHeight', 'subtitleKerning', 'detailsKerning', 'dedicationKerning', 'namesKerning',
+    'titleAllCaps', 'locationAllCaps',
     'customText', 'posterType', 'printSize', 'selectedTemplate',
     'mapCity', 'mapCenterLat', 'mapCenterLng', 'mapZoom', 'mapBearing',
-    'mapBgColor', 'mapStreetColor', 'mapColorPreset', 'mapStyleUrl',
+    'mapBgColor', 'mapStreetColor', 'mapWaterColor', 'mapLandColor',
+    'mapMainRoadColor', 'mapSmallRoadColor', 'mapDetailRoadColor',
+    'mapColorPreset', 'mapStyleUrl',
     'mapBackgroundImage', 'mapImageOffsetX', 'mapImageOffsetY', 'mapImageOpacity',
     'showLocationPin', 'locationPinSize', 'locationPinOffsetX', 'locationPinOffsetY',
+    'backgroundImageUrl', 'backgroundImageOffsetY',
 ] as const;
 
 type DesignField = typeof DESIGN_FIELDS[number];
@@ -39,6 +43,8 @@ function captureDesignSnapshot(state: StoreState): Partial<StoreState> {
     }
     return snap;
 }
+
+export type MapCaptureOptions = Partial<Pick<MapExportTarget, 'targetPx' | 'detailScale'>>;
 
 interface StoreState {
     // Core Data
@@ -115,11 +121,13 @@ interface StoreState {
     dedicationFont: string;
     namesFont: string;
     titleKerning: number;
+    titleLineHeight: number;
     subtitleKerning: number;
     detailsKerning: number;
     dedicationKerning: number;
     namesKerning: number;
     titleAllCaps: boolean;
+    locationAllCaps: boolean;
 
     // Preview Zoom
     previewZoom: number;
@@ -127,6 +135,7 @@ interface StoreState {
     // New Feature Toggles
     showConstellations: boolean;
     showMilkyWay: boolean;
+    milkyWayOpacity: number; // master intensity for the Milky Way band (0–1)
     showGrid: boolean;
     designStyle: 'standard' | 'fineline' | 'minimal';
     finelineWidth: number; // NEW: Width for fineline double lines
@@ -141,6 +150,7 @@ interface StoreState {
     showLocation: boolean;
     showDate: boolean;
     showCoords: boolean;
+    detailsDateFirst: boolean;
 
     // Custom Text Overrides
     customText: {
@@ -155,6 +165,7 @@ interface StoreState {
 
     // Print Size
     printSize: { label: string; width: number; height: number; ratio: string };
+    lockedPrintSize: { label: string; width: number; height: number; ratio: string } | null;
 
     // Map image pan offset and opacity
     mapImageOffsetX: number;
@@ -162,6 +173,23 @@ interface StoreState {
     mapImageOpacity: number; // 0.1–1.0, controls map fade intensity
     /** True while the user is actively dragging the map image in the poster preview */
     isDraggingMapImage: boolean;
+    /** True while the vector street map is fetching tiles / rasterising a new view */
+    streetMapRendering: boolean;
+    /**
+     * True only while DownloadButton is actively exporting a vector street map from the live
+     * editor. The editor normally rasterises vector street maps to a JPEG <image> for fast
+     * pan/zoom (see VectorStarMap's raster-preview effect) — correct for interactive use, but
+     * it means the DOM never contains real <path> elements there. DownloadButton's own export
+     * wait polls specifically for <path> data, a condition that can never become true in raster
+     * mode no matter how long you wait — this is what silently hung real customer exports
+     * (confirmed via direct testing: pathChars stayed frozen at just the location pin's fixed
+     * length for a full 168s run, unrelated to network speed). Setting this flag makes
+     * VectorStarMap render true vectors for the export's duration, matching what the
+     * server-side /render page (forceVector=true) already does successfully — and is also the
+     * behavior actually documented as intended: exports should be crisp vectors, not a frozen
+     * raster snapshot.
+     */
+    forceVectorExport: boolean;
 
     // Poster Type
     posterType: 'starmap' | 'streetmap' | 'coloredmap';
@@ -174,23 +202,34 @@ interface StoreState {
     mapBearing: number; // 0–360, degrees clockwise rotation of the map
     mapBgColor: string;
     mapStreetColor: string;
+    mapWaterColor: string;
+    mapLandColor: string;
+    mapMainRoadColor: string;
+    mapSmallRoadColor: string;
+    mapDetailRoadColor: string;
     mapColorPreset: string;
     mapStyleUrl: string | null; // null = custom 2-color style; URL = use prebuilt style (e.g. realistic)
+    /** Multiplier for street/place label text size on the colored map (1 = style default). */
+    mapLabelScale: number;
 
     // Setters
     // Template System
     selectedTemplate: string;
     mapBackgroundImage: string | null;
+    backgroundImageUrl: string | null; // custom poster background image (URL or data URI)
+    backgroundImageOffsetY: number; // vertical pan of the poster background image (-100..100)
     borderStyle: 'simple' | 'double-offset' | 'dashed';
     templateSettings: Record<string, Partial<StoreState>>; // Store settings for each template
 
     // High-res print capture — set by StreetMapCapture on mount, called by DownloadButton
-    captureHighResFn: (() => Promise<string>) | null;
-    setCaptureHighResFn: (fn: (() => Promise<string>) | null) => void;
+    captureHighResFn: ((options?: MapCaptureOptions) => Promise<string>) | null;
+    setCaptureHighResFn: (fn: ((options?: MapCaptureOptions) => Promise<string>) | null) => void;
 
     // Setters
     setSelectedTemplate: (template: string) => void;
     setMapBackgroundImage: (url: string | null) => void;
+    setBackgroundImageUrl: (url: string | null) => void;
+    setBackgroundImageOffsetY: (v: number) => void;
     setBorderStyle: (style: 'simple' | 'double-offset' | 'dashed') => void;
     saveTemplateSettings: (templateId: string) => void;
     restoreTemplateSettings: (templateId: string) => void;
@@ -212,6 +251,7 @@ interface StoreState {
     setShowBorder: (show: boolean) => void;
     setShowConstellations: (show: boolean) => void;
     setShowMilkyWay: (show: boolean) => void;
+    setMilkyWayOpacity: (opacity: number) => void;
     setShowGrid: (show: boolean) => void;
     setDesignStyle: (style: 'standard' | 'fineline' | 'minimal') => void;
     setMaskShape: (shape: 'circle' | 'heart' | 'house' | 'rect') => void;
@@ -219,11 +259,13 @@ interface StoreState {
     setShowLocation: (show: boolean) => void;
     setShowDate: (show: boolean) => void;
     setShowCoords: (show: boolean) => void;
+    setDetailsDateFirst: (v: boolean) => void;
     setPosterColor: (posterColor: string) => void;
     setTextColor: (textColor: string) => void;
     setStarColor: (starColor: string) => void;
     setMapInteriorColor: (color: string) => void;
     setPrintSize: (size: { label: string; width: number; height: number; ratio: string }) => void;
+    setLockedPrintSize: (size: { label: string; width: number; height: number; ratio: string } | null) => void;
     setCustomText: (key: keyof StoreState['customText'], value: string) => void;
     setCircleSize: (size: number) => void;
     setHeartSize: (size: number) => void;
@@ -275,11 +317,13 @@ interface StoreState {
     setNamesFont: (font: string) => void;
     setShowNames: (show: boolean) => void;
     setTitleKerning: (kerning: number) => void;
+    setTitleLineHeight: (lineHeight: number) => void;
     setSubtitleKerning: (kerning: number) => void;
     setDetailsKerning: (kerning: number) => void;
     setDedicationKerning: (kerning: number) => void;
     setNamesKerning: (kerning: number) => void;
     setTitleAllCaps: (v: boolean) => void;
+    setLocationAllCaps: (v: boolean) => void;
 
     // Poster type setters
     setPosterType: (type: 'starmap' | 'streetmap' | 'coloredmap') => void;
@@ -290,12 +334,20 @@ interface StoreState {
     setMapBearing: (bearing: number) => void;
     setMapBgColor: (color: string) => void;
     setMapStreetColor: (color: string) => void;
+    setMapWaterColor: (color: string) => void;
+    setMapLandColor: (color: string) => void;
+    setMapMainRoadColor: (color: string) => void;
+    setMapSmallRoadColor: (color: string) => void;
+    setMapDetailRoadColor: (color: string) => void;
     setMapColorPreset: (preset: string) => void;
     setMapStyleUrl: (url: string | null) => void;
+    setMapLabelScale: (v: number) => void;
     setMapImageOffsetX: (x: number) => void;
     setMapImageOffsetY: (y: number) => void;
     setMapImageOpacity: (opacity: number) => void;
     setIsDraggingMapImage: (v: boolean) => void;
+    setStreetMapRendering: (v: boolean) => void;
+    setForceVectorExport: (v: boolean) => void;
 
     // Active typography field (set when user clicks a text element in the poster)
     activeTypoField: 'title' | 'subtitle' | 'details' | 'dedication' | 'names' | null;
@@ -322,10 +374,16 @@ interface StoreState {
 
     // Template-link ordering flow
     selectedTemplateEtsyUrl: string | null;
+    selectedTemplateEtsyVariantName: string | null;
+    selectedTemplateFulfillmentSize: string | null;
+    selectedTemplateListingSlug: string | null;
     savedDesignToken: string | null;
     selectedEtsyListingId: string | null;
     selectedEtsyVariant: string | null;
     setSelectedTemplateEtsyUrl: (url: string | null) => void;
+    setSelectedTemplateEtsyVariantName: (name: string | null) => void;
+    setSelectedTemplateFulfillmentSize: (size: string | null) => void;
+    setSelectedTemplateListingSlug: (slug: string | null) => void;
     setSavedDesignToken: (token: string | null) => void;
     setSelectedEtsyListingId: (id: string | null) => void;
     setSelectedEtsyVariant: (variant: string | null) => void;
@@ -410,11 +468,13 @@ export const useStore = create<StoreState>((set) => ({
     dedicationFont: 'Playfair Display',
     namesFont: 'Playfair Display',
     titleKerning: 0.05,
+    titleLineHeight: 1.08,
     subtitleKerning: 0.2,
     detailsKerning: 0.1,
     dedicationKerning: 0.05,
     namesKerning: 0.15,
     titleAllCaps: false,
+    locationAllCaps: false,
 
     // Preview Zoom & Pan - Default Values
     previewZoom: 1.0,
@@ -430,6 +490,7 @@ export const useStore = create<StoreState>((set) => ({
     // New Feature Defaults
     showConstellations: true,
     showMilkyWay: false,
+    milkyWayOpacity: 0.6,
     showGrid: true,
     designStyle: 'standard',
     finelineWidth: 1.0,
@@ -440,6 +501,7 @@ export const useStore = create<StoreState>((set) => ({
     showLocation: true,
     showDate: true,
     showCoords: true,
+    detailsDateFirst: false,
 
     // Custom Text - Defaults empty (use auto-generated)
     customText: {
@@ -454,12 +516,15 @@ export const useStore = create<StoreState>((set) => ({
 
     // Print Size - Default 8x10
     printSize: { label: '8x10"', width: 8, height: 10, ratio: '4/5' },
+    lockedPrintSize: null,
 
     // Map image pan offsets
     mapImageOffsetX: 0,
     mapImageOffsetY: 0,
     mapImageOpacity: 1,
     isDraggingMapImage: false,
+    streetMapRendering: false,
+    forceVectorExport: false,
     activeTypoField: null,
     typoFieldVersion: 0,
     pendingGlyphForInlineEdit: null,
@@ -479,13 +544,21 @@ export const useStore = create<StoreState>((set) => ({
     mapBearing: 0,
     mapBgColor: '#1a1a2e',
     mapStreetColor: '#3d5a80',
+    mapWaterColor: '#8f8f8f',
+    mapLandColor: '#b6b6b6',
+    mapMainRoadColor: '#111111',
+    mapSmallRoadColor: '#1a1a1a',
+    mapDetailRoadColor: '#2a2a2a',
     mapColorPreset: 'midnight',
     mapStyleUrl: null,
+    mapLabelScale: 1,
 
     // Setters
     // Template System - Default Values
     selectedTemplate: 'custom',
     mapBackgroundImage: null,
+    backgroundImageUrl: null,
+    backgroundImageOffsetY: 0,
     borderStyle: 'simple',
     templateSettings: {},
     captureHighResFn: null,
@@ -493,6 +566,8 @@ export const useStore = create<StoreState>((set) => ({
     // Setters Implementation
     setSelectedTemplate: (selectedTemplate) => set({ selectedTemplate }),
     setMapBackgroundImage: (mapBackgroundImage) => set({ mapBackgroundImage }),
+    setBackgroundImageUrl: (backgroundImageUrl) => set({ backgroundImageUrl }),
+    setBackgroundImageOffsetY: (backgroundImageOffsetY) => set({ backgroundImageOffsetY }),
     setBorderStyle: (borderStyle) => set({ borderStyle }),
     setCaptureHighResFn: (captureHighResFn) => set({ captureHighResFn }),
     saveTemplateSettings: (templateId) => set((state) => {
@@ -502,6 +577,15 @@ export const useStore = create<StoreState>((set) => ({
             textColor: state.textColor,
             starColor: state.starColor,
             mapInteriorColor: state.mapInteriorColor,
+            mapBgColor: state.mapBgColor,
+            mapStreetColor: state.mapStreetColor,
+            mapWaterColor: state.mapWaterColor,
+            mapLandColor: state.mapLandColor,
+            mapMainRoadColor: state.mapMainRoadColor,
+            mapSmallRoadColor: state.mapSmallRoadColor,
+            mapDetailRoadColor: state.mapDetailRoadColor,
+            mapColorPreset: state.mapColorPreset,
+            mapStyleUrl: state.mapStyleUrl,
             starScale: state.starScale,
             lineWeight: state.lineWeight,
             gridWidth: state.gridWidth,
@@ -510,11 +594,14 @@ export const useStore = create<StoreState>((set) => ({
             showBorder: state.showBorder,
             showConstellations: state.showConstellations,
             showMilkyWay: state.showMilkyWay,
+            milkyWayOpacity: state.milkyWayOpacity,
             showGrid: state.showGrid,
             designStyle: state.designStyle,
             maskShape: state.maskShape,
             isLightMode: state.isLightMode,
             mapBackgroundImage: state.mapBackgroundImage,
+            backgroundImageUrl: state.backgroundImageUrl,
+            backgroundImageOffsetY: state.backgroundImageOffsetY,
             borderStyle: state.borderStyle,
             showFrame: state.showFrame,
             frameInset: state.frameInset,
@@ -550,6 +637,7 @@ export const useStore = create<StoreState>((set) => ({
             namesKerning: state.namesKerning,
             showNames: state.showNames,
             titleAllCaps: state.titleAllCaps,
+            locationAllCaps: state.locationAllCaps,
         };
         return {
             templateSettings: {
@@ -573,6 +661,15 @@ export const useStore = create<StoreState>((set) => ({
             textColor: state.textColor,
             starColor: state.starColor,
             mapInteriorColor: state.mapInteriorColor,
+            mapBgColor: state.mapBgColor,
+            mapStreetColor: state.mapStreetColor,
+            mapWaterColor: state.mapWaterColor,
+            mapLandColor: state.mapLandColor,
+            mapMainRoadColor: state.mapMainRoadColor,
+            mapSmallRoadColor: state.mapSmallRoadColor,
+            mapDetailRoadColor: state.mapDetailRoadColor,
+            mapColorPreset: state.mapColorPreset,
+            mapStyleUrl: state.mapStyleUrl,
             starScale: state.starScale,
             lineWeight: state.lineWeight,
             gridWidth: state.gridWidth,
@@ -581,11 +678,14 @@ export const useStore = create<StoreState>((set) => ({
             showBorder: state.showBorder,
             showConstellations: state.showConstellations,
             showMilkyWay: state.showMilkyWay,
+            milkyWayOpacity: state.milkyWayOpacity,
             showGrid: state.showGrid,
             designStyle: state.designStyle,
             maskShape: state.maskShape,
             isLightMode: state.isLightMode,
             mapBackgroundImage: state.mapBackgroundImage,
+            backgroundImageUrl: state.backgroundImageUrl,
+            backgroundImageOffsetY: state.backgroundImageOffsetY,
             borderStyle: state.borderStyle,
             showFrame: state.showFrame,
             frameInset: state.frameInset,
@@ -624,6 +724,7 @@ export const useStore = create<StoreState>((set) => ({
             namesKerning: state.namesKerning,
             showNames: state.showNames,
             titleAllCaps: state.titleAllCaps,
+            locationAllCaps: state.locationAllCaps,
         };
 
         // Save to localStorage
@@ -660,6 +761,7 @@ export const useStore = create<StoreState>((set) => ({
     setShowBorder: (showBorder) => set({ showBorder }),
     setShowConstellations: (showConstellations) => set({ showConstellations }),
     setShowMilkyWay: (showMilkyWay) => set({ showMilkyWay }),
+    setMilkyWayOpacity: (milkyWayOpacity) => set({ milkyWayOpacity }),
     setShowGrid: (showGrid) => set({ showGrid }),
     setDesignStyle: (designStyle) => set({
         designStyle,
@@ -670,13 +772,24 @@ export const useStore = create<StoreState>((set) => ({
     setShowLocation: (showLocation) => set({ showLocation }),
     setShowDate: (showDate) => set({ showDate }),
     setShowCoords: (showCoords) => set({ showCoords }),
-    // Keep mapBgColor in sync with posterColor so street-map background always
-    // matches the overall design palette when the user changes the poster color.
-    setPosterColor: (posterColor) => set({ posterColor, mapBgColor: posterColor }),
+    setDetailsDateFirst: (detailsDateFirst) => set({ detailsDateFirst }),
+    // Keep mapBgColor and mapInteriorColor in sync with posterColor.
+    // mapInteriorColor only follows when it hasn't been manually diverged from posterColor.
+    setPosterColor: (posterColor) => set((state) => ({
+        posterColor,
+        mapBgColor: posterColor,
+        mapInteriorColor: state.mapInteriorColor === state.posterColor ? posterColor : state.mapInteriorColor,
+    })),
     setTextColor: (textColor) => set({ textColor }),
     setStarColor: (starColor) => set({ starColor }),
     setMapInteriorColor: (mapInteriorColor) => set({ mapInteriorColor }),
-    setPrintSize: (printSize) => set(() => {
+    setLockedPrintSize: (lockedPrintSize) => set((state) => ({
+        lockedPrintSize,
+        // Snap the active size to the lock immediately
+        ...(lockedPrintSize ? { printSize: lockedPrintSize } : {}),
+    })),
+    setPrintSize: (printSize) => set((state) => {
+        if (state.lockedPrintSize) return {}; // silently ignore — size is locked to paid order
         // All formats share the same circle size (1.0) — the SVG coordinate system handles
         // the physical size difference. 8x10 and 16x20 are the same aspect ratio and thus
         // identical SVG dimensions (1200×1500), so their designs should look identical.
@@ -735,6 +848,7 @@ export const useStore = create<StoreState>((set) => ({
     setShowNames: (showNames) => set({ showNames }),
     setNamesKerning: (namesKerning) => set({ namesKerning }),
     setTitleAllCaps: (titleAllCaps) => set({ titleAllCaps }),
+    setLocationAllCaps: (locationAllCaps) => set({ locationAllCaps }),
     setTitleOffsetX: (titleOffsetX) => set({ titleOffsetX }),
     setTitleOffsetY: (titleOffsetY) => set({ titleOffsetY }),
     setSubtitleOffsetY: (subtitleOffsetY) => set({ subtitleOffsetY }),
@@ -769,6 +883,7 @@ export const useStore = create<StoreState>((set) => ({
     setDetailsFont: (detailsFont) => set({ detailsFont }),
     setDedicationFont: (dedicationFont) => set({ dedicationFont }),
     setTitleKerning: (titleKerning) => set({ titleKerning }),
+    setTitleLineHeight: (titleLineHeight) => set({ titleLineHeight }),
     setSubtitleKerning: (subtitleKerning) => set({ subtitleKerning }),
     setDetailsKerning: (detailsKerning) => set({ detailsKerning }),
     setDedicationKerning: (dedicationKerning) => set({ dedicationKerning }),
@@ -781,19 +896,27 @@ export const useStore = create<StoreState>((set) => ({
             ? 'https://tiles.openfreemap.org/styles/bright'
             : null,
     }),
-    setMapCity: (mapCity) => set({ mapCity, mapImageOffsetX: 0, mapImageOffsetY: 0, locationPinOffsetX: 0, locationPinOffsetY: 0 }),
+    setMapCity: (mapCity) => set({ mapCity, mapBackgroundImage: null, mapImageOffsetX: 0, mapImageOffsetY: 0, locationPinOffsetX: 0, locationPinOffsetY: 0 }),
     setMapCenterLat: (mapCenterLat) => set({ mapCenterLat }),
     setMapCenterLng: (mapCenterLng) => set({ mapCenterLng }),
     setMapZoom: (mapZoom) => set({ mapZoom }),
     setMapBearing: (mapBearing) => set({ mapBearing }),
     setMapBgColor: (mapBgColor) => set({ mapBgColor }),
     setMapStreetColor: (mapStreetColor) => set({ mapStreetColor }),
+    setMapWaterColor: (mapWaterColor) => set({ mapWaterColor }),
+    setMapLandColor: (mapLandColor) => set({ mapLandColor }),
+    setMapMainRoadColor: (mapMainRoadColor) => set({ mapMainRoadColor }),
+    setMapSmallRoadColor: (mapSmallRoadColor) => set({ mapSmallRoadColor }),
+    setMapDetailRoadColor: (mapDetailRoadColor) => set({ mapDetailRoadColor }),
     setMapColorPreset: (mapColorPreset) => set({ mapColorPreset }),
     setMapStyleUrl: (mapStyleUrl) => set({ mapStyleUrl }),
+    setMapLabelScale: (mapLabelScale) => set({ mapLabelScale }),
     setMapImageOffsetX: (mapImageOffsetX) => set({ mapImageOffsetX }),
     setMapImageOffsetY: (mapImageOffsetY) => set({ mapImageOffsetY }),
     setMapImageOpacity: (mapImageOpacity) => set({ mapImageOpacity }),
     setIsDraggingMapImage: (isDraggingMapImage) => set({ isDraggingMapImage }),
+    setStreetMapRendering: (streetMapRendering) => set({ streetMapRendering }),
+    setForceVectorExport: (forceVectorExport) => set({ forceVectorExport }),
     setActiveTypoField: (activeTypoField) => set((s) => ({ activeTypoField, typoFieldVersion: s.typoFieldVersion + 1 })),
     setPendingGlyphForInlineEdit: (pendingGlyphForInlineEdit) => set({ pendingGlyphForInlineEdit }),
     setShowLocationPin: (showLocationPin) => set({ showLocationPin }),
@@ -807,10 +930,16 @@ export const useStore = create<StoreState>((set) => ({
 
     // Template-link ordering flow
     selectedTemplateEtsyUrl: null,
+    selectedTemplateEtsyVariantName: null,
+    selectedTemplateFulfillmentSize: null,
+    selectedTemplateListingSlug: null,
     savedDesignToken: null,
     selectedEtsyListingId: null,
     selectedEtsyVariant: null,
     setSelectedTemplateEtsyUrl: (selectedTemplateEtsyUrl) => set({ selectedTemplateEtsyUrl }),
+    setSelectedTemplateEtsyVariantName: (selectedTemplateEtsyVariantName) => set({ selectedTemplateEtsyVariantName }),
+    setSelectedTemplateFulfillmentSize: (selectedTemplateFulfillmentSize) => set({ selectedTemplateFulfillmentSize }),
+    setSelectedTemplateListingSlug: (selectedTemplateListingSlug) => set({ selectedTemplateListingSlug }),
     setSavedDesignToken: (savedDesignToken) => set({ savedDesignToken }),
     setSelectedEtsyListingId: (selectedEtsyListingId) => set({ selectedEtsyListingId }),
     setSelectedEtsyVariant: (selectedEtsyVariant) => set({ selectedEtsyVariant }),

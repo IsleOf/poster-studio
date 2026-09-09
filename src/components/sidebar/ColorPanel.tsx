@@ -1,20 +1,39 @@
-// ColorPanel — Poster color palette presets and custom color pickers.
-// Extracted from SidebarControls. Uses useStore() directly.
-
-import React from 'react';
+// ColorPanel — Poster color palette presets, custom color pickers, background image upload.
+import React, { useRef, useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { Box, VStack, HStack, Text, Input } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Input, Button, Image, IconButton, Slider, SliderTrack, SliderFilledTrack, SliderThumb } from '@chakra-ui/react';
 
-const PALETTE_PRESETS = [
-    { bg: '#0a1628', text: '#c8b888', label: 'Navy Gold' },
-    { bg: '#1a1a2e', text: '#e0d0b0', label: 'Midnight Cream' },
-    { bg: '#ffffff', text: '#1a202c', label: 'Clean White' },
-    { bg: '#f5f5f0', text: '#2d3748', label: 'Ivory' },
-    { bg: '#0d1b3e', text: '#d4a574', label: 'Indigo Copper' },
-    { bg: '#1a0a00', text: '#f0c080', label: 'Dark Amber' },
-    { bg: '#0a2818', text: '#a8d8a0', label: 'Forest' },
-    { bg: '#1a0a2e', text: '#c8a0e8', label: 'Cosmic' },
-];
+const API = import.meta.env.VITE_API_URL || '';
+
+type ColorRowProps = {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+};
+
+// Local state while dragging; commits to store only on blur (picker close).
+// This prevents expensive re-renders on every pointer move inside the native color picker.
+const ColorRow: React.FC<ColorRowProps> = ({ label, value, onChange }) => {
+    const [local, setLocal] = useState(value);
+    // Sync when template/preset changes the value externally
+    useEffect(() => { setLocal(value); }, [value]);
+    return (
+        <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+            <Text fontSize="sm" color="gray.700" fontWeight="500">{label}</Text>
+            <HStack>
+                <Text fontSize="xs" color="gray.500" fontFamily="mono">{local}</Text>
+                <Input
+                    type="color" w={8} h={8} p={0}
+                    border="1px solid" borderColor="gray.300" borderRadius="md" bg="transparent"
+                    value={local}
+                    onChange={(e) => setLocal(e.target.value)}
+                    onBlur={() => { if (local !== value) onChange(local); }}
+                    cursor="pointer"
+                />
+            </HStack>
+        </HStack>
+    );
+};
 
 const ColorPanel: React.FC = () => {
     const {
@@ -23,96 +42,194 @@ const ColorPanel: React.FC = () => {
         starColor, setStarColor,
         mapInteriorColor, setMapInteriorColor,
         mapStreetColor, setMapStreetColor,
-        posterType,
+        mapBgColor, setMapBgColor,
+        mapWaterColor, setMapWaterColor,
+        mapLandColor, setMapLandColor,
+        mapMainRoadColor, setMapMainRoadColor,
+        mapSmallRoadColor, setMapSmallRoadColor,
+        mapDetailRoadColor, setMapDetailRoadColor,
+        backgroundImageUrl, setBackgroundImageUrl,
+        mapBackgroundImage, setMapBackgroundImage,
+        backgroundImageOffsetY, setBackgroundImageOffsetY,
+        posterType, maskShape,
     } = useStore();
+
+    // Show interior color for star maps when there's no full-poster image
+    // (if backgroundImageUrl is set, the shape is transparent and the image shows through)
+    const showInteriorColor = posterType === 'starmap' && !backgroundImageUrl;
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploading, setUploading] = React.useState(false);
+
+    async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploading(true);
+        try {
+            // Try admin upload first (if authenticated)
+            const adminJwt = localStorage.getItem('admin_jwt') || sessionStorage.getItem('admin_jwt') || '';
+            if (adminJwt) {
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const base64 = (reader.result as string).split(',')[1];
+                    const res = await fetch(`${API}/api/admin/assets/upload`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminJwt}` },
+                        body: JSON.stringify({ type: 'image', name: file.name, filename: file.name, data: base64 }),
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setBackgroundImageUrl(`${API}${data.url}`);
+                    } else {
+                        // Fallback: use data URI directly (not persisted after reload)
+                        setBackgroundImageUrl(reader.result as string);
+                    }
+                    setUploading(false);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // Guest mode: encode as data URI (lost on page reload, stored in design token on save)
+                const reader = new FileReader();
+                reader.onload = () => {
+                    setBackgroundImageUrl(reader.result as string);
+                    setUploading(false);
+                };
+                reader.readAsDataURL(file);
+            }
+        } catch {
+            setUploading(false);
+        }
+        // Reset input so same file can be re-selected
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    }
 
     return (
         <VStack align="stretch" spacing={3}>
-            {/* Color palette presets */}
-            <Text fontSize="xs" fontWeight="600" color="gray.700">Presets</Text>
-            <HStack flexWrap="wrap" spacing={2}>
-                {PALETTE_PRESETS.map(({ bg, text, label }) => (
-                    <Box
-                        key={bg}
-                        w="28px" h="28px" borderRadius="md" bg={bg}
-                        border="2px solid"
-                        borderColor={posterColor === bg ? 'blue.400' : 'gray.300'}
-                        cursor="pointer" title={label}
-                        position="relative" overflow="hidden"
-                        onClick={() => {
-                            setPosterColor(bg);
-                            setTextColor(text);
-                            setStarColor(text);
-                            setMapInteriorColor(bg);
-                        }}
-                        _hover={{ borderColor: 'blue.300' }}
-                    >
-                        <Box position="absolute" bottom={0} left={0} right={0} h="35%" bg={text} opacity={0.8} />
-                    </Box>
-                ))}
-            </HStack>
 
-            <Text fontSize="xs" fontWeight="600" color="gray.700">Custom Colors</Text>
+            {/* Background color */}
+            <ColorRow label="Background" value={posterColor} onChange={setPosterColor} />
 
-            {/* Background */}
-            <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                <Text fontSize="sm" color="gray.700" fontWeight="500">Background</Text>
-                <HStack>
-                    <Text fontSize="xs" color="gray.500" fontFamily="mono">{posterColor}</Text>
-                    <Input
-                        type="color" w={8} h={8} p={0}
-                        border="1px solid" borderColor="gray.300" borderRadius="md" bg="transparent"
-                        value={posterColor}
-                        onChange={(e) => setPosterColor(e.target.value)}
-                        cursor="pointer"
-                    />
+            {/* Star map shape interior — shown for star maps without a full-poster bg image */}
+            {showInteriorColor && (
+                <ColorRow
+                    label={maskShape === 'rect' ? 'Map Interior' : 'Sky Interior'}
+                    value={mapInteriorColor}
+                    onChange={setMapInteriorColor}
+                />
+            )}
+
+            {/* Background image */}
+            <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                <HStack justify="space-between" mb={backgroundImageUrl ? 2 : 0}>
+                    <Text fontSize="sm" color="gray.700" fontWeight="500">Background Image</Text>
+                    <HStack spacing={1}>
+                        {backgroundImageUrl && (
+                            <IconButton
+                                aria-label="Remove background image"
+                                icon={<span>✕</span>}
+                                size="xs" variant="ghost" colorScheme="red"
+                                onClick={() => setBackgroundImageUrl(null)}
+                            />
+                        )}
+                        <Button
+                            size="xs"
+                            variant="outline"
+                            isLoading={uploading}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            {backgroundImageUrl ? 'Replace' : 'Upload'}
+                        </Button>
+                    </HStack>
                 </HStack>
-            </HStack>
+                {backgroundImageUrl && (
+                    <Image
+                        src={backgroundImageUrl}
+                        alt="Background preview"
+                        h="60px" w="100%"
+                        objectFit="cover"
+                        borderRadius="sm"
+                        border="1px solid"
+                        borderColor="gray.200"
+                    />
+                )}
+                {backgroundImageUrl && /\/backgrounds\/sm002\//.test(backgroundImageUrl) && (
+                    <HStack spacing={2} mt={2} align="center">
+                        <Text fontSize="xs" color="gray.500" fontWeight="500">Colour</Text>
+                        {(['teal', 'blue', 'gold', 'pink'] as const).map((c) => {
+                            const url = `/backgrounds/sm002/bg-${c}-2000.webp`;
+                            const active = backgroundImageUrl === url;
+                            const swatch = { teal: '#1f7a78', blue: '#2f55c0', gold: '#c0902a', pink: '#b02a78' }[c];
+                            return (
+                                <Box key={c} as="button" type="button" onClick={() => setBackgroundImageUrl(url)}
+                                    w="26px" h="26px" borderRadius="md" bg={swatch} title={c}
+                                    border="2px solid" borderColor={active ? 'gray.900' : 'gray.200'}
+                                    _hover={{ borderColor: 'gray.500' }} />
+                            );
+                        })}
+                    </HStack>
+                )}
+                {!backgroundImageUrl && (
+                    <Text fontSize="xs" color="gray.400">
+                        Upload an image to use as the poster background (replaces solid color).
+                    </Text>
+                )}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={handleImageUpload}
+                />
+            </Box>
+
+            {/* Sky colour + position — the forest night-sky poster background (SM002 line) */}
+            {backgroundImageUrl && /\/backgrounds\/sm002\//.test(backgroundImageUrl) && (
+                <Box p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                    <Text fontSize="sm" color="gray.700" fontWeight="500" mb={2}>Sky colour</Text>
+                    <HStack spacing={2}>
+                        {(['teal', 'blue', 'gold', 'pink'] as const).map((c) => {
+                            const forestUrl = `/backgrounds/sm002/bg-${c}-2000.webp`;
+                            const active = backgroundImageUrl === forestUrl;
+                            const swatch = { teal: '#1f7a78', blue: '#2f55c0', gold: '#c0902a', pink: '#b02a78' }[c];
+                            // the shape is transparent, so the forest IS the consistent background; clear any stale in-shape image
+                            const apply = () => { setBackgroundImageUrl(forestUrl); setMapBackgroundImage(null); };
+                            return (
+                                <Box key={c} as="button" type="button" onClick={apply}
+                                    w="30px" h="30px" borderRadius="md" bg={swatch} title={c}
+                                    border="2px solid" borderColor={active ? 'gray.900' : 'gray.200'}
+                                    _hover={{ borderColor: 'gray.500' }} />
+                            );
+                        })}
+                    </HStack>
+                    <Text fontSize="xs" color="gray.500" fontWeight="500" mt={3} mb={1}>Background position (up / down)</Text>
+                    <Slider min={-100} max={100} step={1} value={backgroundImageOffsetY ?? 0}
+                        onChange={setBackgroundImageOffsetY} aria-label="background-offset-y">
+                        <SliderTrack><SliderFilledTrack /></SliderTrack>
+                        <SliderThumb />
+                    </Slider>
+                </Box>
+            )}
 
             {/* Text & elements */}
-            <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                <Text fontSize="sm" color="gray.700" fontWeight="500">Text & Elements</Text>
-                <HStack>
-                    <Text fontSize="xs" color="gray.500" fontFamily="mono">{textColor}</Text>
-                    <Input
-                        type="color" w={8} h={8} p={0}
-                        border="1px solid" borderColor="gray.300" borderRadius="md" bg="transparent"
-                        value={textColor}
-                        onChange={(e) => setTextColor(e.target.value)}
-                        cursor="pointer"
-                    />
-                </HStack>
-            </HStack>
+            <ColorRow label="Text & Elements" value={textColor} onChange={setTextColor} />
 
-            {/* Streets (streetmap) or Map Background (starmap/coloredmap) */}
-            {posterType === 'streetmap' ? (
-                <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                    <Text fontSize="sm" color="gray.700" fontWeight="500">Streets</Text>
-                    <HStack>
-                        <Text fontSize="xs" color="gray.500" fontFamily="mono">{mapStreetColor}</Text>
-                        <Input
-                            type="color" w={8} h={8} p={0}
-                            border="1px solid" borderColor="gray.300" borderRadius="md" bg="transparent"
-                            value={mapStreetColor}
-                            onChange={(e) => setMapStreetColor(e.target.value)}
-                            cursor="pointer"
-                        />
-                    </HStack>
-                </HStack>
-            ) : (
-                <HStack justify="space-between" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                    <Text fontSize="sm" color="gray.700" fontWeight="500">Map Background</Text>
-                    <HStack>
-                        <Text fontSize="xs" color="gray.500" fontFamily="mono">{mapInteriorColor}</Text>
-                        <Input
-                            type="color" w={8} h={8} p={0}
-                            border="1px solid" borderColor="gray.300" borderRadius="md" bg="transparent"
-                            value={mapInteriorColor}
-                            onChange={(e) => setMapInteriorColor(e.target.value)}
-                            cursor="pointer"
-                        />
-                    </HStack>
-                </HStack>
+            {/* Street map gets per-layer color controls; star/colored maps derive interior from Background */}
+            {posterType === 'streetmap' && (
+                <>
+                    <Box pt={2}>
+                        <Text fontSize="sm" color="gray.700" fontWeight="700">Map Colors</Text>
+                        <Text fontSize="xs" color="gray.500">Controls apply to the actual vector map layers.</Text>
+                    </Box>
+                    <ColorRow label="Map Background" value={mapBgColor} onChange={setMapBgColor} />
+                    <ColorRow label="Water" value={mapWaterColor} onChange={setMapWaterColor} />
+                    <ColorRow label="Land/Parks" value={mapLandColor} onChange={setMapLandColor} />
+                    <ColorRow label="Main Streets" value={mapMainRoadColor} onChange={(value) => {
+                        setMapMainRoadColor(value);
+                        setMapStreetColor(value);
+                    }} />
+                    <ColorRow label="Small Streets" value={mapSmallRoadColor} onChange={setMapSmallRoadColor} />
+                    <ColorRow label="Detail Streets" value={mapDetailRoadColor} onChange={setMapDetailRoadColor} />
+                </>
             )}
         </VStack>
     );

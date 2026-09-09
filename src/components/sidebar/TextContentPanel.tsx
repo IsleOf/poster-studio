@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { ChevronDown } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { trackEvent } from '../../utils/analytics';
+import { asCalendarDate } from '../../utils/dateOnly';
 import { inputStyles, labelStyles, toggleButtonStyles } from './sidebarStyles';
 import {
     Box, VStack, HStack, Text, Input, Button, Accordion, AccordionItem,
@@ -16,7 +17,168 @@ import {
 
 // ── Smart suggestion generators ──────────────────────────────────────────────
 
-function generateSmartTitleSuggestions(location: string, date: Date): string[] {
+const HEART_MAP_TITLE_SUGGESTIONS = [
+    'Where It All Began',
+    'Where Our Story Started',
+    'The First Date',
+    'Where We Met',
+    'It Was Always You',
+    'Where Forever Started',
+    'The Place You Said Yes',
+    'Where We Said I Do',
+    'Our Best Day',
+    'To the Moon and Back',
+    'Our Happy Place',
+    'My Favorite Place is with You',
+    "Home is Wherever I'm with You",
+    'Our Little Corner of the World',
+    'Our Love Story',
+    'Love Knows No Distance',
+    'Miles Apart, Close in Heart',
+    'Worth Every Mile',
+    'Together Anywhere',
+];
+
+const HEART_MAP_SUBTITLE_SUGGESTIONS = [
+    'Our Story Began Here',
+    'Forever Starts Here',
+    'The Place That Changed Everything',
+    'Every Love Story Has a Place',
+    'The Beginning of Always',
+    'A Moment We Will Never Forget',
+    'Two Hearts, One Place',
+    'A Love Worth Every Mile',
+    'From This Place, Forever',
+    'Where My Heart Found Home',
+];
+
+const HOUSE_MAP_TITLE_SUGGESTIONS = [
+    'Our First Home',
+    'Home Sweet Home',
+    'Our Forever Home',
+    'Where Love Lives',
+    'The Place We Call Home',
+    'Our New Beginning',
+    'Home Is Here',
+    'The First Place We Called Ours',
+    'Our Little Home',
+    'Where Our Story Lives',
+    'Our Happy Place',
+    'The Door We Opened Together',
+    'A Place to Call Ours',
+    'New Home, New Memories',
+    'The Home We Built Together',
+    'Our Nest',
+    'The Address That Became Home',
+    'Where Family Begins',
+];
+
+const HOUSE_MAP_SUBTITLE_SUGGESTIONS = [
+    'The Place We Call Home',
+    'Our First Chapter Together',
+    'Where Love Lives',
+    'A New Beginning',
+    'Built on Love and Memories',
+    'Our Favorite Place to Be',
+    'The Start of Our Next Adventure',
+    'Home Is Wherever We Are Together',
+    'Made for Us',
+    'Established with Love',
+];
+
+const STREET_MAP_TITLE_SUGGESTIONS = [
+    'Our Happy Place',
+    'The Place That Matters',
+    'Life Is an Adventure With You',
+    'Our Little Corner of the World',
+    'The City That Made Us',
+    'Where Our Story Started',
+    'A Map of Us',
+    'City of Memories',
+    'The Streets We Know by Heart',
+    'Always Take the Scenic Route',
+    'Adventure Awaits',
+    'Our Favorite Place',
+    'The Place We Keep Coming Back To',
+    'Where We Belong',
+    'Home, Mapped',
+    'A City Worth Remembering',
+    'The Road That Led to You',
+    'Every Street Leads to You',
+];
+
+const STREET_MAP_SUBTITLE_SUGGESTIONS = [
+    'The Place That Matters',
+    'Life Is an Adventure With You...',
+    'A City Worth Remembering',
+    'Mapped With Love',
+    'Our Favorite Place on Earth',
+    'Where the Best Memories Live',
+    'The Streets That Tell Our Story',
+    'Always Worth the Journey',
+    'A Place We Will Never Forget',
+    'Made for the Places We Love',
+];
+
+const STAR_MAP_TITLE_SUGGESTIONS = [
+    'The Night We Met',
+    'The Night Our Stars Aligned',
+    'Written in the Stars',
+    'The Stars Aligned',
+    'The Night We Said I Do',
+    'Our Wedding Night',
+    'The Beginning of Forever',
+    'The Night Our Love Was Born',
+    'The Day You Were Born',
+    'The Night You Were Born',
+    'The Sky on Your Birthday',
+    'Welcome to the World',
+    'Our First Night as Three',
+    'A Moment in Time',
+    'Under These Stars',
+    'The Night Everything Changed',
+    'First Night of Forever',
+    'Love Under the Stars',
+    'The Universe Remembered',
+    'Our Special Night',
+];
+
+const STAR_MAP_SUBTITLE_SUGGESTIONS = [
+    'The Sky Above Us That Night',
+    'Under These Stars',
+    'The Moment Everything Changed',
+    'Our Story Began',
+    'Forever and Always',
+    'A Night to Remember',
+    'The Start of Something Beautiful',
+    'Love Written in the Stars',
+    'The Universe Had a Plan',
+    'A Moment We Will Never Forget',
+];
+
+function uniqueSuggestions(suggestions: string[]): string[] {
+    return Array.from(new Set(suggestions));
+}
+
+function isMapDesign(context: { posterType: string }): boolean {
+    return context.posterType === 'streetmap' || context.posterType === 'coloredmap';
+}
+
+function generateSmartTitleSuggestions(
+    location: string,
+    date: Date,
+    context: { posterType: string; maskShape: string },
+): string[] {
+    if (isMapDesign(context) && context.maskShape === 'heart') {
+        return HEART_MAP_TITLE_SUGGESTIONS;
+    }
+    if (isMapDesign(context) && context.maskShape === 'house') {
+        return HOUSE_MAP_TITLE_SUGGESTIONS;
+    }
+    if (context.posterType === 'streetmap' && context.maskShape === 'rect') {
+        return STREET_MAP_TITLE_SUGGESTIONS;
+    }
+
     const suggestions: string[] = [];
     const month = date.getMonth() + 1;
     const day = date.getDate();
@@ -57,17 +219,25 @@ function generateSmartTitleSuggestions(location: string, date: Date): string[] {
         suggestions.push("Winter Stars", "Stars in the Winter Sky");
     }
 
-    const generic = [
-        "Our Night Sky", "The Night We Met", "Where It All Began", "The Day You Were Born",
-        "Our Love Story", "Written in the Stars", "The Stars Aligned", "A Moment in Time",
-        "Our Special Night", "The Beginning of Forever", "Love Under the Stars",
-    ];
-    const seen = new Set(suggestions);
-    for (const g of generic) { if (!seen.has(g)) suggestions.push(g); }
-    return suggestions;
+    suggestions.push(...STAR_MAP_TITLE_SUGGESTIONS);
+    return uniqueSuggestions(suggestions);
 }
 
-function generateSmartSubtitleSuggestions(location: string, date: Date): string[] {
+function generateSmartSubtitleSuggestions(
+    location: string,
+    date: Date,
+    context: { posterType: string; maskShape: string },
+): string[] {
+    if (isMapDesign(context) && context.maskShape === 'heart') {
+        return HEART_MAP_SUBTITLE_SUGGESTIONS;
+    }
+    if (isMapDesign(context) && context.maskShape === 'house') {
+        return HOUSE_MAP_SUBTITLE_SUGGESTIONS;
+    }
+    if (context.posterType === 'streetmap' && context.maskShape === 'rect') {
+        return STREET_MAP_SUBTITLE_SUGGESTIONS;
+    }
+
     const suggestions: string[] = [];
     const month = date.getMonth() + 1;
     const day = date.getDate();
@@ -84,14 +254,8 @@ function generateSmartSubtitleSuggestions(location: string, date: Date): string[
         suggestions.push("Where the Water Meets the Stars", "Salt Air and Starlight");
     }
 
-    const generic = [
-        "A Moment to Remember", "Under These Stars", "Our Story Began", "Forever and Always",
-        "The Day Everything Changed", "When Our Hearts Met", "The Start of Something Beautiful",
-        "Our Universe", "Love Under the Stars", "A Night to Remember",
-    ];
-    const seen = new Set(suggestions);
-    for (const g of generic) { if (!seen.has(g)) suggestions.push(g); }
-    return suggestions;
+    suggestions.push(...STAR_MAP_SUBTITLE_SUGGESTIONS);
+    return uniqueSuggestions(suggestions);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -109,9 +273,45 @@ const TextContentPanel: React.FC = () => {
         showCoords, setShowCoords,
         showNames, setShowNames,
         customText, setCustomText,
+        posterType,
+        maskShape,
+        locationAllCaps, setLocationAllCaps,
         showDivider, setShowDivider, dividerLength, setDividerLength, dividerThickness, setDividerThickness,
+        dividerOffsetY, setDividerOffsetY,
         showVertSep, setShowVertSep, vertSepHeight, setVertSepHeight, vertSepThickness, setVertSepThickness,
+        vertSepOffsetY, setVertSepOffsetY,
     } = useStore();
+
+    // ── Clearable text lines ────────────────────────────────────────────────
+    // Clearing a custom-text field should REMOVE that line from the poster. Customers delete the
+    // characters and reasonably expect it gone — but the renderer treats an empty customText value
+    // as "not customised, fall back to the auto-generated default", which silently puts it right
+    // back. (Two real customers hit this on the date; one spent a paid revision on a change that
+    // did nothing.) That renderer rule is load-bearing — most saved designs legitimately store ''
+    // and rely on the default — so intent is expressed via the show* flag here instead of changing
+    // renderer semantics, which would retroactively alter existing customers' posters.
+    //
+    // Hiding happens on BLUR, never on keystroke: people routinely clear a field before typing a
+    // replacement, and hiding per-keystroke made the line flicker off/on mid-edit (and could leave
+    // it hidden if they wandered off with the box momentarily empty). Typing always restores it.
+    //
+    // Applied uniformly to every line that has a Visibility toggle EXCEPT `names`: that input is
+    // itself rendered only when showNames is true, so auto-hiding would make the field vanish
+    // out from under the user mid-edit. Names stays toggle-only.
+    const clearableText = (
+        field: 'date' | 'location' | 'coords',
+        isShown: boolean,
+        setShown: (v: boolean) => void,
+    ) => ({
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+            const v = e.target.value;
+            setCustomText(field, v);
+            if (v.trim() !== '' && !isShown) setShown(true);
+        },
+        onBlur: (e: React.FocusEvent<HTMLInputElement>) => {
+            if (e.target.value.trim() === '') setShown(false);
+        },
+    });
 
     const [locationQuery, setLocationQuery] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -121,8 +321,24 @@ const TextContentPanel: React.FC = () => {
     const [showAllTitleSuggestions, setShowAllTitleSuggestions] = useState(false);
     const [showAllSubtitleSuggestions, setShowAllSubtitleSuggestions] = useState(false);
 
-    const titleSuggestions = useMemo(() => generateSmartTitleSuggestions(location, date), [location, date]);
-    const subtitleSuggestions = useMemo(() => generateSmartSubtitleSuggestions(location, date), [location, date]);
+    const titleSuggestions = useMemo(
+        () => generateSmartTitleSuggestions(location, date, { posterType, maskShape }),
+        [location, date, posterType, maskShape],
+    );
+    const subtitleSuggestions = useMemo(
+        () => generateSmartSubtitleSuggestions(location, date, { posterType, maskShape }),
+        [location, date, posterType, maskShape],
+    );
+    const titleQuery = (customText.title || title).toLowerCase();
+    const filteredTitleSuggestions = titleSuggestions.filter(s => s.toLowerCase().includes(titleQuery));
+    const visibleTitleSuggestions = showAllTitleSuggestions || filteredTitleSuggestions.length === 0
+        ? titleSuggestions
+        : filteredTitleSuggestions;
+    const subtitleQuery = (customText.subtitle || subtitle).toLowerCase();
+    const filteredSubtitleSuggestions = subtitleSuggestions.filter(s => s.toLowerCase().includes(subtitleQuery));
+    const visibleSubtitleSuggestions = showAllSubtitleSuggestions || filteredSubtitleSuggestions.length === 0
+        ? subtitleSuggestions
+        : filteredSubtitleSuggestions;
 
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newDate = new Date(e.target.value);
@@ -196,7 +412,7 @@ const TextContentPanel: React.FC = () => {
             <HStack spacing={4}>
                 <FormControl>
                     <FormLabel {...labelStyles}>Date</FormLabel>
-                    <Input type="date" value={format(date, 'yyyy-MM-dd')} onChange={handleDateChange} {...inputStyles} />
+                    <Input type="date" value={format(asCalendarDate(date), 'yyyy-MM-dd')} onChange={handleDateChange} {...inputStyles} />
                 </FormControl>
                 <FormControl>
                     <FormLabel {...labelStyles}>Time</FormLabel>
@@ -242,10 +458,7 @@ const TextContentPanel: React.FC = () => {
                             bg="white" border="1px" borderColor="gray.300" borderRadius="md"
                             boxShadow="lg" maxH="48" overflowY="auto"
                         >
-                            {(showAllTitleSuggestions
-                                ? titleSuggestions
-                                : titleSuggestions.filter(s => s.toLowerCase().includes((customText.title || title).toLowerCase()))
-                            ).map((suggestion, index) => (
+                            {visibleTitleSuggestions.map((suggestion, index) => (
                                 <ListItem key={index} px={4} py={2}
                                     _hover={{ bg: 'gray.100', cursor: 'pointer' }} fontSize="sm"
                                     onMouseDown={() => {
@@ -300,10 +513,7 @@ const TextContentPanel: React.FC = () => {
                             bg="white" border="1px" borderColor="gray.300" borderRadius="md"
                             boxShadow="lg" maxH="48" overflowY="auto"
                         >
-                            {(showAllSubtitleSuggestions
-                                ? subtitleSuggestions
-                                : subtitleSuggestions.filter(s => s.toLowerCase().includes((customText.subtitle || subtitle).toLowerCase()))
-                            ).map((suggestion, index) => (
+                            {visibleSubtitleSuggestions.map((suggestion, index) => (
                                 <ListItem key={index} px={4} py={2}
                                     _hover={{ bg: 'gray.100', cursor: 'pointer' }} fontSize="sm"
                                     onMouseDown={() => {
@@ -329,6 +539,12 @@ const TextContentPanel: React.FC = () => {
                     <Button onClick={() => setShowCoords(!showCoords)} {...toggleButtonStyles(showCoords)}>Coords</Button>
                     <Button onClick={() => setShowNames(!showNames)} {...toggleButtonStyles(showNames)}>Names</Button>
                 </HStack>
+                {/* Discoverability: two customers in a row tried to remove the date by clearing the
+                    text box in "Advanced Text Options" and couldn't find these toggles. Spell out
+                    that tapping a button here removes that line from the poster. */}
+                <Text fontSize="xs" color="gray.500" mt={2}>
+                    Tap to show or hide each line on your poster. A dimmed button means that line is hidden.
+                </Text>
             </Box>
 
             {/* Horizontal Divider controls */}
@@ -355,6 +571,21 @@ const TextContentPanel: React.FC = () => {
                                 <Text fontSize="xs" color="gray.500">{dividerThickness.toFixed(1)}px</Text>
                             </HStack>
                             <Slider value={dividerThickness} min={0.3} max={4} step={0.1} onChange={(v) => setDividerThickness(parseFloat(v.toFixed(1)))}>
+                                <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
+                                <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
+                            </Slider>
+                        </Box>
+                        <Box w="full">
+                            <HStack justify="space-between" mb={1}>
+                                <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Position</Text>
+                                <HStack spacing={2}>
+                                    <Text fontSize="xs" color="gray.500">{Math.round(dividerOffsetY)}px</Text>
+                                    {Math.round(dividerOffsetY) !== 0 && (
+                                        <Button size="xs" variant="ghost" colorScheme="gray" px={1} h="auto" py={0} fontSize="xs" onClick={() => setDividerOffsetY(0)}>Reset</Button>
+                                    )}
+                                </HStack>
+                            </HStack>
+                            <Slider value={dividerOffsetY} min={-300} max={300} step={1} onChange={setDividerOffsetY}>
                                 <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
                                 <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                             </Slider>
@@ -392,6 +623,21 @@ const TextContentPanel: React.FC = () => {
                                     <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
                                 </Slider>
                             </Box>
+                            <Box w="full">
+                                <HStack justify="space-between" mb={1}>
+                                    <Text fontSize="xs" color="gray.700" fontWeight="500">Vertical Position</Text>
+                                    <HStack spacing={2}>
+                                        <Text fontSize="xs" color="gray.500">{Math.round(vertSepOffsetY)}px</Text>
+                                        {Math.round(vertSepOffsetY) !== 0 && (
+                                            <Button size="xs" variant="ghost" colorScheme="gray" px={1} h="auto" py={0} fontSize="xs" onClick={() => setVertSepOffsetY(0)}>Reset</Button>
+                                        )}
+                                    </HStack>
+                                </HStack>
+                                <Slider value={vertSepOffsetY} min={-100} max={100} step={1} onChange={setVertSepOffsetY}>
+                                    <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
+                                    <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="2px" />
+                                </Slider>
+                            </Box>
                         </VStack>
                     )}
                 </Box>
@@ -412,32 +658,52 @@ const TextContentPanel: React.FC = () => {
                                 <FormLabel {...labelStyles}>Custom Date Text</FormLabel>
                                 <Input
                                     value={customText.date}
-                                    onChange={(e) => setCustomText('date', e.target.value)}
+                                    {...clearableText('date', showDate, setShowDate)}
                                     placeholder={format(date, 'MMMM do, yyyy').toUpperCase()}
                                     name="custom-date-text-unique"
                                     autoComplete="new-password"
                                     {...inputStyles}
                                 />
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                    Clear this field to remove the date from your poster.
+                                </Text>
                             </FormControl>
                             <FormControl>
-                                <FormLabel {...labelStyles}>Custom Location Text</FormLabel>
+                                <HStack justify="space-between" align="center" mb={2}>
+                                    <FormLabel {...labelStyles} mb={0}>Custom Location Text</FormLabel>
+                                    <HStack spacing={2}>
+                                        <Text fontSize="xs" color="gray.600" fontWeight="600">Full Caps</Text>
+                                        <Switch
+                                            size="sm"
+                                            isChecked={locationAllCaps}
+                                            onChange={(e) => setLocationAllCaps(e.target.checked)}
+                                            colorScheme="gray"
+                                        />
+                                    </HStack>
+                                </HStack>
                                 <Input
                                     value={customText.location}
-                                    onChange={(e) => setCustomText('location', e.target.value)}
+                                    {...clearableText('location', showLocation, setShowLocation)}
                                     placeholder={location ? location.toUpperCase() : 'Location'}
                                     autoComplete="new-password"
                                     {...inputStyles}
                                 />
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                    Clear this field to remove the location from your poster.
+                                </Text>
                             </FormControl>
                             <FormControl>
                                 <FormLabel {...labelStyles}>Custom Coordinates</FormLabel>
                                 <Input
                                     value={customText.coords}
-                                    onChange={(e) => setCustomText('coords', e.target.value)}
+                                    {...clearableText('coords', showCoords, setShowCoords)}
                                     placeholder="0.0000° N, 0.0000° E"
                                     autoComplete="new-password"
                                     {...inputStyles}
                                 />
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                    Clear this field to remove the coordinates from your poster.
+                                </Text>
                             </FormControl>
                             {showNames && (
                                 <FormControl>

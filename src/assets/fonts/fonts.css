@@ -811,3 +811,23 @@
   font-display: swap;
   src: url('./Typewriter-400-normal.woff2') format('woff2');
 }
+
+/* Brittany Signature — monoline signature script. Matched to the heart street-map
+   reference design (6 of 9 extraction runs picked it, confirmed by rendered comparison). */
+@font-face {
+  font-family: 'Brittany Signature';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./BrittanySignature-400-normal.woff2') format('woff2');
+}
+
+/* Josefin Slab — light geometric slab. The reference design's names/detail face;
+   chosen over the majority Cormorant guess on measured letterform evidence. */
+@font-face {
+  font-family: 'Josefin Slab';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./JosefinSlab-400-normal.woff2') format('woff2');
+}

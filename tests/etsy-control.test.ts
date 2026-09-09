@@ -937,7 +937,7 @@ test.describe('Seller perspective — Designer as product', () => {
         await page.waitForSelector('.chakra-modal__content', { timeout: 5000 });
         await page.waitForTimeout(300);
         const bodyText = await page.textContent('body');
-        expect(bodyText?.toLowerCase()).toMatch(/watermark|demo|preview/);
+        expect(bodyText?.toLowerCase()).toMatch(/watermark|themappedmoment\.com|preview/);
     });
 
     test('ec-98 designer — undo/redo buttons are present in toolbar', async ({ page }) => {

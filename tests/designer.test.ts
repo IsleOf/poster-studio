@@ -67,7 +67,8 @@ test.describe('Template URL /t/:id', () => {
         test.setTimeout(30000);
         await setupMockApi(page);
         let templateFetched = false;
-        await page.route('**/api/templates/home-street', route => {
+        // Use regex so it matches /api/templates/home-street?ts=... (applyTemplate adds a cache-bust param)
+        await page.route(/\/api\/templates\/home-street/, route => {
             templateFetched = true;
             route.fulfill({
                 json: {
@@ -77,9 +78,9 @@ test.describe('Template URL /t/:id', () => {
             });
         });
         await page.goto('/t/home-street');
-        // coloredmap loads MapLibre tiles — networkidle may take a while
-        await page.waitForLoadState('networkidle').catch(() => {});
-        await page.waitForTimeout(500);
+        // Never use waitForLoadState('networkidle') with MapLibre — tiles never settle
+        await page.waitForSelector('svg', { timeout: 15000 });
+        await page.waitForTimeout(300);
         expect(templateFetched).toBe(true);
     });
 

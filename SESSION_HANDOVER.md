@@ -142,8 +142,8 @@ The user has reported repeatedly that local and production drift on:
 
 After local is clean, sync prod:
 ```bash
-scp scripts/sync-listing-state.cjs ubuntu@13.210.227.152:/home/ubuntu/poster-studio/scripts/
-ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs --db /home/ubuntu/poster-studio/server/data/db.sqlite"
+scp scripts/sync-listing-state.cjs ubuntu@3.107.34.169:/home/ubuntu/poster-studio/scripts/
+ssh ubuntu@3.107.34.169 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs --db /home/ubuntu/poster-studio/server/data/db.sqlite"
 node scripts/verify-listing.cjs  # visual diff local vs prod
 ```
 

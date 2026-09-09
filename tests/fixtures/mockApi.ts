@@ -175,6 +175,40 @@ export const MOCK_RENDER_QUEUE = [
     { id: 5, token: 'MNO345', status: 'pending_manual', started_at: null, buyer_name: 'Mark Taylor', print_size: '18x24"' },
 ];
 
+export const MOCK_ORDER_TIMELINES: Record<number, Array<{
+    id: number;
+    label: string;
+    detail: string;
+    actor: string;
+    created_at: number;
+}>> = {
+    1: [
+        {
+            id: 101,
+            label: 'Order verified',
+            detail: 'Etsy receipt validated and design token linked.',
+            actor: 'system',
+            created_at: Math.floor(Date.now() / 1000) - 86400 * 6,
+        },
+        {
+            id: 102,
+            label: 'Poster delivered',
+            detail: 'Signed download link emailed to the buyer.',
+            actor: 'system',
+            created_at: Math.floor(Date.now() / 1000) - 86400 * 6 + 3600,
+        },
+    ],
+    6: [
+        {
+            id: 601,
+            label: 'Render failed',
+            detail: 'Renderer returned an invalid image and the job was marked failed.',
+            actor: 'system',
+            created_at: Math.floor(Date.now() / 1000) - 3600 * 4,
+        },
+    ],
+};
+
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 async function handleRoute(route: Route) {
@@ -250,6 +284,11 @@ async function handleRoute(route: Route) {
         const o = MOCK_ORDERS.find(o => o.id === parseInt(orderMatch[1]));
         if (!o) return route.fulfill({ status: 404, json: { error: 'Not found' } });
         return route.fulfill({ json: { order: o, design: { posterType: 'starmap', maskShape: 'circle', location: 'Sydney, Australia', customText: { title: 'The Night We Met' } } } });
+    }
+    const orderTimelineMatch = path.match(/^\/api\/admin\/orders\/(\d+)\/timeline$/);
+    if (orderTimelineMatch && method === 'GET') {
+        const orderId = parseInt(orderTimelineMatch[1], 10);
+        return route.fulfill({ json: { events: MOCK_ORDER_TIMELINES[orderId] || [] } });
     }
     const orderStatusMatch = path.match(/^\/api\/admin\/orders\/(\d+)\/status$/);
     if (orderStatusMatch && method === 'PATCH') {

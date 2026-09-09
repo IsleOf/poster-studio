@@ -1,24 +1,70 @@
 # HANDOVER — The Mapped Moment (Poster Studio)
 
 > For AI coding agents (Claude Code, Cursor, Copilot Workspace, Devin, etc.)
-> Last updated: 2026-04-11
+> Last updated: 2026-06-09
 
 Read this file before touching anything. The bugs in here have already cost hours — read the "Known Failure Modes" section before you make assumptions.
+
+> **Latest session handoff:** [docs/HANDOVER-2026-08-18-export-hang-and-price-fix.md](docs/HANDOVER-2026-08-18-export-hang-and-price-fix.md) —
+> Fixed the client-side vector street map export hang (root cause: the live editor renders street
+> maps as a raster `<image>`, so `DownloadButton`'s "wait for vector paths" check could never pass
+> — no timeout could have fixed it; added a `forceVectorExport` store flag instead), the
+> `price_cents` 100x inflation bug (Etsy Money-object divisor was being ignored; backfilled 34
+> corrupted production order rows), and a wide-area street map tile-count explosion (361→121 tiles
+> for a city-wide view via a new tile-count budget with graceful zoom backoff). All three verified
+> with real Playwright runs (not just reasoning) and deployed to production. ⚠️ Also surfaced: the
+> A-series print-size fix mentioned below was sitting uncommitted and got swept into this
+> session's `dist` deploy as a side effect — it's now live.
+>
+> Previous: [docs/HANDOVER-2026-08-14-factory-stage004.md](docs/HANDOVER-2026-08-14-factory-stage004.md) —
+> Listing-factory stage 004 (render) wired end-to-end. While building the render-proof step
+> (rendering through the real `PosterRenderPage` path, not the admin editor preview), found and
+> fixed a live production bug: **every A-series print size (A4/A5/A3/A2/A1) silently failed to
+> export** — `PRINT_SIZE_BY_LABEL` stores those in millimetres but every render call site treated
+> them as inches, computing a ~63000×89100px canvas for A4 that fails to rasterize. No customer
+> has ever ordered an A-series size, so it was undiscovered. Fixed locally across 7 call sites;
+> deployed to prod 2026-08-18 (see latest handoff above).
+>
+> Previous: [docs/HANDOVER-2026-08-02-contabo-migration.md](docs/HANDOVER-2026-08-02-contabo-migration.md) —
+> **READ THIS FIRST.** The server moved: AWS EC2 Sydney (`3.107.34.169`) → **Contabo VPS in Paris
+> (`169.58.110.137`)**, 7.8 GB RAM. Every deploy/SSH command in this file and in CLAUDE.md still names
+> the old IP — use the new one. Covers the full cutover, five gotchas hit on the way, and five findings
+> that need decisions — notably that **`server/` is gitignored so the backend has no version control**,
+> and that an **SSRF guard in `designs.js` is written but never deployed**. Old box is intact as a
+> rollback; don't decommission it yet.
+>
+> Previous: [docs/HANDOVER-2026-07-16-digital-pivot.md](docs/HANDOVER-2026-07-16-digital-pivot.md) —
+> The shop model changed completely since the entries below: it's now digital-only,
+> made-to-order via Etsy's Personalization box, 5 live listings at $6.99. Covers a critical order-routing
+> bug (fixed today — wrong design was being rendered for made-to-order orders), an Etsy inventory-price
+> API gotcha, the buyer-email approval saga, an Etsy API deprecation, a pending server migration, and an
+> AI-art fulfillment pivot under discussion. The business-model description in §1 and the "Next Steps" in
+> §16/§19 below are **stale** — everything else in this file (render pipeline, font system, DB schema,
+> deployment mechanics) is still accurate.
+>
+> Earlier: [docs/HANDOVER-2026-06-09-sm002.md](docs/HANDOVER-2026-06-09-sm002.md) — SM002 "Forest Night
+> Sky" star-map listing, background fit-to-width + vertical slide, multi-line title, script-font
+> subtitle, `detailsDateFirst`.
+>
+> Earlier still: [docs/HANDOVER-2026-06-04-shop.md](docs/HANDOVER-2026-06-04-shop.md) — size-lock fix,
+> digital size-unlock, order confirm-mode, 30-day edit window, inbound message triage.
 
 ---
 
 ## 1. What This Project Is
 
-**The Mapped Moment** is a custom poster design tool + Etsy storefront for selling personalized star maps, street maps, and colored maps as digital downloads and physical prints.
+**The Mapped Moment** is a custom poster design tool + Etsy storefront for selling personalized star maps, street maps, and colored maps.
 
-**Business model:**
-- Customer finds listing on Etsy → buys digital download ($12-20) or physical print ($25-45)
-- Customer visits themappedmoment.com/verify → enters Etsy order number
-- System verifies purchase via Etsy API → renders poster → delivers download link or sends to print fulfillment
-- For digital: customer gets 300 DPI PNG download (link valid 7 days, 3 free revisions)
-- For prints: system uploads to Printify → ships to customer
+⚠️ **STALE SECTION — see [docs/HANDOVER-2026-07-16-digital-pivot.md](docs/HANDOVER-2026-07-16-digital-pivot.md) for the current model.** Summary: the shop pivoted from physical-print-via-Printify to **digital-only, made-to-order via Etsy**. There are no physical listings live (archived, not deleted — `archive/physical-listings/`). Printify is not the active fulfiller.
 
-**Revenue so far:** $0 — shop is connected, first listings exist but are not yet live on Etsy.
+**Current business model (as of 2026-07-16):**
+- 5 live Etsy listings, `type=download` + `when_made=made_to_order`, **$6.99** each.
+- Buyer designs free at `themappedmoment.com/go/<code>`, copies their design code, buys on Etsy, pastes the code into Etsy's **Personalization box at checkout**.
+- The 2-minute Etsy poll reads that code from the order's **variations** (not `transaction.personalization` — see the digital-pivot doc for a critical bug this caused), renders, and attempts to email the file.
+- `/verify` (enter order number + design code) remains as a self-serve backup/edit path.
+- **Buyer email is `null` from Etsy shop-wide** (separate approval pending) — most orders currently need **manual delivery** via Etsy message.
+
+**Revenue so far:** 2 real paid orders (both $0.99, pre-reprice — pricing is now $6.99 for future orders). See the digital-pivot doc §1 for order-table caveats (legacy cancelled rows, unverified old rows).
 
 ---
 
@@ -87,7 +133,7 @@ Read this file before touching anything. The bugs in here have already cost hour
 │                    INFRASTRUCTURE                        │
 │                                                          │
 │  AWS EC2 t3.micro (ap-southeast-2, Sydney)               │
-│  Ubuntu 24.04 · IP: 13.210.227.152                       │
+│  Ubuntu 24.04 · IP: 3.107.34.169                       │
 │  Domain: themappedmoment.com (Let's Encrypt SSL)         │
 │  Nginx: reverse proxy port 3001 → Express                │
 │  Systemd: poster-studio-api.service                      │
@@ -151,8 +197,8 @@ node scripts/sync-listing-state.cjs                         # verify local
 node scripts/sync-listing-state.cjs --db /home/ubuntu/poster-studio/server/data/db.sqlite  # not possible remotely
 
 # Instead, run on prod:
-scp scripts/sync-listing-state.cjs ubuntu@13.210.227.152:/home/ubuntu/poster-studio/scripts/
-ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
+scp scripts/sync-listing-state.cjs ubuntu@3.107.34.169:/home/ubuntu/poster-studio/scripts/
+ssh ubuntu@3.107.34.169 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
   --db /home/ubuntu/poster-studio/server/data/db.sqlite"
 ```
 
@@ -170,7 +216,7 @@ ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-
 
 **Fix applied:** Always use `--exclude='designs/'` in rsync:
 ```bash
-rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@3.107.34.169:/var/www/poster-studio/
 ```
 This is already in CLAUDE.md deploy commands. Do not remove it.
 
@@ -194,6 +240,38 @@ const thumbSize = group.sizes.find(sz => sz.fulfillment_size === '8x10') ?? grou
 // ...
 style={{ aspectRatio: '4/5', objectFit: 'cover' }}
 ```
+
+### G. Etsy variation confused with design code / print size (fixed 2026-07-16)
+
+**Symptom:** A real paid made-to-order order rendered the wrong (generic default) poster; a design
+token ended up stored in `orders.print_size`.
+
+**Root cause:** `server/services/etsy.js` `extractToken()` only checked `transaction.personalization`
+for the buyer's pasted design code. On made-to-order listings, Etsy actually delivers that code as a
+**variation** (`property_id: 54, formatted_name: "Personalization"`) — a different field entirely.
+`sizeFromVariations()` also had a `|| vals[0]` fallback that, with no real size variation present,
+grabbed that same Personalization variation's value and stored it as the size.
+
+**Fix:** `extractToken()` now also scans `transaction.variations` for `property_id === 54` /
+`/personaliz/i.test(formatted_name)`. `sizeFromVariations()` excludes that variation and returns
+`null` (never `vals[0]`) when no real size variation exists. **Any new code that reads
+`transaction.variations` must exclude the Personalization variation before treating a value as
+anything else** — this is an easy mistake to repeat.
+
+### H. Etsy `PATCH /listings/{id}` price field silently no-ops (fixed 2026-07-16)
+
+**Symptom:** `PATCH /listings/{id} {price: X}` returns `200 OK`, but re-fetching the listing shows the
+price unchanged.
+
+**Root cause:** On inventory-backed listings (anything with offerings — which these are, even with
+only one offering), price lives on the **inventory offering**, not the top-level listing resource. The
+top-level `price` field is read-only display data.
+
+**Fix:** `PUT /listings/{id}/inventory` with the offering's `price` as a plain decimal. Working
+example: `server/scripts/reprice-digital-listings.js`. **General rule: never trust a 200 from an Etsy
+PATCH — always re-GET and verify the field actually changed.** This is the second silent-no-op pattern
+found in this codebase (the other: nginx `state=inactive` parking a listing in undocumented "edit"
+limbo — see the Etsy troubleshooting section in `CLAUDE.md`).
 
 ---
 
@@ -289,7 +367,7 @@ node capture-thumbnails.cjs
 cp /tmp/thumb-newdesign.png public/designs/SM001/Design003/8x10.png
 
 # Production
-scp /tmp/thumb-newdesign.png ubuntu@13.210.227.152:/var/www/poster-studio/designs/SM001/Design003/8x10.png
+scp /tmp/thumb-newdesign.png ubuntu@3.107.34.169:/var/www/poster-studio/designs/SM001/Design003/8x10.png
 ```
 
 ### Step 5: Update DB thumbnail_path and listing_templates
@@ -301,8 +379,8 @@ Edit `scripts/sync-listing-state.cjs` — add the new design group to `DESIGNS` 
 node scripts/sync-listing-state.cjs
 
 # Apply on production
-scp scripts/sync-listing-state.cjs ubuntu@13.210.227.152:/home/ubuntu/poster-studio/scripts/
-ssh ubuntu@13.210.227.152 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
+scp scripts/sync-listing-state.cjs ubuntu@3.107.34.169:/home/ubuntu/poster-studio/scripts/
+ssh ubuntu@3.107.34.169 "node /home/ubuntu/poster-studio/scripts/sync-listing-state.cjs \
   --db /home/ubuntu/poster-studio/server/data/db.sqlite"
 ```
 
@@ -317,7 +395,7 @@ src={`${API}${thumbSize.thumbnail_path}?v=3`}  // was ?v=2
 
 ```bash
 npm run build
-rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@3.107.34.169:/var/www/poster-studio/
 ```
 
 ### Step 8: Visual verification (mandatory)
@@ -379,7 +457,7 @@ If you skip step 3, the font will show in the browser preview but render as a fa
 ### Frontend
 ```bash
 npm run build
-rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/poster-studio/
+rsync -avz --delete --exclude='designs/' dist/ ubuntu@3.107.34.169:/var/www/poster-studio/
 ```
 
 `--exclude='designs/'` is critical — do not remove it. The `/designs/` directory contains thumbnails that are NOT build artifacts; rsync `--delete` would wipe them.
@@ -387,8 +465,8 @@ rsync -avz --delete --exclude='designs/' dist/ ubuntu@13.210.227.152:/var/www/po
 ### Server
 ```bash
 rsync -avz --exclude node_modules --exclude data --exclude .env \
-  server/ ubuntu@13.210.227.152:/home/ubuntu/poster-studio/server/
-ssh ubuntu@13.210.227.152 "cd /home/ubuntu/poster-studio/server && \
+  server/ ubuntu@3.107.34.169:/home/ubuntu/poster-studio/server/
+ssh ubuntu@3.107.34.169 "cd /home/ubuntu/poster-studio/server && \
   npm install --production && sudo systemctl restart poster-studio-api && \
   sleep 2 && sudo systemctl is-active poster-studio-api"
 ```
@@ -565,7 +643,7 @@ After thumbnail changes only:
 ## 15. Server Management
 
 ```bash
-ssh ubuntu@13.210.227.152
+ssh ubuntu@3.107.34.169
 
 # Service
 sudo systemctl status poster-studio-api
@@ -587,11 +665,11 @@ ls /var/www/poster-studio/designs/
 
 ## 16. Next Steps (Priority Order)
 
-1. **Publish Etsy listings** — Create listing images, publish via admin Etsy page, set `ETSY_DIGITAL_LISTING_IDS` in .env
-2. **Enable server-side rendering** — Set `ENABLE_LOCAL_RENDER=true` and `FRONTEND_URL` in production .env, add 2GB swap
-3. **End-to-end order test** — Place test order on Etsy, verify render → download works
-4. **Prodigi print integration** — `server/services/prodigi.js`, wire into verify flow
-5. **Harden production secrets** — Rotate `ADMIN_PASSWORD`, `JWT_SECRET`, `DOWNLOAD_SECRET` to 24+ char random values
+⚠️ **STALE — this list predates the digital pivot** (listings are published and live, server-side
+rendering is on, Prodigi is already the fulfiller for the print path even though print isn't currently
+sold). **See [docs/HANDOVER-2026-07-16-digital-pivot.md](docs/HANDOVER-2026-07-16-digital-pivot.md)
+§10 for the current next-steps list.** Item 5 (secret rotation) is still a legitimately open item —
+not confirmed done as of the digital-pivot doc.
 
 ---
 
@@ -615,3 +693,78 @@ ls /var/www/poster-studio/designs/
 **Target Etsy pricing:**
 - Digital download: $12.99-19.99 (89% margin)
 - Physical 18x24: $39.99 (64% margin at Prodigi rates)
+
+---
+
+## 19. Fulfillment, Profitability & Shipping (2026-06 build)
+
+> Full detail in **CLAUDE.md** sections "Fulfillment & Print Products", "Profitability Guard",
+> "Markets/products/shipping", and "Modular architecture". This is the handover summary.
+>
+> ⚠️ **The infrastructure described below (profitability guard, Prodigi, shipping profiles) is still
+> live in the code but the shop currently sells digital-only** — the physical/print/framed path this
+> section describes isn't actively used (no physical listings are live; see
+> [docs/HANDOVER-2026-07-16-digital-pivot.md](docs/HANDOVER-2026-07-16-digital-pivot.md) §1). The "open
+> question" at the end of this section (shipping profiles vs. size-as-variation) is moot for now.
+
+### Platform-agnostic fulfillment
+Product type (`digital`/`print`/`framed`) comes from the saved design `orderType` first
+(`server/routes/verify.js` `getListingType`, `server/services/etsy.js` `resolveListingType`),
+not the sales channel — so Amazon Custom / TikTok can be added by writing an ingestion adapter
+that sets `orderType`+`printSize`+`revenue_cents`+`currency` on the order, then calling
+`submitPrintOrder`/`releasePrintOrder`. Prodigi is the fulfiller (`server/services/prodigi.js`).
+
+### Profitability guard (never pay Prodigi > customer paid)
+`releasePrintOrder()` is the single chokepoint for ALL release paths. It re-quotes Prodigi live
+(per destination country/currency) and holds the order in `needs_review` if
+`revenue − Etsy fees − Prodigi cost < floor`. Config in `server/services/profitability.js`
+(+ `settings`: `etsy_fee_pct`, `etsy_fee_flat_cents`, `min_margin_cents`, `min_margin_pct`).
+New `orders` columns: `currency, revenue_cents, shipping_paid_cents, tax_cents, prodigi_cost_cents,
+prodigi_ship_cents, margin_cents, profit_status, profit_json`. Admin override:
+`POST /api/admin/orders/:id/fulfill {force:true}`; re-quote: `POST /api/admin/orders/:id/assess`.
+
+### Shipping & markets
+Markets: **US (free shipping) + Canada + UK + Australia + EU**, all clear $8 floor. Per-country
+Prodigi method in `shippingMethodFor()`: US/CA/AU=Budget, GB/EU=Standard (`prodigi_shipping_<ISO>`
+to override). **12 live Etsy shipping profiles** (one per size; IDs in prod
+`settings.shipping_profile_bap_<size>`), built by `server/scripts/build-shipping-profiles.js`
+(dry-run default; `--apply`, `--replace`, `--only-size`, `--no-express`). Each: US free +
+CA/GB/AU/EU charged + US-domestic Express upgrade. Paper: BAP (`ART-FAP-BAP-*`) for 10 sizes;
+FAP for 5x7 & A5 (BAP not offered). Framing line config `prodigi_frame_line` (default **CFP**).
+⚠️ **Etsy shipping profile is per-LISTING, not per-variation** — see "open question" below.
+
+### Modular swap points (config-driven, no code change)
+- **LLM** — `server/services/llm.js`, `llm_provider` (openrouter|bedrock|disabled). **ACTIVE =
+  openrouter**, model `openrouter/free` (Free Models Router; needs `OPENROUTER_API_KEY` in `.env`).
+  Bedrock is a documented fallback that's NOT viable in ap-southeast-2 without cross-region inference
+  profiles (3.5 Haiku absent, Claude 3 Haiku Legacy-blocked) — that's why we use OpenRouter.
+- **Framing** — `getFramedSku()` in prodigi.js.
+- **Fulfiller** — replace prodigi.js (Printify/Gelato have pricing APIs + 30-day reship like Prodigi;
+  need monthly sub for cheap rates — revisit at volume).
+
+### Bad-order recovery (`server/services/orderRecovery.js` + `personalizationParser.js`)
+When a buyer types details into Etsy's Personalization box (no design code), the Etsy poll prefills
+the listing's default template (Design001) with parsed fields → near-finished design to approve.
+Deterministic parse + LLM (Haiku) gap-fill. Gated `enable_order_recovery` / `ENABLE_ORDER_RECOVERY`
+(default OFF). Tested deterministic live on prod.
+
+### Etsy specifics
+- OAuth scopes now include `shops_w listings_w` (`server/routes/auth.js`); re-auth done.
+- Production partner "Prodigi" added manually (no create API). Returns policy = "no returns";
+  cancellations 24h. EU GPSR: shop is Estonia-based = own economic operator; personalized goods
+  exempt from 14-day withdrawal (declared in T&C). Outbound Etsy messages NOT API-able (v3 killed
+  messaging) → browser agent only. Inbound email is catch-all → `/api/webhooks/email-inbound`.
+- Customer-facing copy: **`LISTING_COPY.md`** (canonical, reusable).
+
+### Helper scripts added (`server/scripts/`)
+`build-shipping-profiles.js`, `quote-matrix.js`, `verify-etsy-write.js`, `pricing-table.js`,
+`frame-probe.js`, `express-probe.js`, `bedrock-probe.js`. Run on PROD (keys via IMDS/.env).
+
+### OPEN QUESTION for next agent — listing structure vs per-size shipping profiles
+We built **one shipping profile per size**, but Etsy attaches **one profile per LISTING** (not per
+variation). If listings use **Size as a variation** (one listing, many sizes), a listing can only
+carry ONE profile → it can't be size-accurate on the *charged intl* line. This is OK because US is
+free (cost baked into each size's price) and intl carries a big margin cushion + the profit guard
+backstops — but decide: (a) one listing per size (precise shipping), or (b) size-as-variation with a
+single representative profile per listing. Attaching profiles via API = `updateListing` with
+`shipping_profile_id` (needs the Etsy listing IDs + this decision).

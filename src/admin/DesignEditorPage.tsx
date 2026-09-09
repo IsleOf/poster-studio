@@ -68,7 +68,9 @@ const DesignEditorPage: React.FC = () => {
         printSize,
         posterType,
         setMapBackgroundImage,
+        streetMapRendering,
         isInlineEditing,
+        undo, redo,
     } = useStore();
 
     const isInlineEditingRef = useRef(false);
@@ -77,6 +79,23 @@ const DesignEditorPage: React.FC = () => {
             isInlineEditingRef.current = state.isInlineEditing;
         });
     }, []);
+
+    // ── Keyboard shortcuts: Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo ─────────
+    // (mirrors MainLayout — the admin designer previously had no undo shortcut).
+    // Skipped while inline-editing text so native text undo still works in fields.
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            const ctrl = e.ctrlKey || e.metaKey;
+            if (!ctrl) return;
+            if (isInlineEditingRef.current) return;
+            const t = e.target as HTMLElement | null;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+            if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [undo, redo]);
 
     // Auth check
     useEffect(() => {
@@ -193,20 +212,11 @@ const DesignEditorPage: React.FC = () => {
         }
     };
 
-    // Navigate to sibling size — saves this size first, then navigates without syncing
-    // (sync is explicit via "Sync to all sizes" button — auto-sync on navigation was causing
-    //  cross-ratio pollution of layout offsets and font sizes)
-    const handleSiblingClick = async (siblingId: string) => {
+    // Navigate to sibling size without saving — save is explicit via the Save button.
+    // Auto-save here was corrupting designs when bad state (e.g. an off-screen divider)
+    // was accidentally persisted to all sibling templates.
+    const handleSiblingClick = (siblingId: string) => {
         if (siblingId === templateId || !templateId) return;
-        setSaving(true);
-        try {
-            const settings = captureCurrentSettings();
-            await saveTemplateSettings(templateId, settings);
-        } catch (err: any) {
-            toast({ title: 'Save failed before switching — changes may be lost', description: err?.message, status: 'warning', duration: 4000 });
-        } finally {
-            setSaving(false);
-        }
         navigate(`/admin/design-editor/${siblingId}`, { replace: true });
     };
 
@@ -219,7 +229,16 @@ const DesignEditorPage: React.FC = () => {
 
     // Preview dimensions
     const [previewDimensions, setPreviewDimensions] = useState({ width: 0, height: 0 });
+    // NOTE: `loading` is in the deps deliberately. While loading, the component
+    // early-returns (no container mounted), so this effect's first run finds
+    // containerRef.current === null and bails without attaching the observer.
+    // For sizes whose ratio differs from the default (8x10 / 4:5), the ratio
+    // changes when the template loads, which re-runs the effect after the
+    // container exists. But 8x10 and 16x20 are themselves 4:5 — their ratio never
+    // changes, so without `loading` here the observer would never attach and the
+    // preview would stay 0×0 (blank poster). Re-running on `loading` fixes that.
     useEffect(() => {
+        if (loading) return;
         const container = containerRef.current;
         if (!container) return;
         const update = () => {
@@ -227,6 +246,7 @@ const DesignEditorPage: React.FC = () => {
             const padding = 64;
             const availW = cw - padding * 2;
             const availH = ch - padding * 2;
+            if (availW <= 0 || availH <= 0) return; // container not laid out yet; RO will fire again
             const [rW, rH] = printSize.ratio.split('/').map(Number);
             const posterAspect = rW / rH;
             let w: number, h: number;
@@ -241,7 +261,7 @@ const DesignEditorPage: React.FC = () => {
         const ro = new ResizeObserver(update);
         ro.observe(container);
         return () => ro.disconnect();
-    }, [printSize.ratio]);
+    }, [printSize.ratio, loading]);
 
     // Pan/zoom handlers
     const [isDragging, setIsDragging] = useState(false);
@@ -436,7 +456,7 @@ const DesignEditorPage: React.FC = () => {
                     display="flex"
                     alignItems="center"
                     justifyContent="center"
-                    bg="gray.50"
+                    bg="#EAEEF2"
                     p={8}
                     overflow="hidden"
                     position="relative"
@@ -547,6 +567,21 @@ const DesignEditorPage: React.FC = () => {
                         )}
                     </Box>
 
+                    {/* "Updating map…" overlay while a street/colored-map capture is in flight */}
+                    {posterType !== 'starmap' && streetMapRendering && (
+                        <Flex
+                            position="absolute" inset={0} zIndex={5}
+                            align="center" justify="center"
+                            bg="rgba(255,255,255,0.55)" pointerEvents="none"
+                            borderRadius="sm"
+                        >
+                            <HStack spacing={2} bg="white" px={3} py={2} borderRadius="md" boxShadow="md">
+                                <Spinner size="sm" color="gray.500" />
+                                <Text fontSize="xs" color="gray.600" fontWeight="500">Updating map…</Text>
+                            </HStack>
+                        </Flex>
+                    )}
+
                     {/* Offscreen street map renderer — lazy-loaded to keep MapLibre out of main bundle */}
                     {posterType !== 'starmap' && (
                         <Box position="fixed" top="-9999px" left="-9999px" width="1200px" height="1200px" pointerEvents="none" aria-hidden>
@@ -576,7 +611,7 @@ const DesignEditorPage: React.FC = () => {
                         _hover={{ bg: 'blue.100', opacity: 0.6 }}
                         transition="background 0.15s"
                     />
-                    <SidebarControls editorSiblings={siblings} onSiblingSwitch={handleSiblingClick} />
+                    <SidebarControls editorSiblings={siblings} onSiblingSwitch={handleSiblingClick} isAdmin={true} />
                 </Box>
             </Flex>
 

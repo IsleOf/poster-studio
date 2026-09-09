@@ -171,8 +171,21 @@ export async function updateOrderNotes(id: number, notes: string) {
     return res.json();
 }
 
+export async function updateOrderEmail(id: number, email: string) {
+    const res = await adminFetch(`/api/admin/orders/${id}/email`, {
+        method: 'PATCH',
+        body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || 'Failed to update email');
+    return res.json();
+}
+
 export async function bulkUpdateOrderStatus(ids: number[], status: string) {
     return Promise.all(ids.map(id => updateOrderStatus(id, status)));
+}
+
+export async function resendOrderEmail(id: number) {
+    return adminFetchJson(`/api/admin/orders/${id}/resend-email`, { method: 'POST' });
 }
 
 // Settings
@@ -306,6 +319,24 @@ export async function createListing(data: object) {
     return adminFetchJson('/api/admin/listings', {
         method: 'POST',
         body: JSON.stringify(data),
+    });
+}
+
+// Thumbnail generation
+export async function captureThumbnail(templateId: string) {
+    return adminFetchJson(`/api/admin/templates/${templateId}/capture-thumbnail`, { method: 'POST' });
+}
+
+// Mockup path existence check
+export async function checkMockupPath(filePath: string): Promise<{ exists: boolean }> {
+    return adminFetchJson(`/api/admin/designs/check-path?path=${encodeURIComponent(filePath)}`);
+}
+
+// Reorder design groups within a listing
+export async function reorderDesignGroups(listingId: string, groupIds: string[]) {
+    return adminFetchJson(`/api/admin/listings/${listingId}/reorder-groups`, {
+        method: 'PATCH',
+        body: JSON.stringify({ groupIds }),
     });
 }
 

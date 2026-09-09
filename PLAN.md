@@ -1,6 +1,6 @@
 # The Mapped Moment — Master Plan
 
-> Last updated: 2026-04-25
+> Last updated: 2026-06-04
 > Live site: https://themappedmoment.com
 > Etsy shop: TheMappedMoment (Shop ID: 12648302)
 
@@ -42,17 +42,34 @@ ADMIN JOURNEY
 - `VectorStarMap.tsx` has 1400+ lines — extract star/text/border as hooks
 - `listing_templates` join table is redundant (design_groups already links templates)
 - No CI/CD — manual rsync deploy; add GitHub Actions when team grows
-- No DB backups — daily sqlite WAL backup to S3 (add before real orders flow)
+- DB backups — operational: daily `VACUUM INTO` on prod (`/etc/cron.d/poster-studio-backup`, WAL-checkpoint, 30-day retention) + a manual offsite copy on the dev machine. (Proper S3 offsite still TODO.)
 
 ---
 
-## Current State (April 25, 2026)
+## Current State (June 4, 2026)
+
+### 2026-06-04 update
+
+Catalog restructured to 4 Etsy listings across 9 design groups (Star Map, Couple Map, Heart Map, Home/Street Map). All are **draft** — pending mockup images and publish. No real orders processed yet; ~28 rows in the prod DB are test/seed/demo data.
+
+Pipeline is feature-complete and deployed:
+- **Order confirm-mode** — size-mismatch triggers /api/order-status + /api/confirm-order hold
+- **Size-confirm** — orders held at `awaiting_size_confirm`, buyer re-confirms layout at ordered size
+- **30-day digital edit window** — was 7 days; `digital_edit_window_days=30` + 30-day signed download links
+- **Profitability guard** — `min_margin_cents=300` ($3 floor), quotes Prodigi live per-country before release
+- **Bad-order recovery** — OpenRouter LLM (`enable_order_recovery=true`) pre-fills design from free-text personalisation notes
+- **Inbound message triage** — code live (`EMAIL_FORWARD_TO` set, render on); only the Gmail Etsy→studio@ forward is still needed to feed it
+- **BLP budget poster line** — `GLOBAL-BLP-*` (170gsm, cheapest, all 12 sizes)
+- **Free-worldwide shipping** profile for digital variation; charged intl for physical
+- **Render enabled** in prod (`ENABLE_LOCAL_RENDER=true`); all provider keys set (Etsy/Prodigi/Resend/OpenRouter)
+- **DB backups operational** (daily VACUUM INTO, 30-day retention) + offsite copy
+- **server/ is gitignored** — deployed via rsync only; not version-controlled (known risk/debt)
 
 ### Working ✓
 - Public designer — star map, street map, colored map
 - **Mobile responsive layout** — poster preview top, accordion controls below, touch zoom, 44px tap targets
 - Admin panel — listings, design editor, orders, queue, Etsy, assets
-- 6 designs in production (Design001..006) — all 5+ sizes each, same-ratio auto-sync
+- 9 design groups across 4 listings (Star Map, Couple Map, Heart Map, Home/Street Map) — all 5+ sizes each, same-ratio auto-sync
 - Etsy OAuth + polling (every 2 min), token auto-refresh
 - Render queue (Puppeteer, PNG at 300 DPI, retry logic)
 - Template sync — same-ratio auto-cascade, cross-ratio style push
@@ -61,15 +78,12 @@ ADMIN JOURNEY
 - Watermark on free exports
 - **Per-design landing URLs** — `/l/:slug/:designSlug` for A/B testing campaigns
 - PDF export (admin/template mode only — never customer view)
-- Visual test suite (22/22 passing)
 
 ### NOT Working / Not Done ✗
-- **0 Etsy listings published** — shop exists but no live products
-- **No real orders processed** — end-to-end untested with real money
-- **Printify not configured** — credentials empty, print fulfillment not wired
-- **No DB backups** — single SQLite file, no redundancy
-- **Server-side render not enabled in prod** — `ENABLE_LOCAL_RENDER` is unset; orders would fall through to `pending_manual`
-- **3,600 lines uncommitted** — recent design fields, fonts, PDF, silent download all in working tree only
+- **0 Etsy listings published** — all 4 listings are drafts pending mockup images (the real revenue blocker)
+- **No real orders processed** — full pipeline untested with real money; needs a live dry-run before launch
+- **Gmail Etsy→studio@ forward** not set — triage receives nothing until it is
+- **No CI/CD yet** — `.github/workflows/ci.yml` added (build + stable e2e); not yet validated on GitHub
 
 ---
 
@@ -282,7 +296,7 @@ That last metric is the new KPI from Phase 1 — once we know which design conve
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| SQLite data loss | Critical | **Daily backup cron — Phase 0b (do this week)** |
+| SQLite data loss | Critical | Daily snapshot on prod + offsite copy (in progress / added) |
 | Etsy account suspension | Critical | Follow TOS, no keyword stuffing, 4h reply SLA |
 | Render failures at scale | High | Dead letter queue + admin alerts (Phase 4c) |
 | Print quality on delivery | High | Order physical sample before listing prints |

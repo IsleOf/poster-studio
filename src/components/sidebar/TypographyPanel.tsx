@@ -35,6 +35,7 @@ const TITLE_FONTS = [
     { label: 'Allura', value: 'Allura' },
     { label: 'Petit Formal Script', value: 'Petit Formal Script' },
     { label: 'Alex Brush', value: 'Alex Brush' },
+    { label: 'Brittany Signature', value: 'Brittany Signature' },
     { label: 'Title004', value: 'Title004' },
 ];
 
@@ -51,6 +52,7 @@ const SUBTITLE_FONTS = [
     { label: 'Playfair Display', value: 'Playfair Display' },
     { label: 'Cinzel', value: 'Cinzel' },
     { label: 'Typewriter', value: 'Typewriter' },
+    { label: 'Josefin Slab', value: 'Josefin Slab' },
 ];
 
 const DETAILS_FONTS = [
@@ -62,6 +64,7 @@ const DETAILS_FONTS = [
     { label: 'Lato', value: 'Lato' },
     { label: 'Space Mono', value: 'Space Mono' },
     { label: 'Typewriter', value: 'Typewriter' },
+    { label: 'Josefin Slab', value: 'Josefin Slab' },
 ];
 
 const DEDICATION_FONTS = [
@@ -80,6 +83,8 @@ const DEDICATION_FONTS = [
     { label: 'Title001', value: 'Title001' },
     { label: 'Title004', value: 'Title004' },
     { label: 'Montserrat', value: 'Montserrat' },
+    { label: 'Josefin Slab', value: 'Josefin Slab' },
+    { label: 'Brittany Signature', value: 'Brittany Signature' },
 ];
 
 // ── Uploaded-font helpers ─────────────────────────────────────────────────────
@@ -105,7 +110,8 @@ interface TypographyPanelProps {
 const TypographyPanel: React.FC<TypographyPanelProps> = ({ typoTab, setTypoTab }) => {
     const {
         titleFont, setTitleFont, titleFontSize, setTitleFontSize,
-        titleKerning, setTitleKerning, titleOffsetY, setTitleOffsetY, titleAllCaps, setTitleAllCaps,
+        titleKerning, setTitleKerning, titleLineHeight, setTitleLineHeight, titleOffsetY, setTitleOffsetY, titleAllCaps, setTitleAllCaps,
+        title, customText,
         subtitleFont, setSubtitleFont, subtitleFontSize, setSubtitleFontSize,
         subtitleKerning, setSubtitleKerning, subtitleOffsetY, setSubtitleOffsetY,
         detailsFont, setDetailsFont, detailsFontSize, setDetailsFontSize,
@@ -177,6 +183,9 @@ const TypographyPanel: React.FC<TypographyPanelProps> = ({ typoTab, setTypoTab }
                     </FormControl>
                     {sliderRow('Font Size', titleFontSize, `${titleFontSize}px`, 24, 300, 1, setTitleFontSize)}
                     {sliderRow('Kerning', titleKerning, `${titleKerning.toFixed(2)}em`, -0.1, 0.5, 0.01, setTitleKerning)}
+                    {/* Line spacing only matters when the title wraps to 2+ lines (a "\n" in the text) */}
+                    {((customText?.title ?? title ?? '').includes('\n')) &&
+                        sliderRow('Line Spacing', titleLineHeight, `${titleLineHeight.toFixed(2)}×`, 0.7, 2, 0.01, setTitleLineHeight)}
                     {sliderRow('Vertical Offset', titleOffsetY, `${titleOffsetY}px`, -100, 100, 1, setTitleOffsetY)}
                     <HStack justify="space-between" w="full">
                         <Text fontSize="xs" color="gray.700" fontWeight="500">All Caps</Text>

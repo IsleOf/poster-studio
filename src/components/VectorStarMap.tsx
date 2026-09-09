@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { geoStereographic, geoPath, geoGraticule } from 'd3-geo';
 import { select } from 'd3-selection';
@@ -8,7 +8,13 @@ import { useStore } from '../store/useStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getProjectionRotation } from '../utils/astronomy';
 import { format } from 'date-fns';
+import { asCalendarDate } from '../utils/dateOnly';
 import { useDebounce } from '../hooks/useDebounce';
+import {
+    isVectorStreetMapEnabled,
+    renderVectorStreetMap,
+    type VectorStreetMapRender,
+} from '../utils/vectorStreetMapRenderer';
 
 interface StarFeature {
     type: 'Feature';
@@ -33,11 +39,16 @@ interface ConstellationFeature {
     };
 }
 
-const VectorStarMap: React.FC = () => {
+const VectorStarMap: React.FC<{ forceVector?: boolean }> = ({ forceVector = false }) => {
     const svgRef = useRef<SVGSVGElement>(null);
     const inlineEditInputRef = useRef<HTMLInputElement>(null);
     const [starsData, setStarsData] = useState<any>(null);
     const [constellationsData, setConstellationsData] = useState<any>(null);
+    const [vectorStreetMap, setVectorStreetMap] = useState<VectorStreetMapRender | null>(null);
+    // Rasterised bitmap of the vector map for fast interactive preview.
+    // Replaced with a single <image> element so dragging sliders doesn't
+    // force the browser to re-rasterise millions of SVG path commands.
+    const [vectorStreetMapRaster, setVectorStreetMapRaster] = useState<string | null>(null);
 
     // Snap guide line visibility (shown while dragging shape near vertical center)
     const [snapGuideX, setSnapGuideX] = useState(false);
@@ -59,20 +70,22 @@ const VectorStarMap: React.FC = () => {
         title, subtitle, date, time, lat, lng, location, starScale, lineWeight, gridWidth,
         posterColor, textColor, glowIntensity, gridOpacity, showBorder, showConstellations,
         showGrid, designStyle, maskShape, isLightMode, showLocation, showDate,
-        showCoords, customText, printSize, circleSize, heartSize, houseSize, shapeOffsetY, titleFontSize,
+        showCoords, detailsDateFirst, customText, printSize, circleSize, heartSize, houseSize, shapeOffsetY, titleFontSize,
         subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize, titleOffsetX, titleOffsetY, subtitleOffsetY,
         detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, dividerOffsetY, shapeOutlineWidth, showFrame, frameInset, frameWidth,
         titleFont, subtitleFont, detailsFont, dedicationFont, namesFont,
-        titleKerning, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
-        titleAllCaps,
+        titleKerning, titleLineHeight, subtitleKerning, detailsKerning, dedicationKerning, namesKerning,
+        titleAllCaps, locationAllCaps,
         showNames,
-        mapBackgroundImage, borderStyle, selectedTemplate, starColor, mapInteriorColor,
+        mapBackgroundImage, backgroundImageUrl, backgroundImageOffsetY, borderStyle, selectedTemplate, starColor, mapInteriorColor,
         showDivider, dividerLength, dividerThickness,
         vertSepOffsetY, setVertSepOffsetY,
         showVertSep, vertSepHeight, vertSepThickness, setShowVertSep, setVertSepHeight, setVertSepThickness,
         setTitleOffsetX, setTitleOffsetY, setSubtitleOffsetY, setDetailsOffsetY, setDedicationOffsetY, setHeartDecorOffsetY, setDividerOffsetY, setDividerLength, setDividerThickness,
         posterType, mapImageOffsetX, mapImageOffsetY, mapImageOpacity, setMapImageOffsetX, setMapImageOffsetY,
-        mapStreetColor, setCustomText,
+        mapCenterLat, mapCenterLng, mapZoom, mapBearing, mapColorPreset,
+        mapBgColor, mapStreetColor, mapWaterColor, mapLandColor, mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
+        setCustomText,
         setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setNamesFontSize,
         setNamesOffsetY,
         setIsInlineEditing,
@@ -88,6 +101,7 @@ const VectorStarMap: React.FC = () => {
         showInnerRing, innerRingWidth, innerRingInset,
         showOuterRing, outerRingWidth, outerRingGap,
         showHeartDecor,
+        forceVectorExport,
     } = useStore(useShallow(s => ({
         title: s.title, subtitle: s.subtitle, date: s.date, time: s.time,
         lat: s.lat, lng: s.lng, location: s.location,
@@ -96,7 +110,7 @@ const VectorStarMap: React.FC = () => {
         gridOpacity: s.gridOpacity, showBorder: s.showBorder, showConstellations: s.showConstellations,
         showGrid: s.showGrid, designStyle: s.designStyle, maskShape: s.maskShape,
         isLightMode: s.isLightMode, showLocation: s.showLocation, showDate: s.showDate,
-        showCoords: s.showCoords, customText: s.customText, printSize: s.printSize,
+        showCoords: s.showCoords, detailsDateFirst: s.detailsDateFirst, customText: s.customText, printSize: s.printSize,
         circleSize: s.circleSize, heartSize: s.heartSize, houseSize: s.houseSize,
         shapeOffsetY: s.shapeOffsetY, shapeOffsetX: s.shapeOffsetX, snapEnabled: s.snapEnabled,
         titleFontSize: s.titleFontSize, subtitleFontSize: s.subtitleFontSize,
@@ -108,16 +122,20 @@ const VectorStarMap: React.FC = () => {
         frameInset: s.frameInset, frameWidth: s.frameWidth,
         titleFont: s.titleFont, subtitleFont: s.subtitleFont, detailsFont: s.detailsFont,
         dedicationFont: s.dedicationFont, namesFont: s.namesFont,
-        titleKerning: s.titleKerning, subtitleKerning: s.subtitleKerning,
+        titleKerning: s.titleKerning, titleLineHeight: s.titleLineHeight, subtitleKerning: s.subtitleKerning,
         detailsKerning: s.detailsKerning, dedicationKerning: s.dedicationKerning, namesKerning: s.namesKerning,
-        titleAllCaps: s.titleAllCaps, showNames: s.showNames,
-        mapBackgroundImage: s.mapBackgroundImage, borderStyle: s.borderStyle,
+        titleAllCaps: s.titleAllCaps, locationAllCaps: s.locationAllCaps, showNames: s.showNames,
+        mapBackgroundImage: s.mapBackgroundImage, backgroundImageUrl: s.backgroundImageUrl, backgroundImageOffsetY: s.backgroundImageOffsetY, borderStyle: s.borderStyle,
         selectedTemplate: s.selectedTemplate, starColor: s.starColor, mapInteriorColor: s.mapInteriorColor,
         showDivider: s.showDivider, dividerLength: s.dividerLength, dividerThickness: s.dividerThickness,
         vertSepOffsetY: s.vertSepOffsetY,
         showVertSep: s.showVertSep, vertSepHeight: s.vertSepHeight, vertSepThickness: s.vertSepThickness,
         posterType: s.posterType, mapImageOffsetX: s.mapImageOffsetX, mapImageOffsetY: s.mapImageOffsetY,
-        mapImageOpacity: s.mapImageOpacity, mapStreetColor: s.mapStreetColor,
+        mapImageOpacity: s.mapImageOpacity,
+        mapCenterLat: s.mapCenterLat, mapCenterLng: s.mapCenterLng, mapZoom: s.mapZoom, mapBearing: s.mapBearing,
+        mapColorPreset: s.mapColorPreset,
+        mapBgColor: s.mapBgColor, mapStreetColor: s.mapStreetColor, mapWaterColor: s.mapWaterColor, mapLandColor: s.mapLandColor,
+        mapMainRoadColor: s.mapMainRoadColor, mapSmallRoadColor: s.mapSmallRoadColor, mapDetailRoadColor: s.mapDetailRoadColor,
         showLocationPin: s.showLocationPin, locationPinSize: s.locationPinSize,
         locationPinOffsetX: s.locationPinOffsetX, locationPinOffsetY: s.locationPinOffsetY,
         pendingGlyphForInlineEdit: s.pendingGlyphForInlineEdit,
@@ -140,7 +158,16 @@ const VectorStarMap: React.FC = () => {
         showInnerRing: s.showInnerRing, innerRingWidth: s.innerRingWidth, innerRingInset: s.innerRingInset,
         showOuterRing: s.showOuterRing, outerRingWidth: s.outerRingWidth, outerRingGap: s.outerRingGap,
         showHeartDecor: s.showHeartDecor,
+        forceVectorExport: s.forceVectorExport,
     })));
+
+    // `forceVector` prop is true only on the dedicated /render page (server-side Puppeteer
+    // target). `forceVectorExport` is the live editor's equivalent, set by DownloadButton for
+    // the duration of an export — see the field's doc comment in useStore.ts for why this
+    // exists: without it, the editor's fast raster preview mode (real <path> data never
+    // reaches the DOM) made DownloadButton's own "wait for vector paths" check unsatisfiable,
+    // silently hanging every editor-triggered street map export forever.
+    const useTrueVectors = forceVector || forceVectorExport;
 
     // Keep a ref to inlineEdit so the pending-glyph effect always sees the latest value
     // without needing it in the dependency array (avoids circular re-runs)
@@ -205,6 +232,164 @@ const VectorStarMap: React.FC = () => {
     const [rW, rH] = printSize.ratio.split('/').map(Number);
     const ratioVal = rW / rH;
     const height = width / ratioVal;
+    const useVectorStreetMap = isVectorStreetMapEnabled()
+        && posterType === 'streetmap'
+        && mapColorPreset === 'design2';
+
+    useEffect(() => {
+        if (!useVectorStreetMap) {
+            setVectorStreetMap(null);
+            // Only clear the flag for star maps. For colored / raster street maps,
+            // StreetMapCapture owns the flag — clearing it here would race its captures.
+            if (posterType === 'starmap') useStore.getState().setStreetMapRendering(false);
+            return;
+        }
+
+        let cancelled = false;
+        // Signal "rendering" so the UI can gray out + show a spinner until the new raster is ready.
+        useStore.getState().setStreetMapRendering(true);
+        const RECT_MAP_H = height * 0.74;
+        const RECT_MAP_PAD = width * 0.0625;
+        const RECT_MAP_INNER_W = width - 2 * RECT_MAP_PAD;
+        const baseMapRadius = Math.min(width, height) * 0.4;
+        const mapRadius = maskShape === 'rect' ? RECT_MAP_INNER_W / 2 : baseMapRadius * (
+            maskShape === 'circle' ? debouncedCircleSize :
+            maskShape === 'heart' ? debouncedHeartSize :
+            debouncedHouseSize
+        );
+        const center = maskShape === 'rect'
+            ? [width / 2, RECT_MAP_PAD + (RECT_MAP_H - 2 * RECT_MAP_PAD) / 2]
+            : [width / 2 + debouncedShapeOffsetX, (height * 0.45) + debouncedShapeOffsetY];
+        const imgSize = mapRadius * 3;
+
+        renderVectorStreetMap({
+            lng: mapCenterLng,
+            lat: mapCenterLat,
+            zoom: mapZoom,
+            bearing: mapBearing,
+            // Offset=0 baseline — pan is applied as a display-time transform on the
+            // rendered image, so the geometry never needs re-fetching just to pan.
+            x: center[0] - imgSize / 2,
+            y: center[1] - imgSize / 2,
+            size: imgSize,
+        })
+            .then(result => { if (!cancelled) setVectorStreetMap(result); })
+            .catch(error => {
+                if (!cancelled) {
+                    console.warn('Vector street map render failed; raster renderer remains available.', error);
+                    setVectorStreetMap(null);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        useVectorStreetMap, width, height, maskShape, debouncedCircleSize, debouncedHeartSize, debouncedHouseSize,
+        debouncedShapeOffsetX, debouncedShapeOffsetY, mapCenterLng, mapCenterLat, mapZoom, mapBearing,
+    ]);
+
+    // Raster-preview effect: converts vector paths → offscreen canvas → JPEG data URL.
+    // Runs only when the map data or colors change (not on text/layout slider interactions).
+    // The /render page uses forceVector=true so Puppeteer always gets full SVG vectors.
+    const mapGeomForRaster = useMemo(() => {
+        const RECT_MAP_H = height * 0.74;
+        const RECT_MAP_PAD = width * 0.0625;
+        const RECT_MAP_INNER_W = width - 2 * RECT_MAP_PAD;
+        const RECT_MAP_INNER_H = RECT_MAP_H - 2 * RECT_MAP_PAD;
+        const baseR = Math.min(width, height) * 0.4;
+        const mapRadius = maskShape === 'rect' ? RECT_MAP_INNER_W / 2 : baseR * (
+            maskShape === 'circle' ? debouncedCircleSize :
+            maskShape === 'heart'  ? debouncedHeartSize  :
+                                     debouncedHouseSize
+        );
+        const center: [number, number] = maskShape === 'rect'
+            ? [width / 2, RECT_MAP_PAD + RECT_MAP_INNER_H / 2]
+            : [width / 2 + debouncedShapeOffsetX, (height * 0.45) + debouncedShapeOffsetY];
+        return { mapRadius, center, imgSize: mapRadius * 3 };
+    }, [width, height, maskShape, debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetX, debouncedShapeOffsetY]);
+
+    useEffect(() => {
+        if (useTrueVectors) {
+            setVectorStreetMapRaster(null);
+            return;
+        }
+        if (!vectorStreetMap) {
+            // Tile fetch failed or not ready — clear the loading state so the spinner doesn't hang.
+            setVectorStreetMapRaster(null);
+            useStore.getState().setStreetMapRendering(false);
+            return;
+        }
+        let cancelled = false;
+        const { center, mapRadius, imgSize } = mapGeomForRaster;
+        const bg     = mapBgColor   || '#ffffff';
+        const water  = mapWaterColor || '#8f8f8f';
+        const land   = mapLandColor  || '#b6b6b6';
+        const major  = mapMainRoadColor || mapStreetColor || '#111111';
+        const minor  = (!mapSmallRoadColor  || mapSmallRoadColor  === '#1a1a1a') ? '#666666' : mapSmallRoadColor;
+        const detail = (!mapDetailRoadColor || mapDetailRoadColor === '#2a2a2a') ? '#8a8a8a' : mapDetailRoadColor;
+        // Offset=0 baseline — the bg rect is positioned without offset; panning is a
+        // display-time transform on the <image>, not a regeneration of this raster.
+        const bx = (center[0] - mapRadius * 1.5).toFixed(1);
+        const by = (center[1] - mapRadius * 1.5).toFixed(1);
+        const sz = imgSize.toFixed(1);
+        const svgH = Math.round(height);
+        const { detailRoadD, smallRoadD, majorRoadD, waterD, waterwayD, landuseD,
+                majorRoadWidth: mrw, smallRoadWidth: srw, detailRoadWidth: drw, waterwayWidth: wwrw,
+                majorRoadUnderlayWidth: mruw, smallRoadUnderlayWidth: sruw, detailRoadUnderlayWidth: druw } = vectorStreetMap;
+        const rc = `stroke-linecap="round" stroke-linejoin="round"`;
+        const svgStr = [
+            `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${svgH}">`,
+            // Full-canvas bg fill prevents black areas (JPEG has no alpha — transparent → black).
+            `<rect x="0" y="0" width="${width}" height="${svgH}" fill="${bg}"/>`,
+            `<rect x="${bx}" y="${by}" width="${sz}" height="${sz}" fill="${bg}"/>`,
+            // nonzero (not evenodd): vector-tile polygons have a buffer overrun, so adjacent
+            // water/landuse tiles overlap — evenodd cancels the overlaps and leaves a grid of seams.
+            landuseD  ? `<path d="${landuseD}" fill="${land}" fill-rule="nonzero" opacity="0.82"/>` : '',
+            waterD    ? `<path d="${waterD}" fill="${water}" fill-rule="nonzero"/>` : '',
+            waterwayD ? `<path d="${waterwayD}" fill="none" stroke="${water}" ${rc} stroke-width="${wwrw.toFixed(2)}"/>` : '',
+            detailRoadD ? `<path d="${detailRoadD}" fill="none" stroke="${bg}" ${rc} stroke-width="${druw.toFixed(2)}"/>` : '',
+            smallRoadD  ? `<path d="${smallRoadD}"  fill="none" stroke="${bg}" ${rc} stroke-width="${sruw.toFixed(2)}"/>` : '',
+            majorRoadD  ? `<path d="${majorRoadD}"  fill="none" stroke="${bg}" ${rc} stroke-width="${mruw.toFixed(2)}"/>` : '',
+            detailRoadD ? `<path d="${detailRoadD}" fill="none" stroke="${detail}" ${rc} stroke-width="${drw.toFixed(2)}"/>` : '',
+            smallRoadD  ? `<path d="${smallRoadD}"  fill="none" stroke="${minor}"  ${rc} stroke-width="${srw.toFixed(2)}"/>` : '',
+            majorRoadD  ? `<path d="${majorRoadD}"  fill="none" stroke="${major}"  ${rc} stroke-width="${mrw.toFixed(2)}"/>` : '',
+            `</svg>`,
+        ].join('');
+        const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            if (cancelled) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = svgH;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.fillStyle = bg;
+                ctx.fillRect(0, 0, width, svgH);
+                ctx.drawImage(img, 0, 0);
+                // New view is ready: reset the transient pan offset to 0 (the new raster is
+                // centred on the recentred geography) and clear the loading state. Batched into
+                // one render so the redraw shows centred new content with no intermediate snap.
+                useStore.setState({ mapImageOffsetX: 0, mapImageOffsetY: 0, streetMapRendering: false });
+                setVectorStreetMapRaster(canvas.toDataURL('image/jpeg', 0.92));
+            }
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            if (!cancelled) useStore.getState().setStreetMapRendering(false);
+        };
+        img.src = url;
+        return () => { cancelled = true; };
+    }, [
+        // NOTE: mapImageOffsetX/Y intentionally excluded — panning is a display-time
+        // transform on the <image>; regenerating the raster on pan caused the snap-back.
+        vectorStreetMap, useTrueVectors, mapGeomForRaster,
+        mapBgColor, mapLandColor, mapWaterColor, mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor, mapStreetColor,
+        width, height,
+    ]);
 
     // Fetch Data Effect (Runs once) — Cache API for offline support + faster repeat visits
     useEffect(() => {
@@ -248,12 +433,34 @@ const VectorStarMap: React.FC = () => {
 
         svg.attr('viewBox', `0 0 ${width} ${height}`);
 
-        // Background
+        // Background fill — solid color fallback always present
         let bgRect = svg.select('rect.background-rect') as any;
         if (bgRect.empty()) {
             bgRect = svg.insert('rect', ':first-child').attr('class', 'background-rect') as any;
         }
-        bgRect.attr('width', '100%').attr('height', '100%').attr('fill', posterColor);
+        // The background image fits the full poster WIDTH (so nothing is cropped left/right);
+        // a tall source overflows vertically and that headroom is where the slider pans. The
+        // rect stays transparent under the image; otherwise it's the solid poster colour.
+        bgRect.attr('width', '100%').attr('height', '100%').attr('fill', backgroundImageUrl ? 'none' : posterColor);
+
+        // Custom background image — covers the full poster behind all layers.
+        //   • preserveAspectRatio "xMidYMid slice" scales uniformly to COVER the poster. For a
+        //     source taller than the poster (e.g. the 2:3 forest on a 4:5 poster) that means the
+        //     WIDTH fits exactly (all trees stay in frame) and the height overflows top+bottom.
+        //   • backgroundImageOffsetY (−100…100) pans within that vertical overflow. ±10% of the
+        //     poster height matches the ~10%/side headroom of the 2:3 source, so the slider uses
+        //     the full travel without ever exposing a blank edge.
+        svg.select('image.background-image').remove();
+        if (backgroundImageUrl) {
+            const dy = ((backgroundImageOffsetY || 0) / 100) * 0.10 * height;
+            svg.insert('image', ':first-child')
+                .attr('class', 'background-image')
+                .attr('href', backgroundImageUrl)
+                .attr('x', 0).attr('y', 0)
+                .attr('width', '100%').attr('height', '100%')
+                .attr('preserveAspectRatio', 'xMidYMid slice')
+                .attr('transform', `translate(0, ${dy})`);
+        }
 
         // Layers
         const layers = ['defs-layer', 'map-layer', 'frame-layer', 'text-layer'];
@@ -267,11 +474,12 @@ const VectorStarMap: React.FC = () => {
             }
         });
 
-    }, [width, height, posterColor]);
+    }, [width, height, posterColor, backgroundImageUrl, backgroundImageOffsetY]);
 
     // Map Rendering Effect (Heavy)
     useEffect(() => {
-        if (!svgRef.current || !starsData || !constellationsData) return;
+        if (!svgRef.current) return;
+        if (posterType === 'starmap' && (!starsData || !constellationsData)) return;
 
         const svg = select(svgRef.current);
         const mapLayer = svg.select('#map-layer');
@@ -349,10 +557,383 @@ const VectorStarMap: React.FC = () => {
         const path = geoPath().projection(projection);
 
         // Draw Map Background (Clipped)
-        const mapContent = mapLayer.append('g').attr('clip-path', 'url(#map-clip)');
+        const mapContent = mapLayer.append('g')
+            .attr('clip-path', 'url(#map-clip)')
+            .style('pointer-events', 'none');
+
+        // Mutable ref so the map-image drag handler can move the pin group in sync
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pinRef: { group: any } = { group: null };
+
+        // In map mode, hitGroup and pinGroup are .raise()d above shapeInteract after creation
+        // so interior/pin events win the hit-test; the uncovered edge ring falls to shape-drag.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let hitGroupRef: any = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let pinGroupRef: any = null;
+        const MAP_EDGE_ZONE = 44; // px ring at shape boundary reserved for shape-drag
 
         // Background Image or Color
-        if (mapBackgroundImage) {
+        if (useVectorStreetMap && (vectorStreetMapRaster || vectorStreetMap)) {
+            if (!useTrueVectors && vectorStreetMapRaster) {
+                // Fast preview: render the pre-rasterised bitmap instead of live vector paths.
+                // Background rect (in map bg colour) sits behind the image so panning beyond
+                // the rendered area never reveals transparency/black.
+                mapContent.append('rect')
+                    .attr('x', 0).attr('y', 0)
+                    .attr('width', width).attr('height', Math.round(height))
+                    .attr('fill', mapBgColor || '#ffffff')
+                    .style('pointer-events', 'none');
+
+                // The image lives in a group whose transform IS the pan offset. Panning only
+                // moves this group — the raster bitmap is never regenerated for a pan, so there
+                // is no async reload and no snap-back.
+                const rasterGroup = mapContent.append('g')
+                    .attr('transform', `translate(${mapImageOffsetX},${mapImageOffsetY})`)
+                    .style('pointer-events', 'none');
+                rasterGroup.append('image')
+                    .attr('href', vectorStreetMapRaster)
+                    .attr('x', 0)
+                    .attr('y', 0)
+                    .attr('width', width)
+                    .attr('height', Math.round(height));
+
+                // Drag hit area — transparent overlay captures pointer events so dragging the
+                // map doesn't fall through to the poster-pan handler in MainLayout.
+                const rasterHitGroup = mapLayer.append('g')
+                    .style('cursor', 'grab')
+                    .style('pointer-events', 'all');
+                hitGroupRef = rasterHitGroup;
+
+                if (maskShape === 'rect') {
+                    rasterHitGroup.append('rect')
+                        .attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y)
+                        .attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H)
+                        .attr('fill', 'transparent');
+                } else if (maskShape === 'heart') {
+                    rasterHitGroup.append('path')
+                        .attr('d', userHeartPath)
+                        .attr('transform', getHeartTransform(Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5)))
+                        .attr('fill', 'transparent');
+                } else if (maskShape === 'house') {
+                    rasterHitGroup.append('path')
+                        .attr('d', userHousePath)
+                        .attr('transform', getHouseTransform(Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5)))
+                        .attr('fill', 'transparent');
+                } else {
+                    rasterHitGroup.append('circle')
+                        .attr('cx', center[0]).attr('cy', center[1])
+                        .attr('r', Math.max(mapRadius - MAP_EDGE_ZONE, mapRadius * 0.5))
+                        .attr('fill', 'transparent');
+                }
+
+                // Drag-to-pan with recentre on release: the image follows the finger live
+                // (in exact SVG units via the screen CTM), and on release the pixel delta is
+                // converted to a new geographic centre so genuinely new map area loads. The
+                // dragged image is kept in place (offset persisted) until the new raster is
+                // ready, and the loading overlay covers the swap — so there's no snap-back.
+                rasterHitGroup.on('pointerdown', (event: PointerEvent) => {
+                    if (event.pointerType === 'mouse' && event.button !== 0) return;
+                    event.stopPropagation();
+                    event.preventDefault();
+                    rasterHitGroup.style('cursor', 'grabbing');
+
+                    const svgNode = svgRef.current;
+                    const ctm = svgNode?.getScreenCTM();
+                    // Convert a client (screen) point to SVG user units so the pan matches the
+                    // cursor 1:1 regardless of preview zoom or how the SVG is scaled to fit.
+                    const toSvg = (cx: number, cy: number) => {
+                        if (!svgNode || !ctm) return { x: cx, y: cy };
+                        const pt = svgNode.createSVGPoint();
+                        pt.x = cx; pt.y = cy;
+                        return pt.matrixTransform(ctm.inverse());
+                    };
+                    const start = toSvg(event.clientX, event.clientY);
+                    let dx = 0, dy = 0;
+                    const hitNode = rasterHitGroup.node() as SVGGElement | null;
+                    hitNode?.setPointerCapture?.(event.pointerId);
+                    useStore.getState().setIsDraggingMapImage(true);
+
+                    const onMove = (ev: PointerEvent) => {
+                        if (ev.pointerId !== event.pointerId) return;
+                        ev.stopPropagation(); ev.preventDefault();
+                        const cur = toSvg(ev.clientX, ev.clientY);
+                        dx = cur.x - start.x;
+                        dy = cur.y - start.y;
+                        rasterGroup.attr('transform', `translate(${dx.toFixed(1)},${dy.toFixed(1)})`);
+                    };
+                    const onUp = (ev: PointerEvent) => {
+                        if (ev.pointerId !== event.pointerId) return;
+                        window.removeEventListener('pointermove', onMove);
+                        window.removeEventListener('pointerup', onUp);
+                        hitNode?.releasePointerCapture?.(event.pointerId);
+                        rasterHitGroup.style('cursor', 'grab');
+
+                        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+                            useStore.setState({ isDraggingMapImage: false });
+                            return;
+                        }
+                        // Convert the SVG-unit drag delta to a geographic centre shift, using the
+                        // same render-zoom scale the tile renderer uses (size = mapRadius*3).
+                        const cur = useStore.getState();
+                        const renderZoom = Math.min(cur.mapZoom + Math.log2((mapRadius * 3) / 1200), 20);
+                        const scale = 512 * Math.pow(2, renderZoom);
+                        const latRad = cur.mapCenterLat * Math.PI / 180;
+                        const newLng = cur.mapCenterLng - (dx * 360) / scale;
+                        const newLat = Math.max(-85, Math.min(85,
+                            cur.mapCenterLat + (dy * 360 * Math.cos(latRad)) / scale));
+                        // Keep the dragged image in place (persist offset) so it doesn't snap back
+                        // before the new tiles arrive. The tile fetch sets streetMapRendering=true,
+                        // and the raster onload resets offset→0 + clears the loading state.
+                        useStore.setState({
+                            mapImageOffsetX: dx,
+                            mapImageOffsetY: dy,
+                            mapCenterLng: newLng,
+                            mapCenterLat: newLat,
+                            isDraggingMapImage: false,
+                        });
+                    };
+                    window.addEventListener('pointermove', onMove, { passive: false });
+                    window.addEventListener('pointerup', onUp, { passive: false });
+                });
+            } else if (vectorStreetMap) {
+            const imgSize = mapRadius * 3;
+            let imgOffsetX = mapImageOffsetX;
+            let imgOffsetY = mapImageOffsetY;
+            const vectorGroup = mapContent.append('g')
+                // The transparent hitGroup below owns all map drag events.
+                // Disabling path hit-testing here is critical with high-detail
+                // vector maps; otherwise pointer moves can traverse millions of
+                // SVG path commands.
+                .style('pointer-events', 'none');
+
+            vectorGroup.append('rect')
+                .attr('x', center[0] - mapRadius * 1.5 + mapImageOffsetX)
+                .attr('y', center[1] - mapRadius * 1.5 + mapImageOffsetY)
+                .attr('width', imgSize)
+                .attr('height', imgSize)
+                .attr('fill', mapBgColor || '#ffffff');
+
+            if (vectorStreetMap.landuseD) {
+                vectorGroup.append('path')
+                    .attr('d', vectorStreetMap.landuseD)
+                    .attr('fill', mapLandColor || '#b6b6b6')
+                    // nonzero (not evenodd): vector-tile buffer overrun makes adjacent
+                    // tile polygons overlap; evenodd cancels overlaps → grid of seams.
+                    .attr('fill-rule', 'nonzero')
+                    .attr('opacity', 0.82);
+            }
+            if (vectorStreetMap.waterD) {
+                vectorGroup.append('path')
+                    .attr('d', vectorStreetMap.waterD)
+                    .attr('fill', mapWaterColor || '#8f8f8f')
+                    .attr('fill-rule', 'nonzero');
+            }
+            if (vectorStreetMap.waterwayD) {
+                vectorGroup.append('path')
+                    .attr('d', vectorStreetMap.waterwayD)
+                    .attr('fill', 'none')
+                    .attr('stroke', mapWaterColor || '#8f8f8f')
+                    .attr('stroke-linecap', 'round')
+                    .attr('stroke-linejoin', 'round')
+                    .attr('stroke-width', vectorStreetMap.waterwayWidth);
+            }
+
+            const roadGroup = vectorGroup.append('g')
+                .attr('fill', 'none')
+                .attr('stroke-linecap', 'round')
+                .attr('stroke-linejoin', 'round');
+
+            const minorRoadColor = !mapSmallRoadColor || mapSmallRoadColor === '#1a1a1a' ? '#666666' : mapSmallRoadColor;
+            const detailRoadColor = !mapDetailRoadColor || mapDetailRoadColor === '#2a2a2a' ? '#8a8a8a' : mapDetailRoadColor;
+
+            if (vectorStreetMap.detailRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.detailRoadD)
+                    .attr('stroke', mapBgColor || '#ffffff')
+                    .attr('stroke-width', vectorStreetMap.detailRoadUnderlayWidth);
+            }
+            if (vectorStreetMap.smallRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.smallRoadD)
+                    .attr('stroke', mapBgColor || '#ffffff')
+                    .attr('stroke-width', vectorStreetMap.smallRoadUnderlayWidth);
+            }
+            if (vectorStreetMap.majorRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.majorRoadD)
+                    .attr('stroke', mapBgColor || '#ffffff')
+                    .attr('stroke-width', vectorStreetMap.majorRoadUnderlayWidth);
+            }
+            if (vectorStreetMap.detailRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.detailRoadD)
+                    .attr('stroke', detailRoadColor)
+                    .attr('stroke-width', vectorStreetMap.detailRoadWidth);
+            }
+            if (vectorStreetMap.smallRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.smallRoadD)
+                    .attr('stroke', minorRoadColor)
+                    .attr('stroke-width', vectorStreetMap.smallRoadWidth);
+            }
+            if (vectorStreetMap.majorRoadD) {
+                roadGroup.append('path')
+                    .attr('d', vectorStreetMap.majorRoadD)
+                    .attr('stroke', mapMainRoadColor || mapStreetColor || '#111111')
+                    .attr('stroke-width', vectorStreetMap.majorRoadWidth);
+            }
+
+            // High-detail vector maps contain millions of SVG path characters.
+            // Keep pointer movement cheap: accumulate drag deltas during the
+            // gesture and move the full vectorGroup once on release.
+            const hitGroup = mapLayer.append('g')
+                .style('cursor', 'grab')
+                .style('pointer-events', 'all');
+            hitGroupRef = hitGroup;
+
+            if (maskShape === 'rect') {
+                hitGroup.append('rect')
+                    .attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H)
+                    .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
+                    .style('pointer-events', 'all');
+            } else if (maskShape === 'heart') {
+                const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
+                hitGroup.append('path')
+                    .attr('d', userHeartPath)
+                    .attr('transform', getHeartTransform(insetScale))
+                    .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
+                    .style('pointer-events', 'all');
+            } else if (maskShape === 'house') {
+                const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
+                hitGroup.append('path')
+                    .attr('d', userHousePath)
+                    .attr('transform', getHouseTransform(insetScale))
+                    .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
+                    .style('pointer-events', 'all');
+            } else {
+                hitGroup.append('circle')
+                    .attr('cx', center[0])
+                    .attr('cy', center[1])
+                    .attr('r', Math.max(mapRadius - MAP_EDGE_ZONE, mapRadius * 0.5))
+                    .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
+                    .style('pointer-events', 'all');
+            }
+
+            let dragStartOffsetX = imgOffsetX;
+            let dragStartOffsetY = imgOffsetY;
+            let vectorMapDragActive = false;
+
+            const finishVectorMapDrag = () => {
+                hitGroup.style('cursor', 'grab');
+                const deltaX = imgOffsetX - dragStartOffsetX;
+                const deltaY = imgOffsetY - dragStartOffsetY;
+                if (deltaX !== 0 || deltaY !== 0) {
+                    vectorGroup
+                        .attr('transform', `translate(${imgOffsetX - mapImageOffsetX}, ${imgOffsetY - mapImageOffsetY})`)
+                        .style('display', null);
+                    useStore.setState({
+                        mapImageOffsetX: imgOffsetX,
+                        mapImageOffsetY: imgOffsetY,
+                        isDraggingMapImage: false,
+                    });
+                    vectorMapDragActive = false;
+                    return;
+                }
+                vectorGroup.style('display', null);
+                useStore.setState({ isDraggingMapImage: false });
+                vectorMapDragActive = false;
+            };
+
+            // D3 drag uses SVG pointer transforms internally. On high-detail
+            // vector maps that becomes visibly slow, so map panning uses raw
+            // client-pixel pointer deltas instead.
+            hitGroup.on('pointerdown', (event: PointerEvent) => {
+                if (vectorMapDragActive) return;
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                vectorMapDragActive = true;
+                event.stopPropagation();
+                event.preventDefault();
+
+                hitGroup.style('cursor', 'grabbing');
+                dragStartOffsetX = imgOffsetX;
+                dragStartOffsetY = imgOffsetY;
+                useStore.getState().setIsDraggingMapImage(true);
+
+                let lastClientX = event.clientX;
+                let lastClientY = event.clientY;
+                const pointerId = event.pointerId;
+                const hitNode = hitGroup.node() as SVGGElement | null;
+                hitNode?.setPointerCapture?.(pointerId);
+
+                const onPointerMove = (moveEvent: PointerEvent) => {
+                    if (moveEvent.pointerId !== pointerId) return;
+                    moveEvent.stopPropagation();
+                    moveEvent.preventDefault();
+                    const zoom = useStore.getState().previewZoom;
+                    imgOffsetX += (moveEvent.clientX - lastClientX) / zoom;
+                    imgOffsetY += (moveEvent.clientY - lastClientY) / zoom;
+                    lastClientX = moveEvent.clientX;
+                    lastClientY = moveEvent.clientY;
+                };
+
+                const onPointerUp = (upEvent: PointerEvent) => {
+                    if (upEvent.pointerId !== pointerId) return;
+                    upEvent.stopPropagation();
+                    upEvent.preventDefault();
+                    window.removeEventListener('pointermove', onPointerMove);
+                    window.removeEventListener('pointerup', onPointerUp);
+                    window.removeEventListener('pointercancel', onPointerUp);
+                    hitNode?.releasePointerCapture?.(pointerId);
+                    finishVectorMapDrag();
+                };
+
+                window.addEventListener('pointermove', onPointerMove, { passive: false });
+                window.addEventListener('pointerup', onPointerUp, { passive: false });
+                window.addEventListener('pointercancel', onPointerUp, { passive: false });
+            });
+
+            hitGroup.on('mousedown', (event: MouseEvent) => {
+                if (vectorMapDragActive || event.button !== 0) return;
+                vectorMapDragActive = true;
+                event.stopPropagation();
+                event.preventDefault();
+
+                    hitGroup.style('cursor', 'grabbing');
+                    dragStartOffsetX = imgOffsetX;
+                    dragStartOffsetY = imgOffsetY;
+                    useStore.getState().setIsDraggingMapImage(true);
+
+                    let lastClientX = event.clientX;
+                let lastClientY = event.clientY;
+
+                const onMouseMove = (moveEvent: MouseEvent) => {
+                    moveEvent.stopPropagation();
+                    moveEvent.preventDefault();
+                    const zoom = useStore.getState().previewZoom;
+                    imgOffsetX += (moveEvent.clientX - lastClientX) / zoom;
+                    imgOffsetY += (moveEvent.clientY - lastClientY) / zoom;
+                    lastClientX = moveEvent.clientX;
+                    lastClientY = moveEvent.clientY;
+                };
+
+                const onMouseUp = (upEvent: MouseEvent) => {
+                    upEvent.stopPropagation();
+                    upEvent.preventDefault();
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                    finishVectorMapDrag();
+                };
+
+                window.addEventListener('mousemove', onMouseMove, { passive: false });
+                window.addEventListener('mouseup', onMouseUp, { passive: false });
+            });
+            } // end else if (vectorStreetMap) — vector render mode
+        } else if (mapBackgroundImage) {
             // Use 3x radius so there's plenty of room to drag the image within the shape
             const imgSize = mapRadius * 3;
             let imgOffsetX = mapImageOffsetX;
@@ -367,32 +948,42 @@ const VectorStarMap: React.FC = () => {
                 .attr('preserveAspectRatio', 'none')
                 .attr('opacity', mapImageOpacity ?? 1);
 
-            // Transparent drag hit area over the shape — lets users reposition the map image
-            const hitGroup = mapLayer.append('g').style('cursor', 'grab');
+            // Transparent drag hit area — inset by MAP_EDGE_ZONE so the outer ring
+            // falls through to shapeInteract (shape drag) once .raise() puts this on top.
+            const hitGroup = mapLayer.append('g')
+                .style('cursor', 'grab')
+                .style('pointer-events', 'all');
+            hitGroupRef = hitGroup;
 
             if (maskShape === 'rect') {
                 hitGroup.append('rect')
                     .attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H)
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             } else if (maskShape === 'heart') {
+                const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
                 hitGroup.append('path')
                     .attr('d', userHeartPath)
-                    .attr('transform', getHeartTransform(1))
+                    .attr('transform', getHeartTransform(insetScale))
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             } else if (maskShape === 'house') {
+                const insetScale = Math.max((mapRadius - MAP_EDGE_ZONE) / mapRadius, 0.5);
                 hitGroup.append('path')
                     .attr('d', userHousePath)
-                    .attr('transform', getHouseTransform(1))
+                    .attr('transform', getHouseTransform(insetScale))
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             } else {
                 hitGroup.append('circle')
                     .attr('cx', center[0])
                     .attr('cy', center[1])
-                    .attr('r', mapRadius)
+                    .attr('r', Math.max(mapRadius - MAP_EDGE_ZONE, mapRadius * 0.5))
                     .attr('fill', 'transparent')
+                    .attr('pointer-events', 'all')
                     .style('pointer-events', 'all');
             }
 
@@ -426,32 +1017,19 @@ const VectorStarMap: React.FC = () => {
                         const deltaX = imgOffsetX - dragStartOffsetX;
                         const deltaY = imgOffsetY - dragStartOffsetY;
                         if (deltaX !== 0 || deltaY !== 0) {
-                            // Persist the drag offset so the SVG keeps showing the image
-                            // in the dragged position while MapLibre re-renders at the new center.
-                            // MainLayout's handleMapCapture will clear these to 0 once the
-                            // new tile capture arrives, so no snap-back occurs.
                             const state = useStore.getState();
                             state.setMapImageOffsetX(imgOffsetX);
                             state.setMapImageOffsetY(imgOffsetY);
 
-                            // Convert SVG pixel delta → geographic delta and tell MapLibre
-                            // to re-render at the new center. The fresh capture will be
-                            // perfectly centred in the shape — no rectangular edges visible.
                             const svgToCanvas = 1200 / imgSize;
                             const worldWidthPx = 512 * Math.pow(2, state.mapZoom);
                             const degPerCanvasPx = 360 / worldWidthPx;
                             const newLng = state.mapCenterLng - deltaX * svgToCanvas * degPerCanvasPx;
                             const newLat = state.mapCenterLat + deltaY * svgToCanvas * degPerCanvasPx
                                 * Math.cos(state.mapCenterLat * Math.PI / 180);
-                            // Set coords FIRST — Zustand subscribe fires synchronously here,
-                            // incrementing captureVersionRef before any awaiting stitch resumes.
-                            // Then clear isDraggingMapImage so no stale capture can slip through
-                            // the guard with the old version number.
                             state.setMapCenterLng(newLng);
                             state.setMapCenterLat(newLat);
                         }
-                        // Clear dragging flag AFTER coordinate updates so the synchronous
-                        // version increment happens before any stale stitch checks the flag.
                         useStore.getState().setIsDraggingMapImage(false);
                     })
             );
@@ -480,8 +1058,10 @@ const VectorStarMap: React.FC = () => {
                 .attr('font-size', '20px').attr('font-family', 'sans-serif')
                 .text('Search a city to load map');
         } else {
-            // Fill shape interior with mapInteriorColor (works for both dark and light mode)
-            const shapeFillColor = mapInteriorColor;
+            // Fill shape interior with mapInteriorColor — UNLESS a full-poster background image is
+            // set, in which case the shape is transparent so the single background shows through
+            // consistently inside and outside the shape (stars/lines render on top).
+            const shapeFillColor = backgroundImageUrl ? 'none' : mapInteriorColor;
             if (maskShape === 'rect') {
                 mapContent.append('rect').attr('x', RECT_MAP_INNER_X).attr('y', RECT_MAP_INNER_Y).attr('width', RECT_MAP_INNER_W).attr('height', RECT_MAP_INNER_H).attr('fill', shapeFillColor);
             } else if (maskShape === 'heart') {
@@ -500,12 +1080,12 @@ const VectorStarMap: React.FC = () => {
         }
 
         // Constellations — skip in street/colored map mode
-        if (showConstellations && constellationsData.features && posterType === 'starmap') {
+        if (posterType === 'starmap' && showConstellations && constellationsData?.features) {
             mapContent.append('g').selectAll('path').data(constellationsData.features as ConstellationFeature[]).enter().append('path').attr('d', path as any).attr('fill', 'none').attr('stroke', starColor).attr('stroke-width', debouncedLineWeight * 2).attr('stroke-opacity', 1.0);
         }
 
         // Stars — skip in street/colored map mode
-        if (starsData.features && posterType === 'starmap') {
+        if (posterType === 'starmap' && starsData?.features) {
             const magScale = scaleLinear().domain([-2, 6]).range([6 * debouncedStarScale, 0.8 * debouncedStarScale]).clamp(true);
             const features = starsData.features as StarFeature[];
             const brightStars = features.filter(d => d.properties.mag < 2.5);
@@ -530,7 +1110,7 @@ const VectorStarMap: React.FC = () => {
         }
 
         // Location Pin — small red heart, draggable
-        if (showLocationPin && posterType !== 'starmap' && mapBackgroundImage) {
+        if (showLocationPin && posterType !== 'starmap' && (mapBackgroundImage || (useVectorStreetMap && (vectorStreetMap || vectorStreetMapRaster)))) {
             const pinScale = locationPinSize / heartOrigWidth;
             const pinX = center[0] + locationPinOffsetX;
             const pinY = center[1] + locationPinOffsetY;
@@ -538,6 +1118,8 @@ const VectorStarMap: React.FC = () => {
             const pinGroup = mapLayer.append('g')
                 .attr('transform', `translate(${pinX}, ${pinY})`)
                 .style('cursor', 'grab');
+            pinRef.group = pinGroup;
+            pinGroupRef = pinGroup;
 
             pinGroup.append('path')
                 .attr('d', userHeartPath)
@@ -555,28 +1137,88 @@ const VectorStarMap: React.FC = () => {
                 .style('pointer-events', 'all');
 
             let pinDx = 0, pinDy = 0;
-            pinGroup.call(
-                drag<SVGGElement, unknown>()
-                    .on('start', (event) => {
-                        event.sourceEvent.stopPropagation();
-                        pinDx = 0; pinDy = 0;
-                        pinGroup.style('cursor', 'grabbing');
-                    })
-                    .on('drag', (event) => {
-                        event.sourceEvent.stopPropagation();
-                        const zoom = useStore.getState().previewZoom;
-                        pinDx += event.dx / zoom;
-                        pinDy += event.dy / zoom;
+            let pinDragActive = false;
+            const startPinDrag = (
+                startEvent: PointerEvent | MouseEvent,
+                bindMove: (onMove: (event: PointerEvent | MouseEvent) => void, onEnd: (event: PointerEvent | MouseEvent) => void) => void,
+            ) => {
+                if (pinDragActive) return;
+                pinDragActive = true;
+                startEvent.stopPropagation();
+                startEvent.preventDefault();
+                pinDx = 0;
+                pinDy = 0;
+                pinGroup.style('cursor', 'grabbing');
+                let lastClientX = startEvent.clientX;
+                let lastClientY = startEvent.clientY;
+
+                const onMove = (moveEvent: PointerEvent | MouseEvent) => {
+                    moveEvent.stopPropagation();
+                    moveEvent.preventDefault();
+                    const zoom = useStore.getState().previewZoom;
+                    pinDx += (moveEvent.clientX - lastClientX) / zoom;
+                    pinDy += (moveEvent.clientY - lastClientY) / zoom;
+                    lastClientX = moveEvent.clientX;
+                    lastClientY = moveEvent.clientY;
+                };
+
+                const onEnd = (endEvent: PointerEvent | MouseEvent) => {
+                    endEvent.stopPropagation();
+                    endEvent.preventDefault();
+                    pinGroup.style('cursor', 'grab');
+                    if (pinDx !== 0 || pinDy !== 0) {
                         pinGroup.attr('transform', `translate(${pinX + pinDx}, ${pinY + pinDy})`);
-                    })
-                    .on('end', () => {
-                        pinGroup.style('cursor', 'grab');
-                        if (pinDx !== 0 || pinDy !== 0) {
-                            setLocationPinOffsetX(locationPinOffsetX + pinDx);
-                            setLocationPinOffsetY(locationPinOffsetY + pinDy);
-                        }
-                    })
-            );
+                        setLocationPinOffsetX(locationPinOffsetX + pinDx);
+                        setLocationPinOffsetY(locationPinOffsetY + pinDy);
+                    }
+                    pinDragActive = false;
+                };
+
+                bindMove(onMove, onEnd);
+            };
+
+            pinGroup.on('pointerdown', (event: PointerEvent) => {
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                const pointerId = event.pointerId;
+                const pinNode = pinGroup.node() as SVGGElement | null;
+                pinNode?.setPointerCapture?.(pointerId);
+                startPinDrag(
+                    event,
+                    (onMove, onEnd) => {
+                        const onPointerMove = (moveEvent: PointerEvent) => {
+                            if (moveEvent.pointerId === pointerId) onMove(moveEvent);
+                        };
+                        const onPointerUp = (upEvent: PointerEvent) => {
+                            if (upEvent.pointerId !== pointerId) return;
+                            window.removeEventListener('pointermove', onPointerMove);
+                            window.removeEventListener('pointerup', onPointerUp);
+                            window.removeEventListener('pointercancel', onPointerUp);
+                            pinNode?.releasePointerCapture?.(pointerId);
+                            onEnd(upEvent);
+                        };
+                        window.addEventListener('pointermove', onPointerMove, { passive: false });
+                        window.addEventListener('pointerup', onPointerUp, { passive: false });
+                        window.addEventListener('pointercancel', onPointerUp, { passive: false });
+                    },
+                );
+            });
+
+            pinGroup.on('mousedown', (event: MouseEvent) => {
+                if (event.button !== 0) return;
+                startPinDrag(
+                    event,
+                    (onMove, onEnd) => {
+                        const onMouseMove = (moveEvent: MouseEvent) => onMove(moveEvent);
+                        const onMouseUp = (upEvent: MouseEvent) => {
+                            window.removeEventListener('mousemove', onMouseMove);
+                            window.removeEventListener('mouseup', onMouseUp);
+                            onEnd(upEvent);
+                        };
+                        window.addEventListener('mousemove', onMouseMove, { passive: false });
+                        window.addEventListener('mouseup', onMouseUp, { passive: false });
+                    },
+                );
+            });
         }
 
         // Border Rendering Logic
@@ -679,7 +1321,9 @@ const VectorStarMap: React.FC = () => {
             // --- Interaction layer (on top of everything) ---
             const shapeInteract = mapLayer.append('g').style('cursor', 'move');
 
-            // Full bounding-box transparent hit area (catches all mouse events on/inside shape)
+            // Full bounding-box transparent hit area — always active.
+            // In map mode, hitGroup and pinGroup are .raise()d on top after this block,
+            // so they win interior hit-tests and this only fires in the uncovered edge ring.
             shapeInteract.append('rect')
                 .attr('x', bbX).attr('y', bbY).attr('width', bbW).attr('height', bbH)
                 .attr('fill', 'transparent').attr('stroke', 'none')
@@ -817,6 +1461,14 @@ const VectorStarMap: React.FC = () => {
                         }
                     })
             );
+
+            // In map mode, raise hitGroup and pinGroup above shapeInteract in Z-order.
+            // This makes them win the hit-test in the interior and over the pin,
+            // leaving the uncovered edge ring to fall through to shapeInteract (shape drag).
+            if (mapBackgroundImage || (useVectorStreetMap && (vectorStreetMap || vectorStreetMapRaster))) {
+                if (hitGroupRef) hitGroupRef.raise();
+                if (pinGroupRef) pinGroupRef.raise();
+            }
         }
 
     }, [
@@ -826,7 +1478,10 @@ const VectorStarMap: React.FC = () => {
         showBorder, showConstellations, showGrid, designStyle, maskShape, isLightMode, // Toggles
         debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, debouncedShapeOffsetY, debouncedShapeOffsetX, debouncedShapeOutlineWidth, // Shape
         posterColor, textColor, starColor, mapInteriorColor, mapStreetColor, width, height, // Colors & Dims
-        mapBackgroundImage, mapImageOffsetX, mapImageOffsetY, mapImageOpacity, borderStyle, posterType, // New Props
+        useVectorStreetMap, vectorStreetMap, vectorStreetMapRaster, useTrueVectors,
+        mapBgColor, mapWaterColor, mapLandColor,
+        mapMainRoadColor, mapSmallRoadColor, mapDetailRoadColor,
+        mapBackgroundImage, mapImageOpacity, borderStyle, posterType, // New Props
         showLocationPin, locationPinSize, locationPinOffsetX, locationPinOffsetY, // Location pin
         showInnerRing, innerRingWidth, innerRingInset,
         showOuterRing, outerRingWidth, outerRingGap, // Inner ring
@@ -870,7 +1525,7 @@ const VectorStarMap: React.FC = () => {
         // circleSize IS used so same-ratio sizes (same circleSize) have identical textStartY.
         const _RECT_MAP_H = height * 0.74;
         const _baseRadius = Math.min(width, height) * 0.4;
-        const _shapeRadius = maskShape === 'rect' ? 0 : _baseRadius * (maskShape === 'circle' ? circleSize : maskShape === 'heart' ? heartSize : houseSize);
+        const _shapeRadius = maskShape === 'rect' ? 0 : _baseRadius * (maskShape === 'circle' ? debouncedCircleSize : maskShape === 'heart' ? debouncedHeartSize : debouncedHouseSize);
         const textStartY = maskShape === 'rect'
             ? _RECT_MAP_H + height * 0.03
             : height * 0.45 + _shapeRadius + height * 0.05;
@@ -1071,14 +1726,28 @@ const VectorStarMap: React.FC = () => {
             .attr('transform', `translate(${width / 2 + titleOffsetX}, ${textStartY + naturalY + titleOffsetY})`)
             .attr('text-anchor', 'middle');
 
+        // Title may span multiple lines — an explicit "\n" in the text forces a line break
+        // (used by event/wedding designs e.g. "THE SKY ON OUR\nWEDDING NIGHT").
+        const titleRaw = titleAllCaps ? (customText.title || title).toUpperCase() : (customText.title || title);
+        const titleLines = titleRaw.split('\n');
         const titleNode = titleGroup.append('text')
             .attr('fill', textColor)
             .attr('font-family', `${titleFont}, serif`)
             .attr('font-size', `${titleFontSize}px`)
             .attr('font-weight', ['Lato', 'DM Sans', 'Poppins', 'Nunito', 'Oswald', 'Montserrat', 'Bebas Neue', 'Brandon Grotesque', 'Cinzel', 'Playfair Display', 'Orbitron'].includes(titleFont) ? 'bold' : '400')
             .attr('letter-spacing', titleFont === 'Mapped Moment Script' ? '0' : `${debouncedTitleKerning}em`)
-            .style('white-space', 'pre')
-            .text(titleAllCaps ? (customText.title || title).toUpperCase() : (customText.title || title));
+            .style('white-space', 'pre');
+        const titleLH = titleLineHeight || 1.08; // line-height multiple — adjustable per design
+        if (titleLines.length > 1) {
+            titleLines.forEach((ln, i) => {
+                titleNode.append('tspan')
+                    .attr('x', 0)
+                    .attr('dy', i === 0 ? '0' : `${titleFontSize * titleLH}px`)
+                    .text(ln);
+            });
+        } else {
+            titleNode.text(titleRaw);
+        }
 
         // Auto-fit: scale down if title is too wide for the poster
         const maxTextWidth = width - 2 * (frameInset + 20);
@@ -1144,11 +1813,16 @@ const VectorStarMap: React.FC = () => {
             );
         }
 
-        // Advance Natural Y — use reference size so resizing title doesn't move other elements
-        naturalY += (refTitleSize * 0.8) + config.titleBottomMargin;
+        // Advance Natural Y — use reference size so resizing title doesn't move other elements.
+        // Extra title lines push subsequent elements down by one (adjustable) line-height each.
+        naturalY += (refTitleSize * 0.8) + (titleLines.length - 1) * (refTitleSize * titleLH) + config.titleBottomMargin;
 
         // 2. Subtitle Group — only render if there's actual text (avoids blank gap)
-        const subtitleText = (customText.subtitle || subtitle).toUpperCase();
+        // Script fonts (used for couple names like "Laura & Steve") keep their original
+        // casing; geometric/serif subtitles stay upper-cased for the classic look.
+        const SCRIPT_SUBTITLE_FONTS = ['Mapped Moment Script', 'Great Vibes', 'Dancing Script', 'Pinyon Script', 'Allura', 'Petit Formal Script'];
+        const rawSubtitle = customText.subtitle || subtitle;
+        const subtitleText = SCRIPT_SUBTITLE_FONTS.includes(subtitleFont) ? rawSubtitle : rawSubtitle.toUpperCase();
         if (subtitleText) {
             const subtitleGroup = textLayer.append('g')
                 .attr('transform', `translate(${width / 2}, ${textStartY + naturalY + subtitleOffsetY})`)
@@ -1180,7 +1854,8 @@ const VectorStarMap: React.FC = () => {
                 const r = textEl.getBoundingClientRect();
                 textEl.style.visibility = 'hidden';
                 const subtitleVal = customText.subtitle || subtitle;
-                setInlineEdit({ field: 'subtitle', value: subtitleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: subtitleFont, fontSize: subtitleFontSize, uppercase: true });
+                // Match the render: script-font subtitles (couple names) keep their casing.
+                setInlineEdit({ field: 'subtitle', value: subtitleVal, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: subtitleFont, fontSize: subtitleFontSize, uppercase: !SCRIPT_SUBTITLE_FONTS.includes(subtitleFont) });
                 setActiveTypoField('subtitle');
             }));
 
@@ -1289,20 +1964,33 @@ const VectorStarMap: React.FC = () => {
             .attr('transform', `translate(${width / 2}, ${textStartY + naturalY + detailsOffsetY})`)
             .attr('text-anchor', 'middle');
 
-        const dateStr = customText.date || format(new Date(date), 'MMMM do, yyyy').toUpperCase();
-        const locStr = customText.location || (location ? location.toUpperCase() : '');
+        // asCalendarDate: the same calendar day must render whether this SVG is drawn in the
+        // customer's own browser (their local timezone) or server-side by Puppeteer (which
+        // runs in Europe/Berlin/UTC in production) — see src/utils/dateOnly.ts.
+        const dateStr = customText.date || format(asCalendarDate(new Date(date)), 'MMMM do, yyyy').toUpperCase();
+        const rawLocStr = customText.location || (location ? location.toUpperCase() : '');
+        const locStr = locationAllCaps ? rawLocStr.toUpperCase() : rawLocStr;
         const coordsStr = customText.coords || `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
 
         // When only location + date are shown (no coords), render on ONE line with vertical separator.
-        const inlineLocationDate = showLocation && showDate && !showCoords;
+        // detailsDateFirst forces a stacked layout with the date ABOVE the location (event/wedding style).
+        const inlineLocationDate = showLocation && showDate && !showCoords && !detailsDateFirst;
+
+        const stackedOrder = detailsDateFirst
+            ? [
+                showDate     ? { field: 'date'     as const, text: dateStr } : null,
+                showLocation ? { field: 'location' as const, text: locStr } : null,
+                showCoords   ? { field: 'coords'   as const, text: coordsStr } : null,
+              ]
+            : [
+                showLocation ? { field: 'location' as const, text: locStr } : null,
+                showCoords   ? { field: 'coords'   as const, text: coordsStr } : null,
+                showDate     ? { field: 'date'     as const, text: dateStr } : null,
+              ];
 
         const detailsEntries = inlineLocationDate
             ? [{ field: 'location' as const, text: locStr }, { field: 'date' as const, text: dateStr }]
-            : [
-                showLocation ? { field: 'location' as const, text: locStr } : null,
-                showCoords  ? { field: 'coords'   as const, text: coordsStr } : null,
-                showDate    ? { field: 'date'      as const, text: dateStr } : null,
-              ].filter(Boolean) as { field: 'location' | 'coords' | 'date'; text: string }[];
+            : stackedOrder.filter(Boolean) as { field: 'location' | 'coords' | 'date'; text: string }[];
 
         if (detailsEntries.length > 0) {
             const lineH = detailsFontSize * config.detailsLineHeight + config.detailsSpacing;
@@ -1391,7 +2079,7 @@ const VectorStarMap: React.FC = () => {
                         const r = textEl.getBoundingClientRect();
                         textEl.style.visibility = 'hidden';
                         useStore.getState().setIsInlineEditing(true);
-                        setInlineEdit({ field: 'location', value: locStr, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
+                        setInlineEdit({ field: 'location', value: customText.location || locStr, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize, uppercase: locationAllCaps });
                         setActiveTypoField('details');
                     });
 
@@ -1428,7 +2116,7 @@ const VectorStarMap: React.FC = () => {
                             useStore.getState().setIsInlineEditing(true);
                             const f = side === -1 ? 'location' : 'date';
                             const v = side === -1 ? locStr : dateStr;
-                            setInlineEdit({ field: f, value: v, svgEl: target, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
+                            setInlineEdit({ field: f, value: f === 'location' ? (customText.location || v) : v, svgEl: target, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize, uppercase: f === 'location' ? locationAllCaps : undefined });
                             setActiveTypoField('details');
                         });
                 });
@@ -1445,7 +2133,7 @@ const VectorStarMap: React.FC = () => {
                             const r = textEl.getBoundingClientRect();
                             textEl.style.visibility = 'hidden';
                             useStore.getState().setIsInlineEditing(true);
-                            setInlineEdit({ field, value: text, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize });
+                            setInlineEdit({ field, value: field === 'location' ? (customText.location || text) : text, svgEl: textEl, editRect: { left: r.left, top: r.top, width: r.width, height: r.height }, fontFamily: detailsFont, fontSize: detailsFontSize, uppercase: field === 'location' ? locationAllCaps : undefined });
                             setActiveTypoField('details');
                         });
                 });
@@ -1606,30 +2294,36 @@ const VectorStarMap: React.FC = () => {
             // hitPad in un-scaled units so the click target is large
             const hitPad = 30 / heartScale;
 
-            const heartGroup = textLayer.append('g')
-                .attr('transform', `translate(${width / 2}, ${heartBaseY + heartDecorOffsetY}) scale(${heartScale})`)
+            // Outer group: translate only + drag (no scale, so D3 coordinate projection is correct)
+            const heartOuter = textLayer.append('g')
+                .attr('transform', `translate(${width / 2}, ${heartBaseY + heartDecorOffsetY})`)
                 .style('cursor', 'move');
 
-            // Large transparent hit area (scale-compensated so it's ~60×60px on screen)
-            heartGroup.append('rect')
-                .attr('x', -hitPad / 2).attr('y', -hitPad / 4)
-                .attr('width', hitPad).attr('height', hitPad)
+            // Large transparent hit area in SVG user-space (not scale-inflated)
+            const hitPadOuter = 40;
+            heartOuter.append('rect')
+                .attr('x', -hitPadOuter / 2).attr('y', -hitPadOuter / 4)
+                .attr('width', hitPadOuter).attr('height', hitPadOuter)
                 .attr('fill', 'transparent')
                 .style('pointer-events', 'all');
 
-            heartGroup.append('path')
+            // Inner group: scale only (path lives here, no drag interaction)
+            const heartInner = heartOuter.append('g')
+                .attr('transform', `scale(${heartScale})`);
+
+            heartInner.append('path')
                 .attr('d', 'M0,15.5 C-10,5 -25,10 -25,25 C-25,45 0,65 0,65 C0,65 25,45 25,25 C25,10 10,5 0,15.5 Z')
                 .attr('fill', textColor)
                 .style('pointer-events', 'none');
 
             let heartDragAcc = 0;
-            heartGroup.call(
+            heartOuter.call(
                 drag<SVGGElement, unknown>()
                     .on('start', (event) => { event.sourceEvent.stopPropagation(); heartDragAcc = 0; })
                     .on('drag', function(event) {
                         heartDragAcc += event.dy / useStore.getState().previewZoom;
                         const newY = heartBaseY + heartDecorOffsetY + heartDragAcc;
-                        select(this).attr('transform', `translate(${width / 2}, ${newY}) scale(${heartScale})`);
+                        select(this).attr('transform', `translate(${width / 2}, ${newY})`);
                     })
                     .on('end', () => {
                         if (heartDragAcc !== 0) setHeartDecorOffsetY(heartDecorOffsetY + heartDragAcc);
@@ -1641,13 +2335,13 @@ const VectorStarMap: React.FC = () => {
         title, subtitle, customText, location, date, lat, lng, // Content
         titleFont, subtitleFont, detailsFont, dedicationFont, namesFont, // Fonts
         titleFontSize, subtitleFontSize, detailsFontSize, dedicationFontSize, namesFontSize, // Sizes
-        debouncedTitleKerning, debouncedSubtitleKerning, debouncedDetailsKerning, debouncedDedicationKerning, debouncedNamesKerning, // Kerning
-        titleAllCaps, // Title casing
+        debouncedTitleKerning, debouncedSubtitleKerning, debouncedDetailsKerning, debouncedDedicationKerning, debouncedNamesKerning, titleLineHeight, // Kerning
+        titleAllCaps, locationAllCaps, // Text casing
         titleOffsetX, titleOffsetY, subtitleOffsetY, detailsOffsetY, dedicationOffsetY, namesOffsetY, heartDecorOffsetY, // Offsets
         showNames, // Names toggle
-        showDate, showLocation, showCoords, showDivider, dividerOffsetY, dividerLength, dividerThickness, vertSepOffsetY, showVertSep, vertSepHeight, vertSepThickness, // Toggles
+        showDate, showLocation, showCoords, detailsDateFirst, showDivider, dividerOffsetY, dividerLength, dividerThickness, vertSepOffsetY, showVertSep, vertSepHeight, vertSepThickness, // Toggles
         showHeartDecor, // Decorative heart below text
-        circleSize, heartSize, houseSize, maskShape, // Shape — textStartY depends on these (shapeOffsetY removed: text is now decoupled from shape position)
+        debouncedCircleSize, debouncedHeartSize, debouncedHouseSize, maskShape, // Shape — textStartY depends on these (shapeOffsetY removed: text is now decoupled from shape position)
         textColor, width, height, frameInset, // Global
         selectedTemplate, // Template
         setTitleFontSize, setSubtitleFontSize, setDetailsFontSize, setDedicationFontSize, setNamesFontSize, setCustomText, setInlineEdit, // Stable setters

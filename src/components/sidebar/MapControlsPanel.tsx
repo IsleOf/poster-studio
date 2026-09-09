@@ -23,9 +23,12 @@ const MapControlsPanel: React.FC = () => {
         mapCenterLng, setMapCenterLng,
         mapZoom, setMapZoom,
         mapBearing, setMapBearing,
+        mapLabelScale, setMapLabelScale,
         mapColorPreset, setMapColorPreset,
         mapBgColor, setMapBgColor,
         mapStreetColor, setMapStreetColor,
+        setMapWaterColor, setMapLandColor,
+        setMapMainRoadColor, setMapSmallRoadColor, setMapDetailRoadColor,
         setMapStyleUrl,
         setPosterColor, setTextColor,
         showLocationPin, setShowLocationPin,
@@ -234,6 +237,22 @@ const MapControlsPanel: React.FC = () => {
                                 </Slider>
                             </FormControl>
 
+                            {/* Label size — colored map only (the 2-colour styles hide all labels).
+                                Scales the vector text size in the style, re-rendered at full print
+                                resolution, so larger labels stay crisp at 300 DPI. */}
+                            {posterType === 'coloredmap' && (
+                                <FormControl>
+                                    <FormLabel fontSize="xs" fontWeight="600" color="gray.700" mb={2}>
+                                        Label size: {Math.round(mapLabelScale * 100)}%
+                                    </FormLabel>
+                                    <Slider value={mapLabelScale} min={0.7} max={2.2} step={0.1} onChange={setMapLabelScale} aria-label="map-label-size">
+                                        <SliderTrack bg="gray.200"><SliderFilledTrack bg="gray.900" /></SliderTrack>
+                                        <SliderThumb boxSize={3} borderColor="gray.300" borderWidth="1px" />
+                                    </Slider>
+                                    <Text fontSize="10px" color="gray.400" mt={1}>Bigger labels may show fewer names (they need more room).</Text>
+                                </FormControl>
+                            )}
+
                             <HStack justify="space-between">
                                 <Text fontSize="xs" fontWeight="600" color="gray.700">Location Pin</Text>
                                 <Switch size="sm" isChecked={showLocationPin} onChange={(e) => setShowLocationPin(e.target.checked)}
@@ -254,13 +273,13 @@ const MapControlsPanel: React.FC = () => {
                     </AccordionPanel>
                 </AccordionItem>
 
-                {/* 2-color presets — street map only */}
+                {/* Presets are starting points; exact map colors live in the Color panel. */}
                 {posterType === 'streetmap' && (
                     <AccordionItem border="none">
                         <h2>
                             <AccordionButton _expanded={{ bg: 'gray.50' }} py={4} px={6}>
                                 <Box flex="1" textAlign="left" fontWeight="600" fontSize="sm" color="gray.900">
-                                    Map Colors
+                                    Map Style Presets
                                 </Box>
                                 <AccordionIcon color="gray.400" />
                             </AccordionButton>
@@ -278,6 +297,11 @@ const MapControlsPanel: React.FC = () => {
                                                 setMapStreetColor(preset.streetColor);
                                                 setMapStyleUrl(preset.styleUrl ?? null);
                                                 if (preset.id === 'design2') {
+                                                    setMapWaterColor('#8f8f8f');
+                                                    setMapLandColor('#b6b6b6');
+                                                    setMapMainRoadColor('#111111');
+                                                    setMapSmallRoadColor('#1a1a1a');
+                                                    setMapDetailRoadColor('#2a2a2a');
                                                     setPosterColor(preset.bgColor);
                                                     setTextColor('#111111');
                                                 } else if (preset.styleUrl) {
@@ -309,7 +333,9 @@ const MapControlsPanel: React.FC = () => {
                                         </Box>
                                     ))}
                                 </Grid>
-                                <Text fontSize="xs" color="gray.500">Fine-tune colors in the Color section below.</Text>
+                                <Text fontSize="xs" color="gray.500">
+                                    Use this only as a starting point. Fine-tune background, water, land, and street colors in the Color section.
+                                </Text>
                             </VStack>
                         </AccordionPanel>
                     </AccordionItem>

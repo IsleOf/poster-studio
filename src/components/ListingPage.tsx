@@ -182,15 +182,17 @@ const TemplateCard: React.FC<{
         {/* Poster thumbnail */}
         <Box bg="gray.900" h={{ base: '220px', md: '260px' }} position="relative" overflow="hidden">
             {t.thumbnail_path ? (
-                <Box
-                    as="img"
-                    src={`${API}${t.thumbnail_path}?v=3`}
-                    alt={t.name}
-                    w="100%"
-                    h="100%"
-                    objectFit="cover"
-                    style={{ display: 'block' }}
-                />
+                <picture style={{ display: 'block', width: '100%', height: '100%' }}>
+                    <source
+                        srcSet={`${API}${t.thumbnail_path.replace(/\.png$/, '.avif')}?v=9`}
+                        type="image/avif"
+                    />
+                    <img
+                        src={`${API}${t.thumbnail_path}?v=9`}
+                        alt={t.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                </picture>
             ) : (
                 <Flex h="100%" align="center" justify="center" opacity={0.15}>
                     <svg width="56" height="56" viewBox="0 0 24 24" fill="white">
