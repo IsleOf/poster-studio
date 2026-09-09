@@ -6,9 +6,9 @@ Expansion evidence-base commit: `e500b2bd73b8c21aba515c0781eeb06ae546f6e3` · Br
 
 Expanded mapping-content commit: `14f96a06417a2e40dcba46c7281535a58890905f` (both artifacts). Previous compact-map content commit: `ccecfef2470acc37296e828dc30290c02355bc53`. This header is finalized by a metadata-only follow-up; use `git log -1 --format=%H -- docs/PROJECT_STATE.md` for its delivery revision.
 
-Validate from the repository root: `python3 -B /mnt/c/Agents/agentic-universe/repo/docs/project_audit_kit/project_graph_scaffold.py validate knowledge/graph/poster-studio_project_graph.json`
+Validate from the repository root: `python tools/knowledge_graph.py validate` (this WSL has only `python3`, so use `python3 -B tools/knowledge_graph.py validate`). The mapping-only local validator checks node/edge vocabulary, evidence file/commit existence, duplicate relations, confidence, orphans and dangling endpoints. This increment explicitly extends the earlier scaffold vocabulary with `refines` and optional `verification_state`; the old scaffold is not the validator for this increment.
 
-Read this document and the graph first in a cold session. They supersede dated handovers as the map of current work, not as authority over VPS data. Historical evidence is preserved, not deleted. Only these two artifacts are changed in this mapping pass; no application repair, regeneration, synchronization, deployment, service restart or credential inspection is included.
+Read this document and the graph first in a cold session. They supersede dated handovers as the map of current work, not as authority over VPS data. Historical evidence is preserved, not deleted. This increment changes the graph, this document and a mapping-only validator; no application repair, regeneration, synchronization, deployment, service restart or credential inspection is included.
 
 ## What it is
 
@@ -171,6 +171,22 @@ These are included so listing-generation work cannot accidentally cross into cus
 | Admin/assets · `admin_assets_auth` | JWT/bcrypt admin handling, guarded asset writes and public font/CSS reads | Do not read credentials or mutate font/default assets to work around a listing render failure. |
 | Tests/deploy · `test_surface`, `deployment_boundary` | Local Playwright preview/unit tests; distinct production checks and static/server deployment boundaries | Mapping validation is not product validation. Preserve unmanaged thumbnails/data and never deploy the dirty workspace as a mapping side effect. |
 
+### Argument increment — 2026-09-09
+
+Baseline: **80 nodes / 105 edges (1.3125 edges/node)**. This increment: **83 nodes / 186 edges (2.2410 edges/node)**; **+81 edges**, including **50 between original nodes**, with a ratio increase of **+0.9285 (+70.74%)**. All original 80 nodes and 105 edges are retained. Exactly three non-feature nodes were added: the failure mode, the run-receipt contract and the proposed ledger/gate port. No new stage or feature nodes.
+
+Dependencies distinguish required workflow contracts from current enforcement: extraction/font confirmation, reviewed template/variants, clean blank/geometry/composition, draft/approval/publication, and original/candidate/review/release artifacts. They do not assert that the runner enforces those gates. Challenge edges connect missing stage004 orchestration, stage006's unsupported publication label, cleaning metadata and cached review identities to downstream claims. Six correction edges between existing nodes use `refines`; earlier nodes are preserved, not silently replaced.
+
+**Named failure mode:** “a completion label is not evidence of completion — metadata checks do not read the artifact.” Agentic Universe's `tools/probe_substrate_adversarial.py:109` posts a fake done annotation while the authoritative task remains pending. Its `tools/gates.py:_evidence_basis` reports missing measurement as `None`, not a fabricated score. These are distinct demonstrations, not proof that AU already verifies Poster imagery. The new failure node challenges every mapped approval, cleaning and publication acceptance surface, including downstream releases/updates. A matching hash binds bytes; it still does not prove visual correctness.
+
+**Factory receipt contract (unverified):** a proposed `candidate/receipts/<run-id>.json` must contain `run_id`, candidate and stage IDs, start/finish timestamps, executor/version, exit status, input hashes, outputs with path/byte count/SHA-256, check results and hash-bound approval references. Compute output hashes from files after execution; record failed/incomplete outcomes explicitly. Publication needs separately authorized remote readback, not a draft ID or a URL string. No receipt file is created by this mapping. The inspected external `run_stage.py` only writes timestamped `manifest.history` metadata; no conforming output-hash receipt emitter was found there. Absence across every other tool was not proven. No current job, output receipt or remote publication was verified.
+
+**Concrete WOULD-CHANGE: port AU `tools/task_ledger.py` + `tools/gates.py`.** Source root: `/mnt/c/Agents/agentic-universe/repo/`. Reuse deterministic dependency scheduling, stale-claim recovery and audit records, plus evidence/release gates and their `tools/pheromone.py` dependency. Adapt tasks to listing/rank/candidate-hash identity and require actual run receipts. Close fragmented orchestration, stale approval identity, concurrent review updates, missing critique evidence, metadata-only cleaning, false publication and dropped resume work. These dependencies are explicit in the graph.
+
+This is a proposed port, **not implemented integration**. AU's `Ledger.complete` trusts a caller-provided result reference; G4 trusts caller-supplied `computable_ok`. The adapters must independently read/hash artifacts, enforce review revisions, execute real checks and retain explicit owner approval. A validator quorum cannot replace that approval. Unknown evidence stays unknown. The review-board acceptance audit remains the first bounded implementation prerequisite, not permission for a new render batch.
+
+**Validation scope:** local structural/evidence-reference checks only, not product tests, visual approval, remote state verification or receipt validation. The validator is a small stdlib project adaptation of AU's structural checks, not a copied application dependency. External evidence paths must exist on the auditing machine; this map still does not make the ignored/untracked source evidence reproducible from a clean clone. No VPS, credentials, images, review decisions or factory jobs were touched. The configured second-brain vault paths were unavailable on this machine; durable increment details are recorded here instead.
+
 ## The single highest-value next move
 
 **Run an isolated acceptance audit of the existing review-board v2 and repair its failed identity/comment/transaction gates before another listing batch.** Concretely, fixtures must cover reopening an existing image comment, changed bytes with unchanged manifest metadata, concurrent edits, historical-approval migration and incomplete gallery coverage. The code findings above already identify failing mechanisms.
@@ -180,7 +196,7 @@ This is one bounded move, not authorization granted by this mapping pass. It bea
 ## Hard constraints
 
 - **VPS authority:** existing templates/defaults, orders and saved production data come from the VPS. Never “restore” them from local guesses. Existing customer design style is not a variable in listing repair.
-- **Mapping scope:** no live-path or credential access; no production or Etsy mutation, DB sync, service restart or rendering. Only this document and its graph are staged and pushed.
+- **Mapping scope:** no live-path or credential access; no production or Etsy mutation, DB sync, service restart or rendering. Only this document, its graph and the mapping-only validator may be staged for this increment; no application files.
 - **Image recovery boundary:** temporary personalization must not overwrite production default templates, sibling settings or thumbnails. The user's standard PNG-button requirement is stricter than an automated render-route capture label. Do not change road weights/star density while preparing listings.
 - **Geometry and quality:** retain A4 210:297 geometry, native exporter rounding, fonts and layout; do not resize low-DPI output into compliance or squeeze designs into incompatible frames. Inspect before/after at full size, including text, map coverage, variation, dark edges and measured perspective fit.
 - **Clean-base only:** no VAE/SynthID on finished lettering. Use verified blank backgrounds plus exact archived rank/quad mapping; preserve original and rejected candidates.
@@ -192,17 +208,17 @@ This is one bounded move, not authorization granted by this mapping pass. It bea
 
 ## Open questions
 
-All five first-pass IDs have an evidence disposition; four are resolved within the stated scope and one remains explicitly open. “Resolved” answers the question; it does not mean the underlying defect is fixed.
+All five first-pass IDs have scoped evidence dispositions. The factory question is now resolved as an evidence-contract question, with `verification_state: unverified`: neither a live job nor a conforming receipt has been observed. “Resolved” does not mean a service is running or a defect is fixed.
 
 | Question node | Answer and evidence |
 | --- | --- |
-| `ps__q_factory_running` — **OPEN** | The external factory cron's current activity and draft 4565362214's current Etsy state are unknown without live access. Last inspected dated entry: August 31, draft with 20 images; September 8 recovery says no replacement gallery upload-ready. `docs/TASKLIST-listing-factory-active.md:1353`, `reports/listing-image-run-ledger-20260908.md:15`. App order polling in `server/index.js:198` is a different cron. |
+| `ps__q_factory_running` — resolved 2026-09-09, **runtime unverified** | The required observable is `ps__factory_run_receipt`, defined below. `run_stage.py:append_history` currently writes only `{stage,at,ok,note}` into `manifest.json.history`; it does not emit output hashes. No conforming receipt was confirmed. Current cron activity and Etsy state remain unknown. August 31's draft-with-20-images entry is historical, and the app order cron is separate. |
 | `ps__q_synthid_wanted` — resolved 2026-09-08 | Yes, for blank backgrounds; not finished designs. `docs/MOCKUP_AND_LISTING_IMAGE_WORKFLOW.md:5` and incident handover authority rules. |
 | `ps__q_relation_to_etsy_branches` — resolved 2026-09-08, repo side only | Available seam: candidate-directory draft CLI, documented external `run_stage.py` / `POSTER_STUDIO_ROOT`, existing app routes. No dedicated orchestrator adapter is wired in inspected package scripts/server route mounts. External branch operation remains unverified, not an end-to-end integration claim. `server/scripts/factory-create-etsy-draft.js:10`, `docs/HANDOVER-2026-08-30-flow-resume.md:35`, `package.json:6`, `server/index.js:123`. |
 | `ps__q_prod_db_sync_reliable` — resolved 2026-09-08 | **No reliable scripted snapshot established.** The one-time VACUUM repair is documented, but `scripts/pull-production-state.sh:21` still copies the main DB directly. WAL is enabled in `server/db.js:15`. `sync-listing-state.cjs` mutates catalog membership/defaults; it is not a backup transfer. |
 | `ps__q_next_listings` — resolved 2026-09-08 | Recover existing candidates, first proving review-board behavior, then a bounded SMBW /02 pilot. Design004's historical draft is not new user approval or the latest finished recovery. Evidence: incident handover, implementation plan PR1/PR4, board source, August 31 tasklist. |
 
-Live status is intentionally open, not guessed to obtain five green flags. No additional live authority is needed to complete and deliver this mapping.
+Live status is intentionally unverified, not guessed to obtain five green flags. No additional live authority is needed to complete and deliver this mapping.
 
 ## What would make this wrong
 

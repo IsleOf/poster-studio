@@ -1,7 +1,7 @@
 {
   "project": "poster-studio",
   "format": "agentic-universe project graph v1",
-  "audit": "Expanded mapping 2026-09-09, explicitly authorized by the owner to exceed 40 nodes and cover the full project, new-listing workflow and existing-image cleaning/rerendering flow. Baseline e500b2bd73b8c21aba515c0781eeb06ae546f6e3. Local source, offline external factory/harness scripts and documentation were read; no live VPS/Etsy/credentials/runtime work. VPS remains ground truth for existing templates, orders and saved production data. Implemented components, required human gates, historical/deprecated paths and automation gaps are distinct. Five original question IDs are retained with four scoped answers and one live-status unknown. Only graph and PROJECT_STATE are changed.",
+  "audit": "Expanded mapping 2026-09-09, explicitly authorized by the owner to exceed 40 nodes and cover the full project, new-listing workflow and existing-image cleaning/rerendering flow. Baseline e500b2bd73b8c21aba515c0781eeb06ae546f6e3. Local source, offline external factory/harness scripts and documentation were read; no live VPS/Etsy/credentials/runtime work. VPS remains ground truth for existing templates, orders and saved production data. Implemented components, required human gates, historical/deprecated paths and automation gaps are distinct. Five original question IDs are retained. The baseline had four scoped answers and one live-status unknown; this increment resolves the fifth as an evidence contract while leaving runtime unverified. Argument increment 2026-09-09: preserve all 80 prior nodes and 105 edges; add three non-feature concepts and evidence dependencies/challenges/refinements. Receipt and port existence/integration remain unverified. Add mapping-only local validator supporting refines and verification_state; no live or image work.",
   "last_updated": "2026-09-09",
   "nodes": [
     {
@@ -461,18 +461,21 @@
       "id": "ps__q_factory_running",
       "type": "question",
       "label": "Is the factory cron running, and what is the live draft/approval state?",
-      "status": "open",
-      "confidence": 0.3,
-      "description": "Evidence update 2026-09-08: the latest inspected historical tasklist records draft 4565362214 with 20 images on August 31, correcting the first-pass three-image snapshot. September 8 recovery notes say no replacement gallery is upload-ready. Current external factory cron activity and current Etsy draft/publication state cannot be determined from those files and remain open because live paths/API reads are excluded. The app's order polling cron is not the factory cron.",
+      "status": "resolved",
+      "confidence": 0.95,
+      "description": "Resolved 2026-09-09 as an evidence-contract question: current runner writes timestamped manifest.history metadata, not the required output-hash receipt defined by ps__factory_run_receipt. No conforming receipt or live run was confirmed. Current cron activity and Etsy draft/publication state remain unknown; this scoped resolution is not a running-factory assertion. Historical August 31 draft status remains historical.",
       "derived_from": [
         "docs/TASKLIST-listing-factory-active.md:1353",
         "reports/listing-image-run-ledger-20260908.md:15",
-        "server/index.js:198"
+        "server/index.js:198",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "docs/PROJECT_STATE.md"
       ],
       "tags": [
         "question",
         "live-state"
-      ]
+      ],
+      "verification_state": "unverified"
     },
     {
       "id": "ps__q_synthid_wanted",
@@ -1349,6 +1352,63 @@
         "application",
         "deployment"
       ]
+    },
+    {
+      "id": "ps__failure_completion_label",
+      "type": "bug",
+      "label": "a completion label is not evidence of completion — metadata checks do not read the artifact",
+      "status": "open",
+      "confidence": 0.98,
+      "description": "AU attack_fake_completion_via_done_annotation demonstrates a done board annotation while the ledger remains pending. gates._evidence_basis returns None for missing measurements, not a plausible score. Poster has analogous publication labels and metadata-only cleaning/approval checks. Require direct artifact inspection, hash-bound results and external readback where relevant; neither a hash nor a label proves visual correctness.",
+      "derived_from": [
+        "/mnt/c/Agents/agentic-universe/repo/tools/probe_substrate_adversarial.py:109",
+        "/mnt/c/Agents/agentic-universe/repo/tools/gates.py:88",
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "scripts/serve-listing-review.mjs"
+      ],
+      "tags": [
+        "failure-mode",
+        "evidence",
+        "fake-completion"
+      ]
+    },
+    {
+      "id": "ps__factory_run_receipt",
+      "type": "constraint",
+      "label": "Required per-run receipt: timestamps plus hashes of actual output bytes",
+      "status": "to_fill",
+      "confidence": 0.95,
+      "verification_state": "unverified",
+      "description": "Defined contract, not an observed file: candidate/receipts/<run-id>.json must record run_id, candidate_id, stage, started_at, finished_at, executor/version, exit_status, input hashes, outputs [{path,sha256,bytes}], checks and approval references bound to output hashes. Hashes must be computed by reading outputs after execution. Failed/incomplete receipts cannot claim completion; publication additionally needs authorized remote readback. Current run_stage.py writes manifest.history [{stage,at,ok,note}] via append_history/save_manifest; no output-hash receipt emitter was found there. No matching receipt or currently running job was verified. Runtime remains unknown.",
+      "derived_from": [
+        "/mnt/c/Agents/hermes-local/listing-factory/run_stage.py",
+        "docs/PROJECT_STATE.md"
+      ],
+      "tags": [
+        "receipt-contract",
+        "unverified",
+        "factory"
+      ]
+    },
+    {
+      "id": "ps__port_au_ledger_gates",
+      "type": "decision",
+      "label": "WOULD-CHANGE: port AU task ledger and gates with per-artifact human approval adapters",
+      "status": "to_fill",
+      "confidence": 0.95,
+      "verification_state": "unverified",
+      "description": "Concrete proposed port of tools/task_ledger.py and tools/gates.py (with its pheromone dependency), not implemented here. Use deterministic dependency scheduling, stale-claim recovery and audit history; adapt G1 evidence and G4 release checks to per-listing/rank/version tasks, actual output-hash receipts and explicit owner approval. Ledger.complete currently trusts caller result_ref, and G4 accepts caller computable_ok; neither reads/validates Poster images automatically. Add byte verification, concurrency/version guards and real checks before marking tasks done. Independent critique/quorum never replaces user approval. Unknown evidence must remain unknown.",
+      "derived_from": [
+        "/mnt/c/Agents/agentic-universe/repo/tools/task_ledger.py",
+        "/mnt/c/Agents/agentic-universe/repo/tools/gates.py",
+        "/mnt/c/Agents/agentic-universe/repo/tools/pheromone.py",
+        "docs/PR-LISTING-RECOVERY-IMPLEMENTATION-PLAN.md"
+      ],
+      "tags": [
+        "would-change",
+        "proposed-port",
+        "human-gates"
+      ]
     }
   ],
   "edges": [
@@ -2086,6 +2146,573 @@
       "target": "ps__order_intake",
       "type": "depends_on",
       "description": "Delivery is associated with actual customer orders."
+    },
+    {
+      "id": "ps__argument_106",
+      "source": "ps__extraction",
+      "target": "ps__font_confirmation",
+      "type": "depends_on",
+      "description": "Extraction cannot be accepted as finished before explicit font confirmation; this is a required human gate, not stage002 enforcement. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_107",
+      "source": "ps__factory_queue",
+      "target": "ps__source_competitor",
+      "type": "depends_on",
+      "description": "Stage001 assumes a captured source reference; directory placement alone is not extraction evidence. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_108",
+      "source": "ps__template_import",
+      "target": "ps__extraction",
+      "type": "depends_on",
+      "description": "Stage003 consumes the extracted settings artifact; import success cannot substitute for inspecting its contents. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_109",
+      "source": "ps__template_review",
+      "target": "ps__template_import",
+      "type": "depends_on",
+      "description": "Human template review requires the actual imported template preview, not merely an import status. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_110",
+      "source": "ps__font_confirmation",
+      "target": "ps__font_resolution",
+      "type": "depends_on",
+      "description": "The font gate needs resolved font candidates and their visual evidence. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_111",
+      "source": "ps__variant_stories",
+      "target": "ps__d_prod_is_truth",
+      "type": "depends_on",
+      "description": "Variants assume active VPS template settings; local defaults are not authoritative. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_112",
+      "source": "ps__prompt_map",
+      "target": "ps__variant_stories",
+      "type": "depends_on",
+      "description": "Scene-to-design prompt mapping requires the intended per-listing variants; prompts do not establish successful rendering. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_113",
+      "source": "ps__flow_scene",
+      "target": "ps__template_review",
+      "type": "depends_on",
+      "description": "Required workflow: scene generation must use a reviewed template, although stage004 does not enforce this chain. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_114",
+      "source": "ps__clean_base_gate",
+      "target": "ps__synthid_engine",
+      "type": "depends_on",
+      "description": "Cleaning acceptance requires detector evidence for the actual cleaned output artifact. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_115",
+      "source": "ps__clean_base_gate",
+      "target": "ps__legacy_clean_bases",
+      "type": "depends_on",
+      "description": "Recovery acceptance must reference the selected cleaned blank base, not a finished text-bearing listing image. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_116",
+      "source": "ps__composition_core",
+      "target": "ps__reusable_geometry",
+      "type": "depends_on",
+      "description": "Composition consumes measured frame geometry; a clean label does not establish placement. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_117",
+      "source": "ps__composition_core",
+      "target": "ps__repair_mapping",
+      "type": "depends_on",
+      "description": "Recovery composition assumes the original-to-mockup mapping has been verified per rank. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_118",
+      "source": "ps__listing_video",
+      "target": "ps__fullsize_review",
+      "type": "depends_on",
+      "description": "Required release contract: video derivatives must use approved image versions, not unreviewed generated stills. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_119",
+      "source": "ps__etsy_draft_writer",
+      "target": "ps__composition_core",
+      "type": "depends_on",
+      "description": "Stage005 requires prepared listing image artifacts; composing them is outside the stage005 runner. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_120",
+      "source": "ps__etsy_draft_writer",
+      "target": "ps__seo_copy",
+      "type": "depends_on",
+      "description": "Draft creation consumes listing copy as well as image files. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_121",
+      "source": "ps__publish_gate",
+      "target": "ps__etsy_draft_writer",
+      "type": "depends_on",
+      "description": "Stage006 assumes an existing Etsy draft identifier from stage005; that identifier is not publication proof. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_122",
+      "source": "ps__publish_gate",
+      "target": "ps__c_user_approval",
+      "type": "depends_on",
+      "description": "Publication requires explicit human approval; stage006 does not verify that approval. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_123",
+      "source": "ps__pinterest_derivatives",
+      "target": "ps__etsy_draft_writer",
+      "type": "depends_on",
+      "description": "Stage007 assumes a listing URL recorded after draft creation; a URL string does not prove an active listing. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_124",
+      "source": "ps__repair_mapping",
+      "target": "ps__repair_inventory",
+      "type": "depends_on",
+      "description": "Rank mapping depends on original inventory coverage, not just feedback text. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_125",
+      "source": "ps__native_export_contract",
+      "target": "ps__d_prod_is_truth",
+      "type": "depends_on",
+      "description": "Native exports must start from authoritative VPS template settings without overwriting them. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_126",
+      "source": "ps__dated_compositors",
+      "target": "ps__legacy_clean_bases",
+      "type": "depends_on",
+      "description": "Recovery composites assume a verified clean blank background matched to the rank. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_127",
+      "source": "ps__dated_compositors",
+      "target": "ps__reusable_geometry",
+      "type": "depends_on",
+      "description": "Recovery compositors consume measured frame quads and must preserve design aspect. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_128",
+      "source": "ps__pair_critique",
+      "target": "ps__repair_inventory",
+      "type": "depends_on",
+      "description": "Original-versus-candidate critique requires the original rank artifact. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_129",
+      "source": "ps__fullsize_review",
+      "target": "ps__repair_feedback",
+      "type": "depends_on",
+      "description": "Review must preserve unresolved owner complaints and their per-image scope. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_130",
+      "source": "ps__release_package",
+      "target": "ps__c_user_approval",
+      "type": "depends_on",
+      "description": "Packaging is permitted only for exact user-approved bytes; a folder-level stage is insufficient. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_131",
+      "source": "ps__anchor_updater",
+      "target": "ps__publish_gate",
+      "type": "depends_on",
+      "description": "Existing-listing update assumes a real remote listing and separately authorized release, not merely a local package. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_132",
+      "source": "ps__repair_resume",
+      "target": "ps__repair_feedback",
+      "type": "depends_on",
+      "description": "Resume must restore the unresolved repair queue and decisions, not infer completion from existing files. Evidence: source/target derived_from."
+    },
+    {
+      "id": "ps__argument_133",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__listing_factory",
+      "type": "challenges",
+      "description": "Fragmented orchestration: run_stage.py stage004 omits Flow, cleaning, composition and critique; successful stage advancement cannot establish a coherent end-to-end workflow."
+    },
+    {
+      "id": "ps__argument_134",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__cron_tasklist",
+      "type": "challenges",
+      "description": "Fragmented orchestration: run_stage.py stage004 omits Flow, cleaning, composition and critique; successful stage advancement cannot establish a coherent end-to-end workflow."
+    },
+    {
+      "id": "ps__argument_135",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__contract_gate",
+      "type": "challenges",
+      "description": "Fragmented orchestration: run_stage.py stage004 omits Flow, cleaning, composition and critique; successful stage advancement cannot establish a coherent end-to-end workflow."
+    },
+    {
+      "id": "ps__argument_136",
+      "source": "ps__bug_published_claim",
+      "target": "ps__factory_queue",
+      "type": "challenges",
+      "description": "run_stage.py stage_006_published checks draft_listing_id only; its success/history label supplies no Etsy publication readback."
+    },
+    {
+      "id": "ps__argument_137",
+      "source": "ps__bug_published_claim",
+      "target": "ps__cron_tasklist",
+      "type": "challenges",
+      "description": "run_stage.py stage_006_published checks draft_listing_id only; its success/history label supplies no Etsy publication readback."
+    },
+    {
+      "id": "ps__argument_138",
+      "source": "ps__bug_published_claim",
+      "target": "ps__listing_factory",
+      "type": "challenges",
+      "description": "run_stage.py stage_006_published checks draft_listing_id only; its success/history label supplies no Etsy publication readback."
+    },
+    {
+      "id": "ps__argument_139",
+      "source": "ps__bug_published_claim",
+      "target": "ps__pinterest_derivatives",
+      "type": "challenges",
+      "description": "run_stage.py stage_006_published checks draft_listing_id only; its success/history label supplies no Etsy publication readback."
+    },
+    {
+      "id": "ps__argument_140",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__synthid_engine",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_141",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__synthid_retry",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_142",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__legacy_clean_bases",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_143",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__reusable_geometry",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_144",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__composition_core",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_145",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__release_package",
+      "type": "challenges",
+      "description": "synthid_final_pass.py sidecar resume and etsy_mockup_pipeline_v3.py metadata checks do not bind clean status to current image hashes; downstream completion requires artifact evidence."
+    },
+    {
+      "id": "ps__argument_146",
+      "source": "ps__bug_review_identity",
+      "target": "ps__fullsize_review",
+      "type": "challenges",
+      "description": "serve-listing-review.mjs candidateInfo/currentCandidates trust cached metadata; a recorded approval cannot prove the currently served/uploaded bytes are approved."
+    },
+    {
+      "id": "ps__argument_147",
+      "source": "ps__bug_review_identity",
+      "target": "ps__release_package",
+      "type": "challenges",
+      "description": "serve-listing-review.mjs candidateInfo/currentCandidates trust cached metadata; a recorded approval cannot prove the currently served/uploaded bytes are approved."
+    },
+    {
+      "id": "ps__argument_148",
+      "source": "ps__bug_review_identity",
+      "target": "ps__c_user_approval",
+      "type": "challenges",
+      "description": "serve-listing-review.mjs candidateInfo/currentCandidates trust cached metadata; a recorded approval cannot prove the currently served/uploaded bytes are approved."
+    },
+    {
+      "id": "ps__argument_149",
+      "source": "ps__bug_review_identity",
+      "target": "ps__etsy_draft_writer",
+      "type": "challenges",
+      "description": "serve-listing-review.mjs candidateInfo/currentCandidates trust cached metadata; a recorded approval cannot prove the currently served/uploaded bytes are approved."
+    },
+    {
+      "id": "ps__argument_150",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__listing_factory",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: Stage003 checks only an extraction record; stage004 runs template import, preview and mutating sync, then auto-advances to005. It does not run the complete Flow/clean/composition/critique chain or record separate human font/template approval. Prompt-map validation is skipped when source.reference_dir is absent. Do not infer full workflow completion from runner success. A handled failure routes to needs-attention but cmd_run does not set a nonzero exit status; subprocess exceptions can bypass the handled-failure history path. Exit code alone is insufficient."
+    },
+    {
+      "id": "ps__argument_151",
+      "source": "ps__bug_factory_gates",
+      "target": "ps__factory_queue",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: Stage003 checks only an extraction record; stage004 runs template import, preview and mutating sync, then auto-advances to005. It does not run the complete Flow/clean/composition/critique chain or record separate human font/template approval. Prompt-map validation is skipped when source.reference_dir is absent. Do not infer full workflow completion from runner success. A handled failure routes to needs-attention but cmd_run does not set a nonzero exit status; subprocess exceptions can bypass the handled-failure history path. Exit code alone is insufficient."
+    },
+    {
+      "id": "ps__argument_152",
+      "source": "ps__bug_published_claim",
+      "target": "ps__publish_gate",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: stage_006_published returns success based only on draft_listing_id. The history text and stage move can therefore say published without an activation or readback. Keep publication external/human-gated and never use this manifest alone as evidence."
+    },
+    {
+      "id": "ps__argument_153",
+      "source": "ps__bug_clean_attestation",
+      "target": "ps__clean_base_gate",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: Cleaning resume keys on sidecar status; the compositing gate checks metadata/path/dimensions but not input/output content hashes. build_reusable_mockup accepts optional detector JSON and does not itself enforce detector-clear status before composing. Thus upstream verification and immutable byte binding are still necessary, even though a different shared-harness path has a stronger metadata gate."
+    },
+    {
+      "id": "ps__argument_154",
+      "source": "ps__bug_review_identity",
+      "target": "ps__review_board",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: candidateInfo trusts manifest sha256 strings, falls back to size/mtime, and currentCandidates caches the result for process lifetime. Media URLs serve files by current path. Replacing bytes without refreshing metadata can leave an old approval attached to newly served content. Migration binds legacy decisions to whichever current roots are configured, without proving the historical version."
+    },
+    {
+      "id": "ps__argument_155",
+      "source": "ps__d_clean_base_first",
+      "target": "ps__legacy_final_cleanup",
+      "type": "refines",
+      "description": "Correction narrows the target's earlier scope without deleting it: Use clean, design-independent backgrounds with measured geometry, then composite the unprocessed native design export. The old final-only SynthID pass over finished lettering is a historical workflow, not the new-listing route: it mangles text. Detector-clear is not a visual approval."
+    },
+    {
+      "id": "ps__argument_156",
+      "source": "ps__failure_completion_label",
+      "target": "ps__font_confirmation",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_157",
+      "source": "ps__failure_completion_label",
+      "target": "ps__template_review",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_158",
+      "source": "ps__failure_completion_label",
+      "target": "ps__catalog_parity",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_159",
+      "source": "ps__failure_completion_label",
+      "target": "ps__clean_base_gate",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_160",
+      "source": "ps__failure_completion_label",
+      "target": "ps__synthid_engine",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_161",
+      "source": "ps__failure_completion_label",
+      "target": "ps__synthid_retry",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_162",
+      "source": "ps__failure_completion_label",
+      "target": "ps__legacy_clean_bases",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_163",
+      "source": "ps__failure_completion_label",
+      "target": "ps__reusable_geometry",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_164",
+      "source": "ps__failure_completion_label",
+      "target": "ps__fullsize_review",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_165",
+      "source": "ps__failure_completion_label",
+      "target": "ps__review_board",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_166",
+      "source": "ps__failure_completion_label",
+      "target": "ps__c_user_approval",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_167",
+      "source": "ps__failure_completion_label",
+      "target": "ps__release_package",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_168",
+      "source": "ps__failure_completion_label",
+      "target": "ps__publish_gate",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_169",
+      "source": "ps__failure_completion_label",
+      "target": "ps__etsy_draft_writer",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_170",
+      "source": "ps__failure_completion_label",
+      "target": "ps__pinterest_derivatives",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_171",
+      "source": "ps__failure_completion_label",
+      "target": "ps__anchor_updater",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_172",
+      "source": "ps__failure_completion_label",
+      "target": "ps__contract_gate",
+      "type": "challenges",
+      "description": "A completion/approval/cleaning/publication label is not proof of the target's required artifact state. Read and bind the artifact; retain explicit human approval and remote readback where applicable. Evidence: fake-completion probe, gates._evidence_basis and target sources."
+    },
+    {
+      "id": "ps__argument_173",
+      "source": "ps__factory_run_receipt",
+      "target": "ps__factory_queue",
+      "type": "records",
+      "description": "Defines the missing byte-bound run evidence contract for runner stage execution; existence remains unverified."
+    },
+    {
+      "id": "ps__argument_174",
+      "source": "ps__q_factory_running",
+      "target": "ps__factory_run_receipt",
+      "type": "depends_on",
+      "description": "Liveness/completion claims require timestamped output-hash receipts; historical manifest history does not meet this contract."
+    },
+    {
+      "id": "ps__argument_175",
+      "source": "ps__failure_completion_label",
+      "target": "ps__factory_run_receipt",
+      "type": "challenges",
+      "description": "A receipt schema or a self-reported hash is not a measured receipt; recompute artifact hashes and inspect checks."
+    },
+    {
+      "id": "ps__argument_176",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_factory_gates",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_177",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_review_identity",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_178",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_review_transactions",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_179",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_agy_evidence",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_180",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_clean_attestation",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_181",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__bug_published_claim",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_182",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__repair_resume",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_183",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__failure_completion_label",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_184",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__factory_run_receipt",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_185",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__c_user_approval",
+      "type": "depends_on",
+      "description": "Port acceptance must close this friction or preserve this gate; code reuse alone does not implement the required per-artifact evidence and human authorization."
+    },
+    {
+      "id": "ps__argument_186",
+      "source": "ps__port_au_ledger_gates",
+      "target": "ps__listing_factory",
+      "type": "refines",
+      "description": "Replace the implied unified stage runner with an explicit durable, per-artifact orchestration contract; proposed only."
     }
   ]
 }
