@@ -4,7 +4,7 @@ Format: Agentic Universe project graph v1 · Graph: `knowledge/graph/poster-stud
 
 Expansion evidence-base commit: `e500b2bd73b8c21aba515c0781eeb06ae546f6e3` · Branch: `codex/backup-current-state-20260501`
 
-Previous compact-map content commit: `ccecfef2470acc37296e828dc30290c02355bc53`. Expanded mapping content commit is recorded after committing; use `git log -1 --format=%H -- docs/PROJECT_STATE.md` for its delivery revision.
+Expanded mapping-content commit: `14f96a06417a2e40dcba46c7281535a58890905f` (both artifacts). Previous compact-map content commit: `ccecfef2470acc37296e828dc30290c02355bc53`. This header is finalized by a metadata-only follow-up; use `git log -1 --format=%H -- docs/PROJECT_STATE.md` for its delivery revision.
 
 Validate from the repository root: `python3 -B /mnt/c/Agents/agentic-universe/repo/docs/project_audit_kit/project_graph_scaffold.py validate knowledge/graph/poster-studio_project_graph.json`
 
